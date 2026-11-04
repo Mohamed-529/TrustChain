@@ -1,0 +1,6 @@
+{
+  "name": "MilestoneProof AI",
+  "description": "Multi-Agent Evidence-to-Settlement Orchestrator for Software Contracts",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
