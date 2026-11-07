@@ -424,6 +424,15 @@ export class MilestoneProofClient {
     });
   }
 
+  public async listPayPalTransactions(
+    milestoneId: string
+  ): Promise<{ transactions: PayPalTransactionRecord[] }> {
+    return this.request({
+      method: 'GET',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/paypal/transactions`,
+    });
+  }
+
   public async handlePayPalWebhook(
     headers: {
       'PAYPAL-TRANSMISSION-ID': string;

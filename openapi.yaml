@@ -656,6 +656,27 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntityError'
 
+  /milestones/{id}/paypal/transactions:
+    get:
+      operationId: listPayPalTransactions
+      tags: [Payments]
+      summary: List PayPal Orders API v2 transactions for a milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Historical PayPal order, authorization, and capture records for the milestone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPalTransactionListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /webhooks/paypal:
     post:
       operationId: handlePayPalWebhook
@@ -2216,6 +2237,16 @@ components:
       properties:
         transaction:
           $ref: '#/components/schemas/PayPalTransactionRecord'
+
+    PayPalTransactionListResponse:
+      type: object
+      required: [transactions]
+      additionalProperties: false
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayPalTransactionRecord'
 
     PayPalWebhookEvent:
       type: object
