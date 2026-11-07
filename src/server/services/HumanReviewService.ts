@@ -127,11 +127,16 @@ export class HumanReviewService {
           )
         : null;
 
+    const provenanceFailureDetails =
+      latestProvenance?.blockingReasons.join(' | ') ||
+      latestProvenance?.discrepancies.join(' | ') ||
+      'MISMATCH_DETECTED';
+
     if (policyCalculation && provenanceBlocked) {
       const provenanceGateReason =
         effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
           ? 'EVIDENCE_PROVENANCE_GATE: Evidence payload SHA-256 tamper check failed (post-submission modification detected).'
-          : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${latestProvenance?.summary ?? 'MISMATCH_DETECTED'}).`;
+          : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${provenanceFailureDetails}).`;
       if (!policyCalculation.gatesTripped.includes(provenanceGateReason)) {
         policyCalculation.gatesTripped.unshift(provenanceGateReason);
       }
@@ -162,7 +167,7 @@ export class HumanReviewService {
       const provenanceBlockMsg =
         effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
           ? 'EVIDENCE_PROVENANCE_GATE: Evidence payload SHA-256 tamper check failed (post-submission modification detected).'
-          : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${latestProvenance?.summary ?? 'MISMATCH_DETECTED'}).`;
+          : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${provenanceFailureDetails}).`;
       if (!blockingReasons.includes(provenanceBlockMsg)) {
         blockingReasons.unshift(provenanceBlockMsg);
       }
@@ -379,12 +384,16 @@ export class HumanReviewService {
             effectiveProvenanceStatus === 'MISMATCH_DETECTED' ||
             effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
           ) {
+            const provenanceSummary =
+              latestProvenance?.blockingReasons.join(' | ') ||
+              latestProvenance?.discrepancies.join(' | ') ||
+              'MISMATCH_DETECTED';
             throw new AppError(
               409,
               'EVIDENCE_PROVENANCE_MISMATCH_BLOCKS_APPROVAL',
               effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
                 ? `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed SHA-256 payload integrity verification (post-submission tampering detected).`
-                : `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed independent GitHub provenance verification (${latestProvenance?.summary ?? 'MISMATCH_DETECTED'}).`
+                : `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed independent GitHub provenance verification (${provenanceSummary}).`
             );
           }
 

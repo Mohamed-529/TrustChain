@@ -1349,9 +1349,13 @@ export class EvaluationService {
       );
 
       if (provenanceMismatchBlocked) {
+        const provenanceDetails =
+          provenanceRecord?.blockingReasons.join(' | ') ||
+          provenanceRecord?.discrepancies.join(' | ') ||
+          'Submitted GitHub artifacts failed independent provenance verification.';
         const provenanceFailureMsg = payloadTampered
           ? `EVIDENCE_PAYLOAD_TAMPERED: Stored SHA-256 digest (${latestSubmission.payloadSha256?.slice(0, 12)}...) does not match recomputed digest (${recomputedPayloadHash.slice(0, 12)}...).`
-          : `GITHUB_PROVENANCE_MISMATCH: ${provenanceRecord?.summary ?? 'Submitted GitHub artifacts failed independent provenance verification.'}`;
+          : `GITHUB_PROVENANCE_MISMATCH: ${provenanceDetails}`;
 
         evidenceAnalysis.missingEvidence.push(provenanceFailureMsg);
         evidenceAnalysis.factualObservations.push(
@@ -1405,10 +1409,14 @@ export class EvaluationService {
       });
 
       if (provenanceMismatchBlocked) {
+        const provenanceDetails =
+          provenanceRecord?.blockingReasons.join(' | ') ||
+          provenanceRecord?.discrepancies.join(' | ') ||
+          'MISMATCH_DETECTED';
         const provenanceGateReason =
           provenanceStatus === 'TAMPERED_PAYLOAD'
             ? 'EVIDENCE_PROVENANCE_GATE: Evidence payload SHA-256 tamper check failed (post-submission modification detected).'
-            : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${provenanceRecord?.summary ?? 'MISMATCH_DETECTED'}).`;
+            : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${provenanceDetails}).`;
         if (!policyCalculation.gatesTripped.includes(provenanceGateReason)) {
           policyCalculation.gatesTripped.unshift(provenanceGateReason);
         }
