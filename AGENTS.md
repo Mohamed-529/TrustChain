@@ -208,3 +208,26 @@ A task is complete only when:
 - Documentation and project status are updated.
 
 **Primary principle: Build a working, verifiable and explainable product. Never prioritize code quantity over correctness.**
+
+## 13. Developer Tooling & Workflow Matrix
+
+To maintain engineering discipline, TrustChain integrates four complementary development tools alongside existing project skills:
+
+1. **GSD (Get Shit Done) — `.agent/skills/gsd/`:**
+   - **Role:** High-level project planning, requirements decomposition, phase milestones, and context preservation.
+   - **Enforcement:** Spec before code; atomic verification criteria. Never replaces `AGENTS.md` or core financial safety rules.
+
+2. **Ponytail — `.agent/skills/ponytail/`:**
+   - **Role:** Code restraint, anti-bloat, and YAGNI ladder enforcement.
+   - **Enforcement:** *"The best code is the code you never wrote."* Reuses existing services, models, and native Node.js/TypeScript standard libraries before writing new code or adding dependencies. Never compromises security, validation, or test assertions.
+
+3. **Ralph Loop — `.agent/skills/ralph-loop/`:**
+   - **Role:** Bounded test-driven iterative execution.
+   - **Enforcement:** Maximum 5 iterations per session; hard stop on 2 consecutive test failures; zero autonomous financial operations; zero automated git pushing.
+
+4. **CodeRabbit — `.coderabbit.yaml`:**
+   - **Role:** Independent pull request review on GitHub.
+   - **Enforcement:** Reviews financial invariants, SQLite ACID persistence, HMAC auth, and webhook integrity. Acts as an independent reviewer, not an automated merger.
+
+5. **Roo Code / RoCode:**
+   - **Status:** Evaluated and not installed (Officially discontinued as of May 15, 2026; incompatible with Antigravity; native Antigravity capabilities supersede it).
