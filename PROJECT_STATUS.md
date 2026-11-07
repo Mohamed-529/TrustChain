@@ -36,27 +36,29 @@ Phase 7 — Evidence Provenance & Independent GitHub Verification (Completed & V
   - **Independent GitHub REST API Verification (`GitHubVerificationService`):** Verifies repository existence (`GET /repos/{owner}/{repo}`), commit SHA & modified files (`GET /repos/{owner}/{repo}/commits/{ref}`), pull request state/merge status/commit linkage (`GET /repos/{owner}/{repo}/pulls/{pull_number}`), and GitHub Actions workflow run status/conclusion/head SHA (`GET /repos/{owner}/{repo}/actions/runs/{run_id}`).
   - **Cryptographic Evidence Payload Tamper Detection:** Computes and persists canonical SHA-256 digest (`payload_sha256`) at submission time and dynamically detects post-submission database modification (`TAMPERED_PAYLOAD`).
   - **GitHub Webhook Authenticity & Idempotency (`POST /api/v1/webhooks/github`):** Verifies `X-Hub-Signature-256` (`sha256=<hex>`) using constant-time `crypto.timingSafeEqual`, fails closed (`503`) when `GITHUB_WEBHOOK_SECRET` is unconfigured, rejects invalid signatures (`401`), and enforces persistent delivery idempotency (`X-GitHub-Delivery` in `github_webhook_events`) with safe retry after `FAILED` attempts.
-  - **Evaluation & Fiduciary Review Provenance Gates:** Blocks policy calculation (`permittedAmountCents = 0`) and human approval (`409 EVIDENCE_PROVENANCE_MISMATCH_BLOCKS_APPROVAL`) when provenance is `MISMATCH_DETECTED` or `TAMPERED_PAYLOAD`, while never allowing GitHub verification to auto-approve milestones or release PayPal payments (Completed & Verified — 4/4 Phase 7 tests passing; **30/30 total tests passing**).
+  - **Evaluation & Fiduciary Review Provenance Gates:** Blocks policy calculation (`permittedAmountCents = 0`) and human approval (`409 EVIDENCE_PROVENANCE_MISMATCH_BLOCKS_APPROVAL`) when provenance is `MISMATCH_DETECTED` or `TAMPERED_PAYLOAD`, while never allowing GitHub verification to auto-approve milestones or release PayPal payments (Completed & Verified — 6/6 Phase 7 tests passing).
+- Phase 8.1 — Bryntum Gantt Foundation:
+  - **Official Package Installation:** Installed `@bryntum/gantt@npm:@bryntum/gantt-trial@7.3.8` and `@bryntum/gantt-react@7.3.8` using npm package aliasing on the public npm registry without private credentials.
+  - **React Wrapper Component (`src/components/BryntumGanttViewer.tsx`):** Implemented genuine Bryntum React Gantt wrapper importing official core stylesheet (`gantt.css`) and light theme (`stockholm-light.css`). Configured typed props, Finish-to-Start dependencies (`type: 2`), dual-bar contract baselines (`baselinesFeature`), critical path visualization (`criticalPathsFeature`), and task tooltips.
+  - **Vite Bundler Compatibility:** Verified production bundling of Bryntum engine and stylesheets with Vite 8 and React 19 (Completed & Verified — 3/3 Phase 8.1 tests passing; **36/36 total tests passing**).
 
 ---
 
 ## Test Results & Validation Status
 
-- **Automated Test Suite (`npm test` — `phase1.test.ts` through `phase7.test.ts`):**
-  - **Status:** **PASSED (`32 / 32` tests across `7 / 7` suites passed, `0` failed)**
+- **Automated Test Suite (`npm test` — `phase1.test.ts` through `phase8_foundation.test.ts`):**
+  - **Status:** **PASSED (`36 / 36` tests across `8 / 8` suites passed, `0` failed)**
   - **Phase 1 Suite (`7 / 7` passed)**
   - **Phase 2 Suite (`3 / 3` passed)**
   - **Phase 3 Suite (`4 / 4` passed)**
   - **Phase 4 Suite (`4 / 4` passed)**
   - **Phase 5 Suite (`4 / 4` passed)**
   - **Phase 6 Suite (`4 / 4` passed)**
-  - **Phase 7 Suite (`6 / 6` passed):**
-    1. `Independent GitHub REST API Provenance Verification & Financial Boundary: verifies repo, commit, PR, and workflow run via GitHub API, never leaks token, and never auto-approves or releases payment` — **PASSED**
-    2. `Provenance Mismatch Detection: detects fake repo (404), fake commit (404), unmerged/mismatched PR, and failed workflow run, blocking policy calculation and human approval` — **PASSED**
-    3. `Unavailable Verification vs. Genuine Verification & Post-Submission Payload Tamper Detection: distinguishes UNVERIFIED_UNAVAILABLE from VERIFIED and blocks tampered SQLite evidence payloads (TAMPERED_PAYLOAD)` — **PASSED**
-    4. `GitHub Webhook Authenticity (X-Hub-Signature-256), Idempotency (X-GitHub-Delivery), Concurrency & Retry Recovery` — **PASSED**
-    5. `Comprehensive GitHub Artifact Edge Cases: API timeout, HTTP 429 rate-limit, closed-unmerged PR, wrong-repo PR, still-running workflow (PENDING), and workflow API 503` — **PASSED**
-    6. `Canonical SHA-256 Evidence Hashing, Raw Body Webhook Tamper Protection & Out-of-Order Event Guard` — **PASSED**
+  - **Phase 7 Suite (`6 / 6` passed)**
+  - **Phase 8.1 Suite (`3 / 3` passed):**
+    1. `resolves official Bryntum Gantt packages, types, and stylesheets` — **PASSED**
+    2. `verifies Bryntum component source integrity, baseline & dependency features` — **PASSED**
+    3. `verifies Vite bundling of Bryntum Gantt React component` — **PASSED**
 - **TypeScript Validation Status (`npm run lint` — `tsc --noEmit`):**
   - **Status:** **PASSED (`0` errors, clean compilation across all server, SDK, types, and UI files)**.
 - **Production Client Build (`npm run build` — `vite build`):**
