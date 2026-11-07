@@ -41,7 +41,7 @@ function signGitHubWebhook(secret: string, rawBody: string): string {
 describe('Phase 7 — Evidence Provenance & Independent GitHub Verification', () => {
   it('1. Independent GitHub REST API Provenance Verification & Financial Boundary: verifies repo, commit, PR, and workflow run via GitHub API, never leaks token, and never auto-approves or releases payment', async () => {
     const githubApiCalls: Array<{ url: string; authHeader: string | null }> = [];
-    const secretGitHubToken = 'ghp_TestSecretGitHubTokenPhase7DoNotLeak999';
+    const secretGitHubToken = 'test-only-fake-github-api-token-provenance-do-not-leak';
 
     const mockGitHubFetch: typeof fetch = async (input, init) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -314,7 +314,7 @@ describe('Phase 7 — Evidence Provenance & Independent GitHub Verification', ()
 
     const { baseUrl, close } = await startTestServer({
       githubOptions: {
-        githubToken: 'ghp_MockTokenPhase7MismatchTest',
+        githubToken: 'test-only-fake-github-api-token-mismatch',
         fetchImpl: mockGitHubFetch,
       },
     });
@@ -471,7 +471,7 @@ describe('Phase 7 — Evidence Provenance & Independent GitHub Verification', ()
   });
 
   it('4. GitHub Webhook Authenticity (X-Hub-Signature-256), Idempotency (X-GitHub-Delivery), Concurrency & Retry Recovery', async () => {
-    const webhookSecret = 'whsec_Phase7GitHubWebhookHmacSecretKey2026';
+    const webhookSecret = 'test-only-github-webhook-hmac-key-provenance-not-a-secret';
 
     // Part A: Fail-closed when GITHUB_WEBHOOK_SECRET is missing
     const unconfiguredServer = await startTestServer({
