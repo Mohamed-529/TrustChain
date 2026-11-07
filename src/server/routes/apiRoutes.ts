@@ -4,6 +4,7 @@ import type { AuthService } from '../services/AuthService.ts';
 import type { AuthController } from '../controllers/AuthController.ts';
 import type { ContractController } from '../controllers/ContractController.ts';
 import type { EvidenceController } from '../controllers/EvidenceController.ts';
+import type { ReviewController } from '../controllers/ReviewController.ts';
 import { createAuthMiddleware, requireRole } from '../middleware/authMiddleware.ts';
 import { OPENAPI_REQUEST_SCHEMAS, validateRequestSchema } from '../middleware/validateRequest.ts';
 import type { RequestHandler } from '../middleware/errorHandler.ts';
@@ -31,9 +32,16 @@ export function createApiRouter(params: {
   authController: AuthController;
   contractController: ContractController;
   evidenceController: EvidenceController;
+  reviewController: ReviewController;
 }): ApiRouter {
   const router = new ApiRouter();
-  const { authService, authController, contractController, evidenceController } = params;
+  const {
+    authService,
+    authController,
+    contractController,
+    evidenceController,
+    reviewController,
+  } = params;
   const authenticate = createAuthMiddleware(authService);
 
   // Public health check
@@ -134,6 +142,26 @@ export function createApiRouter(params: {
     validateRequestSchema('PolicyPreviewRequest'),
     evidenceController.previewPolicy
   );
+
+  // Protected Phase 4 Human Review Workflow & Financial Decision Ledger endpoints
+  router.get('/milestones/:id/review', authenticate, reviewController.getReviewDetails);
+  router.post('/milestones/:id/review', authenticate, reviewController.submitReview);
+  router.post(
+    '/milestones/:id/review/approve',
+    authenticate,
+    reviewController.approveMilestone
+  );
+  router.post(
+    '/milestones/:id/review/reject',
+    authenticate,
+    reviewController.rejectMilestone
+  );
+  router.post(
+    '/milestones/:id/review/request-changes',
+    authenticate,
+    reviewController.requestChanges
+  );
+  router.get('/ledger', authenticate, reviewController.getLedger);
 
   // Protected tamper-evident audit endpoints
   router.get('/audit', authenticate, contractController.listAuditLogs);

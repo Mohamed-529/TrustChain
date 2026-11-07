@@ -10,6 +10,8 @@ import type {
   EvidenceAnalysis,
   EvidenceReference,
   EvidenceSubmission,
+  HumanApprovalRecord,
+  HumanReviewDecision,
   Milestone,
   MilestoneStatus,
   PaymentStatus,
@@ -501,6 +503,13 @@ export class EvaluationRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  public findById(id: string): EvaluationRun | null {
+    const row = this.rawDb
+      .prepare('SELECT * FROM ai_evaluations WHERE id = ?')
+      .get(id);
+    return row ? this.mapRow(row) : null;
+  }
+
   public findRunningByMilestoneId(milestoneId: string): EvaluationRun | null {
     const row = this.rawDb
       .prepare(
@@ -529,6 +538,65 @@ export class EvaluationRepository {
         JSON.stringify(evaluation.arbitratorRecommendation),
         JSON.stringify(evaluation.policyCalculation),
         evaluation.evaluatedAt
+      );
+  }
+}
+
+export class HumanApprovalRepository {
+  private readonly rawDb: DatabaseSync;
+
+  constructor(rawDb: DatabaseSync) {
+    this.rawDb = rawDb;
+  }
+
+  private mapRow(row: Record<string, unknown>): HumanApprovalRecord {
+    return {
+      id: String(row.id),
+      milestoneId: String(row.milestone_id),
+      evaluationId: String(row.evaluation_id),
+      reviewerId: String(row.reviewer_id),
+      decision: String(row.decision) as HumanReviewDecision,
+      approvedAmountCents: Number(row.approved_amount_cents),
+      isOverride: Number(row.is_override) === 1,
+      justification: String(row.justification),
+      decidedAt: String(row.decided_at),
+    };
+  }
+
+  public listByMilestoneId(milestoneId: string): HumanApprovalRecord[] {
+    const rows = this.rawDb
+      .prepare('SELECT * FROM human_approvals WHERE milestone_id = ? ORDER BY decided_at DESC')
+      .all(milestoneId);
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  public findLatestByMilestoneId(milestoneId: string): HumanApprovalRecord | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT * FROM human_approvals WHERE milestone_id = ? ORDER BY decided_at DESC LIMIT 1'
+      )
+      .get(milestoneId);
+    return row ? this.mapRow(row) : null;
+  }
+
+  public insert(approval: HumanApprovalRecord): void {
+    this.rawDb
+      .prepare(
+        `INSERT INTO human_approvals (
+          id, milestone_id, evaluation_id, reviewer_id, decision,
+          approved_amount_cents, is_override, justification, decided_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        approval.id,
+        approval.milestoneId,
+        approval.evaluationId,
+        approval.reviewerId,
+        approval.decision,
+        approval.approvedAmountCents,
+        approval.isOverride ? 1 : 0,
+        approval.justification,
+        approval.decidedAt
       );
   }
 }

@@ -14,7 +14,7 @@
 
 ## Current Phase
 
-Phase 3 — Evidence Intelligence Engine & Multi-Agent AI Evaluation Pipeline (Completed & Verified; awaiting user review before Phase 4).
+Phase 4 — Deterministic Settlement Policy Engine, Human Approval Workflow & Financial Decision Ledger (Completed & Verified; awaiting user review before Phase 5).
 
 ## Overall Progress
 
@@ -22,12 +22,13 @@ Phase 3 — Evidence Intelligence Engine & Multi-Agent AI Evaluation Pipeline (C
 - Prompt 2 — HLD, LLD, Open-Source Research & Phase 1 Security/Persistence Architecture Review (Completed).
 - Phase 1 — Backend foundation, HMAC-SHA256 Auth/RBAC, Native SQLite (`WAL` + `synchronous=FULL` + append-only triggers) ACID Persistence & Hash-Chained Audit Trail (Completed & Verified — 7/7 tests passing).
 - Phase 2 — OpenAPI 3.0.3 contract (`openapi.yaml`), APIMatic metadata (`APIMATIC-META.json`), live spec discovery endpoints, and runtime schema validator (`validateRequest.ts`) (Completed & Verified — 3/3 Phase 2 tests passing).
-- Phase 3 — Evidence Intelligence Engine: GitHub evidence ingestion, canonical reference registry, 3-stage Multi-Agent AI Evaluation (`EvidenceAnalyst`, `RiskAnalyst`, `ReviewSynthesizer`), `<untrusted_evidence>` prompt-injection isolation, deterministic `SettlementPolicyEngine`, and 3-milestone reproducible demo scenario (Completed & Verified — 4/4 Phase 3 tests passing; 14/14 total tests passing).
-- Next Phases — Human Approval & Settlement Governance, Bryntum Gantt schedule & AG Grid financial decision ledger, PayPal Developer Sandbox Orders API v2 integration, and Frontend integration.
+- Phase 3 — Evidence Intelligence Engine: GitHub evidence ingestion, canonical reference registry, 3-stage Multi-Agent AI Evaluation (`EvidenceAnalyst`, `RiskAnalyst`, `ReviewSynthesizer`), `<untrusted_evidence>` prompt-injection isolation, and 3-milestone reproducible demo scenario (Completed & Verified — 4/4 Phase 3 tests passing).
+- Phase 4 — Dedicated `SettlementPolicyService`, Human Review & Fiduciary Approval Workflow (`HumanReviewService`, `ReviewController`), Audit-Traceable Financial Decision Ledger (`GET /api/v1/ledger`), and Human-Review Workbench UI (`src/App.tsx`) (Completed & Verified — 4/4 Phase 4 tests passing; 18/18 total tests passing).
+- Next Phases — PayPal Developer Sandbox Orders API v2 integration, Bryntum Gantt schedule & AG Grid financial ledger enhancements, and final end-to-end demonstration.
 
 ---
 
-## 1. Completed Features (Phase 1, Phase 2 & Phase 3)
+## 1. Completed Features (Phase 1 – Phase 4)
 
 ### Phase 1 — Backend Foundation, Auth/RBAC, SQLite ACID Persistence & Hash-Chained Audit
 1. **Native Node.js HTTP Server + Vite Middleware Integration (`src/server/index.ts`, `src/server/routes/apiRoutes.ts`)**
@@ -43,30 +44,35 @@ Phase 3 — Evidence Intelligence Engine & Multi-Agent AI Evaluation Pipeline (C
 4. **Live OpenAPI Discovery Endpoints (`GET /api/v1/openapi.yaml`, `GET /api/v1/openapi.json`)**
 
 ### Phase 3 — Evidence Intelligence Engine & Multi-Agent AI Evaluation
-1. **Evidence Ingestion & Validation (`src/server/services/EvidenceService.ts`, `src/server/controllers/EvidenceController.ts`):**
-   - Validates GitHub repository URLs, 7–40 hex commit SHAs, GitHub PR URLs, PR status (`MERGED | OPEN | CLOSED`), changed-file summaries, CI reports, and security scans.
-   - Generates canonical server-verified `EvidenceReference` items (`ev_commit_<id>`, `ev_pr_<id>`, `ev_ci_<id>`, `ev_sec_<id>`), tracks immutable attempt history (`attemptNumber = 1..N`), and records `EVIDENCE_SUBMITTED` in the hash-chained audit log.
-   - Includes a deterministic demo fixture loader (`src/server/services/DemoEvidenceFixtures.ts`) for the 3-milestone seeded contract (`ms_seed_01`, `ms_seed_02`, `ms_seed_03`).
-2. **Three-Stage Multi-Agent Evaluation & Financial Safety Boundary (`src/server/services/EvaluationService.ts`):**
-   - Implements `EvidenceAnalyst` (`EvidenceAnalysis`), `RiskAnalyst` (`RiskAssessment`), and `ReviewSynthesizer` (`ReviewSynthesis` with `recommendedOutcome: PASS | FAIL | NEEDS_HUMAN_REVIEW` and `isAdvisoryOnly: true`), paired with the deterministic `SettlementPolicyEngine` (`calculateDeterministicPolicy`).
-   - Isolates untrusted repository text inside `<untrusted_evidence>` tags and detects prompt-injection attempts (`promptInjectionDetected`).
-   - Enforces the strict financial boundary (`422 AI_FINANCIAL_BOUNDARY_VIOLATION` on any prohibited authority field; milestones transition strictly to `'PENDING_REVIEW'`, never `'APPROVED'` or `'SETTLED'`).
-   - Supports both `GeminiHttpEvaluator` (`gemini-2.5-flash` when `GEMINI_API_KEY` is configured) and `DeterministicMockEvaluator` (`mock-deterministic-v1` when `GEMINI_API_KEY` is absent).
+1. **Evidence Ingestion & Validation (`src/server/services/EvidenceService.ts`, `src/server/controllers/EvidenceController.ts`)**
+2. **Three-Stage Multi-Agent Evaluation & Financial Safety Boundary (`src/server/services/EvaluationService.ts`)**
+3. **Deterministic Demo Evidence Fixtures (`src/server/services/DemoEvidenceFixtures.ts`)**
+
+### Phase 4 — Deterministic Settlement Policy Engine, Human Review Workflow & Financial Decision Ledger
+1. **Dedicated `SettlementPolicyService` (`src/server/services/SettlementPolicyService.ts`):**
+   - Pure integer-cent mathematical policy calculation (`permittedAmountCents`, `grossEligibleCents`, `deductionCents`, `lateDays`, `latePenaltyCents`, `blockingReasons`).
+   - Enforces mandatory CI, security scan, CVE, and completion gates and rejects any amount exceeding the milestone budget or permitted cap.
+2. **Human Review Workflow & State Machine (`src/server/services/HumanReviewService.ts`, `src/server/controllers/ReviewController.ts`):**
+   - Implements `GET /api/v1/milestones/:id/review`, `POST /api/v1/milestones/:id/review`, `POST /api/v1/milestones/:id/review/approve`, `POST /api/v1/milestones/:id/review/reject`, and `POST /api/v1/milestones/:id/review/request-changes`.
+   - Enforces developer self-approval prohibition (`403 SELF_APPROVAL_FORBIDDEN`), designated contract reviewer authorization, mandatory completed evaluation on latest submission, state transitions (`SUBMITTED` -> `PENDING_REVIEW` -> `APPROVED` / `REJECTED` / `REVISION_REQUESTED` [`NEEDS_CHANGES`]), duplicate approval prevention, post-rejection lock, and mandatory justification reason.
+3. **Audit-Traceable Financial Decision Ledger (`GET /api/v1/ledger`):**
+   - Returns flattened ledger rows linking contract, milestone, evidence submission ID, evaluation ID, policy calculation, reviewer decision, approved amount, payment eligibility, and audit hash chain references.
+4. **Human-Review Workbench UI (`src/App.tsx`):**
+   - Displays evidence summary, AI advisory findings, policy breakdown, blocking reasons, review actions with pre-approval confirmation modal, and the read-only Financial Decision Ledger table.
 
 ---
 
 ## 2. Test Results & Validation Status
 
-- **Automated Test Suite (`node --test src/server/__tests__/phase1.test.ts src/server/__tests__/phase2.test.ts src/server/__tests__/phase3.test.ts`):**
-  - **Status:** **PASSED (`14 / 14` tests across `3 / 3` suites passed, `0` failed in `2816.9ms`)**
+- **Automated Test Suite (`node --test src/server/__tests__/phase1.test.ts src/server/__tests__/phase2.test.ts src/server/__tests__/phase3.test.ts src/server/__tests__/phase4.test.ts`):**
+  - **Status:** **PASSED (`18 / 18` tests across `4 / 4` suites passed, `0` failed in `4361.1ms`)**
   - **Phase 1 Suite (`7 / 7` passed)**
   - **Phase 2 Suite (`3 / 3` passed)**
-  - **Phase 3 Suite (`4 / 4` passed):**
-    1. `validates GitHub evidence ingestion, enforces DEVELOPER RBAC, rejects invalid URLs/SHAs, and tracks attempt history` — **PASSED (`559.3ms`)**
-    2. `executes reproducible 3-milestone demo scenario: PASS (complete), NEEDS_HUMAN_REVIEW (missing evidence), and FAIL (suspicious/contradictory)` — **PASSED (`204.0ms`)**
-    3. `detects and neutralizes adversarial prompt-injection attempts in repository evidence` — **PASSED (`153.4ms`)**
-    4. `enforces financial safety boundary, strips untrusted AI evidence IDs, and handles malformed output & unavailable Gemini safely` — **PASSED (`319.1ms`)**
-- **Gemini Configuration Status:**
-  - `GEMINI_API_KEY` is currently not set in the local environment (`geminiConfigured: false`); `EvaluationService` defaults to `DeterministicMockEvaluator` (`evaluationMode: 'DETERMINISTIC_MOCK'`, `isMockEvaluation: true`) and automatically switches to `GeminiHttpEvaluator` (`gemini-2.5-flash`) when `GEMINI_API_KEY` is set on the server.
+  - **Phase 3 Suite (`4 / 4` passed)**
+  - **Phase 4 Suite (`4 / 4` passed):**
+    1. `calculates deterministic integer-cent policy caps, late penalties, deductions, and blocking reasons without AI influence` — **PASSED (`381.5ms`)**
+    2. `blocks developer self-approval, unauthorized reviewers, approval without evaluation, and policy bypass` — **PASSED (`649.8ms`)**
+    3. `enforces state machine transitions (SUBMITTED -> PENDING_REVIEW -> NEEDS_CHANGES / APPROVED / REJECTED), blocks duplicate approval & approval after rejection, and requires rejection reason` — **PASSED (`595.2ms`)**
+    4. `handles concurrent reviews, atomic transaction rollback, and serves audit-traceable Financial Decision Ledger` — **PASSED (`316.2ms`)**
 - **TypeScript Validation Status:**
   - **Status:** **PENDING (`tsc --noEmit` binary unavailable until `npm install` is executed — `GLOBAL_TSC_NOT_FOUND`)**. All TypeScript source and test files execute cleanly under Node.js `v24.14.0` native TypeScript support.

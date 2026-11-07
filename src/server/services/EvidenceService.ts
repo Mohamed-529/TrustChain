@@ -110,11 +110,15 @@ export class EvidenceService {
       );
     }
 
-    if (milestone.status === 'APPROVED' || milestone.status === 'SETTLED') {
+    if (
+      milestone.status === 'APPROVED' ||
+      milestone.status === 'SETTLED' ||
+      milestone.status === 'REJECTED'
+    ) {
       throw new AppError(
         409,
         'MILESTONE_ALREADY_FINALIZED',
-        `Cannot submit new evidence for milestone '${milestoneId}' in '${milestone.status}' state.`
+        `Cannot submit new evidence for milestone '${milestoneId}' in terminal '${milestone.status}' state.`
       );
     }
 

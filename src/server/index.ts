@@ -7,6 +7,7 @@ import {
   ContractRepository,
   EvaluationRepository,
   EvidenceRepository,
+  HumanApprovalRepository,
   MilestoneRepository,
   SessionRepository,
   UserRepository,
@@ -19,9 +20,12 @@ import {
   EvaluationService,
   type MultiAgentEvaluatorProvider,
 } from './services/EvaluationService.ts';
+import { SettlementPolicyService } from './services/SettlementPolicyService.ts';
+import { HumanReviewService } from './services/HumanReviewService.ts';
 import { AuthController } from './controllers/AuthController.ts';
 import { ContractController } from './controllers/ContractController.ts';
 import { EvidenceController } from './controllers/EvidenceController.ts';
+import { ReviewController } from './controllers/ReviewController.ts';
 import { createApiRouter, type RouteDefinition } from './routes/apiRoutes.ts';
 import {
   AppError,
@@ -273,11 +277,14 @@ export interface ServerContainer {
   milestoneRepo: MilestoneRepository;
   evidenceRepo: EvidenceRepository;
   evaluationRepo: EvaluationRepository;
+  approvalRepo: HumanApprovalRepository;
   auditService: AuditService;
   authService: AuthService;
   contractService: ContractService;
   evidenceService: EvidenceService;
   evaluationService: EvaluationService;
+  settlementPolicyService: SettlementPolicyService;
+  humanReviewService: HumanReviewService;
 }
 
 export function createServerApp(options?: {
@@ -292,6 +299,7 @@ export function createServerApp(options?: {
   const contractRepo = new ContractRepository(db.raw, milestoneRepo);
   const evidenceRepo = new EvidenceRepository(db.raw);
   const evaluationRepo = new EvaluationRepository(db.raw);
+  const approvalRepo = new HumanApprovalRepository(db.raw);
   const auditService = new AuditService(db.raw);
 
   const authService = new AuthService(
@@ -328,6 +336,22 @@ export function createServerApp(options?: {
     options?.evaluatorProvider
   );
 
+  const settlementPolicyService = new SettlementPolicyService(
+    contractRepo,
+    milestoneRepo
+  );
+
+  const humanReviewService = new HumanReviewService(
+    db,
+    contractRepo,
+    milestoneRepo,
+    evidenceRepo,
+    evaluationRepo,
+    approvalRepo,
+    settlementPolicyService,
+    auditService
+  );
+
   const authController = new AuthController(authService);
   const contractController = new ContractController(
     contractService,
@@ -338,12 +362,14 @@ export function createServerApp(options?: {
     evidenceService,
     evaluationService
   );
+  const reviewController = new ReviewController(humanReviewService);
 
   const apiRouter = createApiRouter({
     authService,
     authController,
     contractController,
     evidenceController,
+    reviewController,
   });
 
   const app = createMountedHttpApp('/api/v1', apiRouter.routes);
@@ -357,11 +383,14 @@ export function createServerApp(options?: {
     milestoneRepo,
     evidenceRepo,
     evaluationRepo,
+    approvalRepo,
     auditService,
     authService,
     contractService,
     evidenceService,
     evaluationService,
+    settlementPolicyService,
+    humanReviewService,
   };
 }
 

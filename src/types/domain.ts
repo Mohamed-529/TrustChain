@@ -300,7 +300,10 @@ export interface PolicyCalculationResult {
   engineVersion: string;
   agreedAmountCents: number;
   verifiedCriteriaRatio: number;
+  grossEligibleCents?: number;
+  deductionCents?: number;
   gatesTripped: string[];
+  blockingReasons?: string[];
   gateBlocked: boolean;
   lateDays: number;
   latePenaltyCents: number;
@@ -322,4 +325,88 @@ export interface EvaluationRun {
   policyCalculation: PolicyCalculationResult;
   evaluatedAt: string;
 }
+
+/**
+ * ============================================================================
+ * PHASE 4 — Settlement Policy Engine, Human Review & Financial Decision Ledger
+ * ============================================================================
+ */
+
+export type HumanReviewDecision = 'APPROVE' | 'REQUEST_REVISIONS' | 'REJECT';
+export type HumanReviewActionInputDecision =
+  | 'APPROVE'
+  | 'REQUEST_REVISIONS'
+  | 'NEEDS_CHANGES'
+  | 'REJECT';
+
+export interface HumanApprovalRecord {
+  id: string;
+  milestoneId: string;
+  evaluationId: string;
+  reviewerId: string;
+  reviewerRole?: UserRole;
+  decision: HumanReviewDecision;
+  approvedAmountCents: number;
+  isOverride: boolean;
+  justification: string;
+  policyEngineVersion?: string;
+  decidedAt: string;
+}
+
+export interface SubmitReviewInput {
+  evaluationId?: string;
+  decision: HumanReviewActionInputDecision;
+  approvedAmountCents?: number;
+  justification: string;
+}
+
+export interface MilestoneReviewDetails {
+  contract: Omit<Contract, 'milestones'>;
+  milestone: Milestone;
+  stateMachineStatus: MilestoneStatus | 'NEEDS_CHANGES';
+  latestSubmission: EvidenceSubmission | null;
+  latestEvaluation: EvaluationRun | null;
+  policyCalculation: PolicyCalculationResult | null;
+  approvals: HumanApprovalRecord[];
+  allowedActions: {
+    canApprove: boolean;
+    canReject: boolean;
+    canRequestChanges: boolean;
+    maxPermittedAmountCents: number;
+    blockingReasons: string[];
+  };
+}
+
+export interface FinancialLedgerRow {
+  milestoneId: string;
+  contractId: string;
+  contractTitle: string;
+  milestoneTitle: string;
+  sequenceOrder: number;
+  milestoneStatus: MilestoneStatus;
+  stateMachineStatus: MilestoneStatus | 'NEEDS_CHANGES';
+  submissionId: string | null;
+  attemptNumber: number | null;
+  evaluationId: string | null;
+  verifiedRatioPct: number;
+  riskSeverity: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'UNAVAILABLE';
+  aiRecommendation: ArbitratorRecommendationCode | 'PENDING';
+  policyEngineVersion: string | null;
+  gateBlocked: boolean;
+  blockingReasons: string[];
+  agreedAmountCents: number;
+  permittedAmountCents: number | null;
+  approvedAmountCents: number | null;
+  approvalId: string | null;
+  reviewerId: string | null;
+  reviewerDecision: HumanReviewDecision | null;
+  decidedAt: string | null;
+  paymentEligible: boolean;
+  paymentStatus: PaymentStatus;
+  auditEventCount: number;
+  auditTrailIds: string[];
+  latestAuditEntryHash: string | null;
+  updatedAt: string;
+}
+
 
