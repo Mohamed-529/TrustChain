@@ -19,6 +19,7 @@ import type {
 import type { AppDatabase } from '../repositories/Database.ts';
 import {
   buildCanonicalEvidenceReferences,
+  computeEvidencePayloadSha256,
   type ContractRepository,
   type EvaluationRepository,
   type EvidenceRepository,
@@ -26,6 +27,7 @@ import {
 } from '../repositories/DomainRepositories.ts';
 import type { AuditService } from './AuditService.ts';
 import { parseGitHubRepoOwnerAndName } from './EvidenceService.ts';
+import type { GitHubVerificationService } from './GitHubVerificationService.ts';
 import { AppError } from '../middleware/errorHandler.ts';
 
 export interface PromptInjectionScanResult {
@@ -1164,6 +1166,7 @@ export class EvaluationService {
   private readonly evaluationRepo: EvaluationRepository;
   private readonly auditService: AuditService;
   private evaluatorProvider: MultiAgentEvaluatorProvider;
+  private githubVerificationService?: GitHubVerificationService;
   private readonly runningMilestones = new Set<string>();
 
   constructor(
@@ -1173,7 +1176,8 @@ export class EvaluationService {
     evidenceRepo: EvidenceRepository,
     evaluationRepo: EvaluationRepository,
     auditService: AuditService,
-    evaluatorProvider?: MultiAgentEvaluatorProvider
+    evaluatorProvider?: MultiAgentEvaluatorProvider,
+    githubVerificationService?: GitHubVerificationService
   ) {
     this.db = db;
     this.contractRepo = contractRepo;
@@ -1181,6 +1185,7 @@ export class EvaluationService {
     this.evidenceRepo = evidenceRepo;
     this.evaluationRepo = evaluationRepo;
     this.auditService = auditService;
+    this.githubVerificationService = githubVerificationService;
 
     if (evaluatorProvider) {
       this.evaluatorProvider = evaluatorProvider;
@@ -1192,6 +1197,10 @@ export class EvaluationService {
         this.evaluatorProvider = new DeterministicMockEvaluator();
       }
     }
+  }
+
+  public setGitHubVerificationService(service: GitHubVerificationService): void {
+    this.githubVerificationService = service;
   }
 
   public setEvaluatorProvider(provider: MultiAgentEvaluatorProvider): void {
@@ -1267,6 +1276,41 @@ export class EvaluationService {
     });
 
     try {
+      // Phase 7: Verify evidence payload integrity (SHA-256 tamper check) and check GitHub provenance
+      const recomputedPayloadHash = computeEvidencePayloadSha256(latestSubmission);
+      const payloadTampered = Boolean(
+        latestSubmission.payloadSha256 &&
+          latestSubmission.payloadSha256 !== recomputedPayloadHash
+      );
+
+      let provenanceRecord =
+        this.githubVerificationService?.getLatestProvenance(milestoneId) ?? null;
+      if (provenanceRecord && provenanceRecord.submissionId !== latestSubmission.id) {
+        provenanceRecord = null;
+      }
+
+      if (
+        !provenanceRecord &&
+        this.githubVerificationService &&
+        (this.githubVerificationService.isGitHubApiConfigured() || payloadTampered)
+      ) {
+        provenanceRecord =
+          await this.githubVerificationService.verifyMilestoneEvidenceProvenance(
+            actor,
+            milestoneId,
+            latestSubmission.id
+          );
+      }
+
+      const provenanceStatus =
+        payloadTampered
+          ? 'TAMPERED_PAYLOAD'
+          : (provenanceRecord?.overallStatus ??
+            latestSubmission.provenanceStatus ??
+            'UNVERIFIED_UNAVAILABLE');
+      const provenanceMismatchBlocked =
+        provenanceStatus === 'MISMATCH_DETECTED' || provenanceStatus === 'TAMPERED_PAYLOAD';
+
       const canonicalRefs =
         latestSubmission.canonicalReferences ??
         buildCanonicalEvidenceReferences(latestSubmission);
@@ -1304,6 +1348,28 @@ export class EvaluationService {
         isMock
       );
 
+      if (provenanceMismatchBlocked) {
+        const provenanceFailureMsg = payloadTampered
+          ? `EVIDENCE_PAYLOAD_TAMPERED: Stored SHA-256 digest (${latestSubmission.payloadSha256?.slice(0, 12)}...) does not match recomputed digest (${recomputedPayloadHash.slice(0, 12)}...).`
+          : `GITHUB_PROVENANCE_MISMATCH: ${provenanceRecord?.summary ?? 'Submitted GitHub artifacts failed independent provenance verification.'}`;
+
+        evidenceAnalysis.missingEvidence.push(provenanceFailureMsg);
+        evidenceAnalysis.factualObservations.push(
+          `[PROVENANCE_GATE] ${provenanceFailureMsg}`
+        );
+        for (const crit of evidenceAnalysis.criteriaResults) {
+          crit.status = 'CONTRADICTED';
+          crit.explanation = `${crit.explanation} [BLOCKED BY PROVENANCE VERIFICATION: ${provenanceFailureMsg}]`;
+        }
+        evidenceAnalysis.verifiedCount = 0;
+
+        riskAnalysis.contradictions.push(provenanceFailureMsg);
+        riskAnalysis.suspiciousSignals.push(provenanceFailureMsg);
+        riskAnalysis.overallRiskSeverity = 'CRITICAL';
+        riskAnalysis.ciBuildPassed = false;
+        riskAnalysis.summary = `${riskAnalysis.summary} [PROVENANCE BLOCK: ${provenanceFailureMsg}]`;
+      }
+
       // Stage C: Review Synthesizer (Advisory Only)
       const rawReviewSynthesis = await this.evaluatorProvider.runReviewSynthesizer({
         milestone,
@@ -1318,6 +1384,12 @@ export class EvaluationService {
         isMock
       );
 
+      if (provenanceMismatchBlocked) {
+        arbitratorRecommendation.recommendedOutcome = 'FAIL';
+        arbitratorRecommendation.recommendation = 'RECOMMEND_REJECTION';
+        arbitratorRecommendation.rationale = `[PROVENANCE GATE BLOCKED] ${arbitratorRecommendation.rationale}`;
+      }
+
       // Stage D: Deterministic Settlement Policy Engine (Authoritative Math)
       const policyCalculation = calculateDeterministicPolicy({
         agreedAmountCents: milestone.agreedAmountCents,
@@ -1331,6 +1403,21 @@ export class EvaluationService {
         highVulnCount: riskAnalysis.highVulnCount,
         scannerStatus: riskAnalysis.scannerStatus,
       });
+
+      if (provenanceMismatchBlocked) {
+        const provenanceGateReason =
+          provenanceStatus === 'TAMPERED_PAYLOAD'
+            ? 'EVIDENCE_PROVENANCE_GATE: Evidence payload SHA-256 tamper check failed (post-submission modification detected).'
+            : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${provenanceRecord?.summary ?? 'MISMATCH_DETECTED'}).`;
+        if (!policyCalculation.gatesTripped.includes(provenanceGateReason)) {
+          policyCalculation.gatesTripped.unshift(provenanceGateReason);
+        }
+        if (policyCalculation.blockingReasons && !policyCalculation.blockingReasons.includes(provenanceGateReason)) {
+          policyCalculation.blockingReasons.unshift(provenanceGateReason);
+        }
+        policyCalculation.gateBlocked = true;
+        policyCalculation.permittedAmountCents = 0;
+      }
 
       const completedAt = new Date().toISOString();
       const evaluationRun: EvaluationRun = {

@@ -376,6 +376,7 @@ export interface MilestoneReviewDetails {
   stateMachineStatus: MilestoneStatus | 'NEEDS_CHANGES';
   latestSubmission: EvidenceSubmission | null;
   latestEvaluation: EvaluationRun | null;
+  latestProvenance?: EvidenceProvenanceVerificationRecord | null;
   policyCalculation: PolicyCalculationResult | null;
   approvals: HumanApprovalRecord[];
   allowedActions: {
@@ -397,6 +398,7 @@ export interface FinancialLedgerRow {
   stateMachineStatus: MilestoneStatus | 'NEEDS_CHANGES';
   submissionId: string | null;
   attemptNumber: number | null;
+  provenanceStatus?: EvidenceProvenanceStatus;
   evaluationId: string | null;
   verifiedRatioPct: number;
   riskSeverity: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'UNAVAILABLE';

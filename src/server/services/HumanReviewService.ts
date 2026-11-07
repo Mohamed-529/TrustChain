@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type {
+  EvidenceProvenanceStatus,
   FinancialLedgerRow,
   HumanApprovalRecord,
   HumanReviewActionInputDecision,
@@ -9,13 +10,15 @@ import type {
   User,
 } from '../../types/domain.ts';
 import type { AppDatabase } from '../repositories/Database.ts';
-import type {
-  ContractRepository,
-  EvaluationRepository,
-  EvidenceRepository,
-  HumanApprovalRepository,
-  MilestoneRepository,
-  PaymentTransactionRepository,
+import {
+  computeEvidencePayloadSha256,
+  type ContractRepository,
+  type EvaluationRepository,
+  type EvidenceProvenanceRepository,
+  type EvidenceRepository,
+  type HumanApprovalRepository,
+  type MilestoneRepository,
+  type PaymentTransactionRepository,
 } from '../repositories/DomainRepositories.ts';
 import type { AuditService } from './AuditService.ts';
 import {
@@ -34,6 +37,7 @@ export class HumanReviewService {
   private readonly settlementPolicyService: SettlementPolicyService;
   private readonly auditService: AuditService;
   private readonly paymentRepo?: PaymentTransactionRepository;
+  private provenanceRepo?: EvidenceProvenanceRepository;
   private readonly activeReviewLocks = new Set<string>();
 
   constructor(
@@ -45,7 +49,8 @@ export class HumanReviewService {
     approvalRepo: HumanApprovalRepository,
     settlementPolicyService: SettlementPolicyService,
     auditService: AuditService,
-    paymentRepo?: PaymentTransactionRepository
+    paymentRepo?: PaymentTransactionRepository,
+    provenanceRepo?: EvidenceProvenanceRepository
   ) {
     this.db = db;
     this.contractRepo = contractRepo;
@@ -56,6 +61,11 @@ export class HumanReviewService {
     this.settlementPolicyService = settlementPolicyService;
     this.auditService = auditService;
     this.paymentRepo = paymentRepo;
+    this.provenanceRepo = provenanceRepo;
+  }
+
+  public setProvenanceRepository(repo: EvidenceProvenanceRepository): void {
+    this.provenanceRepo = repo;
   }
 
   private toStateMachineStatus(status: MilestoneStatus): MilestoneStatus | 'NEEDS_CHANGES' {
@@ -80,7 +90,25 @@ export class HumanReviewService {
     const { milestones: _omittedMilestones, ...contract } = fullContract;
     const latestSubmission = this.evidenceRepo.findLatestByMilestoneId(milestoneId);
     const latestEvaluation = this.evaluationRepo.findLatestByMilestoneId(milestoneId);
+    const latestProvenance =
+      latestSubmission && this.provenanceRepo
+        ? this.provenanceRepo.findLatestBySubmissionId(latestSubmission.id)
+        : null;
     const approvals = this.approvalRepo.listByMilestoneId(milestoneId);
+
+    const payloadTampered = Boolean(
+      latestSubmission &&
+        latestSubmission.payloadSha256 &&
+        computeEvidencePayloadSha256(latestSubmission) !== latestSubmission.payloadSha256
+    );
+    const effectiveProvenanceStatus: EvidenceProvenanceStatus = payloadTampered
+      ? 'TAMPERED_PAYLOAD'
+      : (latestProvenance?.overallStatus ??
+        latestSubmission?.provenanceStatus ??
+        'UNVERIFIED_UNAVAILABLE');
+    const provenanceBlocked =
+      effectiveProvenanceStatus === 'MISMATCH_DETECTED' ||
+      effectiveProvenanceStatus === 'TAMPERED_PAYLOAD';
 
     const hasValidEvaluationForLatestSubmission = Boolean(
       latestSubmission &&
@@ -99,6 +127,24 @@ export class HumanReviewService {
           )
         : null;
 
+    if (policyCalculation && provenanceBlocked) {
+      const provenanceGateReason =
+        effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
+          ? 'EVIDENCE_PROVENANCE_GATE: Evidence payload SHA-256 tamper check failed (post-submission modification detected).'
+          : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${latestProvenance?.summary ?? 'MISMATCH_DETECTED'}).`;
+      if (!policyCalculation.gatesTripped.includes(provenanceGateReason)) {
+        policyCalculation.gatesTripped.unshift(provenanceGateReason);
+      }
+      if (
+        policyCalculation.blockingReasons &&
+        !policyCalculation.blockingReasons.includes(provenanceGateReason)
+      ) {
+        policyCalculation.blockingReasons.unshift(provenanceGateReason);
+      }
+      policyCalculation.gateBlocked = true;
+      policyCalculation.permittedAmountCents = 0;
+    }
+
     const blockingReasons: string[] = [];
     if (milestone.status === 'APPROVED' || milestone.status === 'SETTLED') {
       blockingReasons.push(`Milestone is already finalized in '${milestone.status}' state.`);
@@ -112,11 +158,22 @@ export class HumanReviewService {
       blockingReasons.push(...policyCalculation.gatesTripped);
     }
 
+    if (provenanceBlocked) {
+      const provenanceBlockMsg =
+        effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
+          ? 'EVIDENCE_PROVENANCE_GATE: Evidence payload SHA-256 tamper check failed (post-submission modification detected).'
+          : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${latestProvenance?.summary ?? 'MISMATCH_DETECTED'}).`;
+      if (!blockingReasons.includes(provenanceBlockMsg)) {
+        blockingReasons.unshift(provenanceBlockMsg);
+      }
+    }
+
     const isReviewableState =
       milestone.status === 'PENDING_REVIEW' && hasValidEvaluationForLatestSubmission;
 
     const canApprove = Boolean(
       isReviewableState &&
+        !provenanceBlocked &&
         policyCalculation &&
         !policyCalculation.gateBlocked &&
         policyCalculation.permittedAmountCents > 0
@@ -128,6 +185,7 @@ export class HumanReviewService {
       stateMachineStatus: this.toStateMachineStatus(milestone.status),
       latestSubmission,
       latestEvaluation,
+      latestProvenance,
       policyCalculation,
       approvals,
       allowedActions: {
@@ -290,7 +348,21 @@ export class HumanReviewService {
           );
         }
 
-        // 5. Re-calculate authoritative deterministic policy cap server-side
+        // 5. Phase 7: Verify evidence payload integrity (SHA-256 tamper check) and GitHub provenance gate
+        const latestProvenance = this.provenanceRepo
+          ? this.provenanceRepo.findLatestBySubmissionId(latestSubmission.id)
+          : null;
+        const payloadTampered = Boolean(
+          latestSubmission.payloadSha256 &&
+            computeEvidencePayloadSha256(latestSubmission) !== latestSubmission.payloadSha256
+        );
+        const effectiveProvenanceStatus: EvidenceProvenanceStatus = payloadTampered
+          ? 'TAMPERED_PAYLOAD'
+          : (latestProvenance?.overallStatus ??
+            latestSubmission.provenanceStatus ??
+            'UNVERIFIED_UNAVAILABLE');
+
+        // 6. Re-calculate authoritative deterministic policy cap server-side
         const authoritativePolicy = this.settlementPolicyService.evaluateMilestonePolicy(
           milestone,
           contract.policyRules,
@@ -303,6 +375,19 @@ export class HumanReviewService {
         let auditAction: string;
 
         if (normalizedDecision === 'APPROVE') {
+          if (
+            effectiveProvenanceStatus === 'MISMATCH_DETECTED' ||
+            effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
+          ) {
+            throw new AppError(
+              409,
+              'EVIDENCE_PROVENANCE_MISMATCH_BLOCKS_APPROVAL',
+              effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
+                ? `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed SHA-256 payload integrity verification (post-submission tampering detected).`
+                : `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed independent GitHub provenance verification (${latestProvenance?.summary ?? 'MISMATCH_DETECTED'}).`
+            );
+          }
+
           const requestedAmount =
             inputObj.approvedAmountCents !== undefined
               ? Number(inputObj.approvedAmountCents)
@@ -446,8 +531,26 @@ export class HumanReviewService {
               ? 0
               : null;
 
+        const latestProvenance =
+          latestSubmission && this.provenanceRepo
+            ? this.provenanceRepo.findLatestBySubmissionId(latestSubmission.id)
+            : null;
+        const payloadTampered = Boolean(
+          latestSubmission &&
+            latestSubmission.payloadSha256 &&
+            computeEvidencePayloadSha256(latestSubmission) !== latestSubmission.payloadSha256
+        );
+        const provenanceStatus: EvidenceProvenanceStatus = payloadTampered
+          ? 'TAMPERED_PAYLOAD'
+          : (latestProvenance?.overallStatus ??
+            latestSubmission?.provenanceStatus ??
+            'UNVERIFIED_UNAVAILABLE');
+        const provenanceBlocked =
+          provenanceStatus === 'MISMATCH_DETECTED' || provenanceStatus === 'TAMPERED_PAYLOAD';
+
         const paymentEligible = Boolean(
           milestone.status === 'APPROVED' &&
+            !provenanceBlocked &&
             latestApproval &&
             latestApproval.decision === 'APPROVE' &&
             latestApproval.approvedAmountCents > 0 &&
@@ -479,6 +582,7 @@ export class HumanReviewService {
           stateMachineStatus: this.toStateMachineStatus(milestone.status),
           submissionId: latestSubmission?.id ?? null,
           attemptNumber: latestSubmission?.attemptNumber ?? null,
+          provenanceStatus,
           evaluationId: latestEvaluation?.id ?? null,
           verifiedRatioPct,
           riskSeverity: latestEvaluation?.riskAnalysis.overallRiskSeverity ?? 'UNAVAILABLE',
