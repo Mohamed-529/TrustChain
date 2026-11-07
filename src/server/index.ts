@@ -389,7 +389,10 @@ export function createServerApp(options?: {
     paymentRepo,
     settlementPolicyService,
     auditService,
-    options?.paypalOptions
+    {
+      webhookEventRepo,
+      ...options?.paypalOptions,
+    }
   );
 
   const authController = new AuthController(authService);

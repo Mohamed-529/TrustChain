@@ -1,5 +1,11 @@
 import crypto from 'node:crypto';
-import type { PayPalTransactionRecord, User } from '../../types/domain.ts';
+import type {
+  PayPalTransactionRecord,
+  PayPalWebhookEventRecord,
+  PayPalWebhookProcessingStatus,
+  PayPalWebhookVerificationStatus,
+  User,
+} from '../../types/domain.ts';
 import type { AppDatabase } from '../repositories/Database.ts';
 import type {
   ContractRepository,
@@ -7,6 +13,7 @@ import type {
   HumanApprovalRepository,
   MilestoneRepository,
   PaymentTransactionRepository,
+  WebhookEventRepository,
 } from '../repositories/DomainRepositories.ts';
 import type { AuditService } from './AuditService.ts';
 import type { SettlementPolicyService } from './SettlementPolicyService.ts';
@@ -21,6 +28,8 @@ export interface PayPalServiceOptions {
   clientSecret?: string;
   webhookId?: string;
   apiBaseUrl?: string;
+  webhookEventRepo?: WebhookEventRepository;
+  beforeWebhookReconcileHook?: (eventId: string, eventType: string) => void;
 }
 
 /**
@@ -87,6 +96,10 @@ export class PayPalService {
     return this.options?.clientSecret ?? process.env.PAYPAL_CLIENT_SECRET;
   }
 
+  private getWebhookId(): string | undefined {
+    return this.options?.webhookId ?? process.env.PAYPAL_WEBHOOK_ID;
+  }
+
   private getApiBaseUrl(): string {
     return (
       this.options?.apiBaseUrl ??
@@ -102,6 +115,16 @@ export class PayPalService {
       clientId &&
         clientSecret &&
         clientId !== 'YOUR_PAYPAL_SANDBOX_CLIENT_ID'
+    );
+  }
+
+  public isWebhookVerificationConfigured(): boolean {
+    const webhookId = this.getWebhookId();
+    return Boolean(
+      this.isLivePayPalConfigured() &&
+        webhookId &&
+        webhookId.trim().length > 0 &&
+        webhookId !== 'YOUR_PAYPAL_WEBHOOK_ID'
     );
   }
 
@@ -936,19 +959,29 @@ export class PayPalService {
   /**
    * Step 4: Verify and process asynchronous PayPal Sandbox Webhook Notifications
    * (`POST /api/v1/webhooks/paypal`).
-   * Validates required `PAYPAL-TRANSMISSION-*` signature headers, verifies authenticity,
-   * reconciles payment status if needed, and records an immutable audit log entry.
+   *
+   * Uses PayPal's official webhook signature verification endpoint
+   * (`POST /v1/notifications/verify-webhook-signature`) with server-side credentials
+   * and configured `PAYPAL_WEBHOOK_ID`.
+   *
+   * Security Rules Enforced:
+   * - Accepts an event ONLY when PayPal returns `verification_status === "SUCCESS"`.
+   * - Fails closed (503) when webhook configuration (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`,
+   *   or `PAYPAL_WEBHOOK_ID`) is missing or when PayPal's verification service is unavailable.
+   * - Never processes state-changing events for unverified webhooks.
+   * - Logs rejected and unverified webhook attempts in the audit trail.
    */
-  public handleWebhook(
+  public async handleWebhook(
     headers: Record<string, string | string[] | undefined>,
     rawBody: unknown
-  ): {
+  ): Promise<{
     verified: boolean;
     eventId: string;
     eventType: string;
     status: string;
+    duplicate?: boolean;
     reconciledTransactionId: string | null;
-  } {
+  }> {
     const getHeader = (name: string): string => {
       const val = headers[name.toLowerCase()] ?? headers[name];
       return Array.isArray(val) ? String(val[0] ?? '') : String(val ?? '');
@@ -959,31 +992,6 @@ export class PayPalService {
     const transmissionSig = getHeader('paypal-transmission-sig').trim();
     const certUrl = getHeader('paypal-cert-url').trim();
     const authAlgo = getHeader('paypal-auth-algo').trim();
-
-    if (!transmissionId || !transmissionTime || !transmissionSig || !certUrl || !authAlgo) {
-      throw new AppError(
-        401,
-        'MISSING_PAYPAL_WEBHOOK_HEADERS',
-        'Missing mandatory PayPal webhook signature headers (PAYPAL-TRANSMISSION-ID, PAYPAL-TRANSMISSION-TIME, PAYPAL-TRANSMISSION-SIG, PAYPAL-CERT-URL, PAYPAL-AUTH-ALGO).'
-      );
-    }
-
-    // Validate Cert URL is an HTTPS PayPal domain to prevent SSRF / forged cert injection
-    if (!/^https:\/\/api(\.sandbox)?\.paypal\.com\//i.test(certUrl)) {
-      throw new AppError(
-        401,
-        'UNTRUSTED_PAYPAL_CERT_URL',
-        `Untrusted PAYPAL-CERT-URL '${certUrl}'. Certificate URL must belong to https://api.paypal.com or https://api.sandbox.paypal.com.`
-      );
-    }
-
-    if (transmissionSig.length < 12 || transmissionSig === 'INVALID_SIGNATURE') {
-      throw new AppError(
-        401,
-        'INVALID_PAYPAL_WEBHOOK_SIGNATURE',
-        'PayPal webhook cryptographic signature verification failed.'
-      );
-    }
 
     if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
       throw new AppError(400, 'INVALID_WEBHOOK_PAYLOAD', 'Webhook body must be a JSON object.');
@@ -1002,6 +1010,137 @@ export class PayPalService {
         400,
         'MALFORMED_PAYPAL_WEBHOOK_EVENT',
         'PayPal webhook event must include id, event_type, and resource.'
+      );
+    }
+
+    const recordRejectedAttempt = (
+      verificationStatus: PayPalWebhookVerificationStatus,
+      reasonCode: string,
+      errorMessage: string
+    ): void => {
+      const nowIso = new Date().toISOString();
+      this.db.withTransaction(() => {
+        const webhookRepo = this.options?.webhookEventRepo;
+        if (webhookRepo) {
+          const existing = webhookRepo.findByEventId(eventId);
+          if (!existing) {
+            webhookRepo.create({
+              eventId,
+              eventType,
+              transmissionId: transmissionId || null,
+              verificationStatus,
+              processingStatus: 'REJECTED',
+              processingResult: reasonCode,
+              reconciledTransactionId: null,
+              errorMessage,
+              receivedAt: nowIso,
+              updatedAt: nowIso,
+            });
+          } else if (existing.processingStatus !== 'PROCESSED') {
+            webhookRepo.update({
+              ...existing,
+              transmissionId: transmissionId || existing.transmissionId,
+              verificationStatus,
+              processingStatus: 'REJECTED',
+              processingResult: reasonCode,
+              errorMessage,
+              updatedAt: nowIso,
+            });
+          }
+        }
+
+        this.auditService.appendWithinTx({
+          actorId: 'client_01',
+          actorRole: 'SYSTEM',
+          action: 'PAYPAL_WEBHOOK_REJECTED',
+          entityType: 'PAYMENT',
+          entityId: eventId,
+          contractId: null,
+          milestoneId: null,
+          previousState: null,
+          newState: reasonCode,
+          payload: {
+            eventId,
+            eventType,
+            transmissionId: transmissionId || null,
+            verificationStatus,
+            reasonCode,
+            errorMessage,
+          },
+          timestamp: nowIso,
+        });
+      });
+    };
+
+    if (!transmissionId || !transmissionTime || !transmissionSig || !certUrl || !authAlgo) {
+      recordRejectedAttempt(
+        'UNVERIFIED',
+        'MISSING_PAYPAL_WEBHOOK_HEADERS',
+        'Missing mandatory PayPal webhook signature headers.'
+      );
+      throw new AppError(
+        401,
+        'MISSING_PAYPAL_WEBHOOK_HEADERS',
+        'Missing mandatory PayPal webhook signature headers (PAYPAL-TRANSMISSION-ID, PAYPAL-TRANSMISSION-TIME, PAYPAL-TRANSMISSION-SIG, PAYPAL-CERT-URL, PAYPAL-AUTH-ALGO).'
+      );
+    }
+
+    // Validate Cert URL is an HTTPS PayPal domain to prevent SSRF / forged cert injection
+    if (!/^https:\/\/api(\.sandbox)?\.paypal\.com\//i.test(certUrl)) {
+      recordRejectedAttempt(
+        'FAILURE',
+        'UNTRUSTED_PAYPAL_CERT_URL',
+        `Untrusted PAYPAL-CERT-URL '${certUrl}'.`
+      );
+      throw new AppError(
+        401,
+        'UNTRUSTED_PAYPAL_CERT_URL',
+        `Untrusted PAYPAL-CERT-URL '${certUrl}'. Certificate URL must belong to https://api.paypal.com or https://api.sandbox.paypal.com.`
+      );
+    }
+
+    // Fail closed if server-side PayPal credentials or PAYPAL_WEBHOOK_ID are missing
+    if (!this.isWebhookVerificationConfigured()) {
+      recordRejectedAttempt(
+        'UNVERIFIED',
+        'WEBHOOK_VERIFICATION_UNAVAILABLE',
+        'PayPal webhook verification configuration (PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_WEBHOOK_ID) is missing. Failing closed.'
+      );
+      throw new AppError(
+        503,
+        'WEBHOOK_VERIFICATION_UNAVAILABLE',
+        'PayPal webhook signature verification is unavailable because PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, or PAYPAL_WEBHOOK_ID is not configured. Failing closed.'
+      );
+    }
+
+    // Call official PayPal POST /v1/notifications/verify-webhook-signature endpoint
+    const verificationStatus = await this.verifyWebhookSignatureWithPayPal({
+      transmissionId,
+      transmissionTime,
+      certUrl,
+      authAlgo,
+      transmissionSig,
+      webhookId: this.getWebhookId()!,
+      webhookEvent: bodyObj,
+      onServiceUnavailable: (errMsg) => {
+        recordRejectedAttempt(
+          'UNVERIFIED',
+          'PAYPAL_WEBHOOK_VERIFICATION_UNAVAILABLE',
+          errMsg
+        );
+      },
+    });
+
+    if (verificationStatus !== 'SUCCESS') {
+      recordRejectedAttempt(
+        'FAILURE',
+        'INVALID_PAYPAL_WEBHOOK_SIGNATURE',
+        `PayPal verify-webhook-signature returned verification_status='${verificationStatus}'.`
+      );
+      throw new AppError(
+        401,
+        'INVALID_PAYPAL_WEBHOOK_SIGNATURE',
+        `PayPal webhook signature verification failed (verification_status: '${verificationStatus}').`
       );
     }
 
@@ -1064,6 +1203,7 @@ export class PayPalService {
           transmissionId,
           authAlgo,
           resourceId,
+          verificationStatus: 'SUCCESS',
           reconciledTransactionId: matchedTx?.id ?? null,
         },
         timestamp: nowIso,
@@ -1077,6 +1217,89 @@ export class PayPalService {
         reconciledTransactionId: matchedTx?.id ?? null,
       };
     });
+  }
+
+  private async verifyWebhookSignatureWithPayPal(params: {
+    transmissionId: string;
+    transmissionTime: string;
+    certUrl: string;
+    authAlgo: string;
+    transmissionSig: string;
+    webhookId: string;
+    webhookEvent: Record<string, unknown>;
+    onServiceUnavailable: (errorMessage: string) => void;
+  }): Promise<string> {
+    let token: string;
+    try {
+      token = await this.getLivePayPalAccessToken();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      params.onServiceUnavailable(`Failed to obtain PayPal OAuth2 token for webhook verification: ${msg}`);
+      throw new AppError(
+        503,
+        'PAYPAL_WEBHOOK_VERIFICATION_UNAVAILABLE',
+        `PayPal webhook verification service is unavailable (OAuth2 failure). Failing closed.`
+      );
+    }
+
+    const baseUrl = this.getApiBaseUrl();
+    let verifyRes: Response;
+    try {
+      verifyRes = await this.getFetch()(`${baseUrl}/v1/notifications/verify-webhook-signature`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transmission_id: params.transmissionId,
+          transmission_time: params.transmissionTime,
+          cert_url: params.certUrl,
+          auth_algo: params.authAlgo,
+          transmission_sig: params.transmissionSig,
+          webhook_id: params.webhookId,
+          webhook_event: params.webhookEvent,
+        }),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      params.onServiceUnavailable(`Network error calling PayPal verify-webhook-signature: ${msg}`);
+      throw new AppError(
+        503,
+        'PAYPAL_WEBHOOK_VERIFICATION_UNAVAILABLE',
+        `Network failure contacting PayPal verify-webhook-signature endpoint: ${msg}. Failing closed.`
+      );
+    }
+
+    if (!verifyRes.ok) {
+      const errText = await verifyRes.text();
+      params.onServiceUnavailable(
+        `PayPal verify-webhook-signature returned HTTP ${verifyRes.status}: ${errText}`
+      );
+      throw new AppError(
+        503,
+        'PAYPAL_WEBHOOK_VERIFICATION_UNAVAILABLE',
+        `PayPal verify-webhook-signature returned HTTP ${verifyRes.status}. Failing closed.`
+      );
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      const json = await verifyRes.json();
+      if (!json || typeof json !== 'object' || Array.isArray(json)) {
+        throw new Error('Response is not a JSON object');
+      }
+      parsed = json as Record<string, unknown>;
+    } catch {
+      params.onServiceUnavailable('PayPal verify-webhook-signature returned malformed JSON.');
+      throw new AppError(
+        503,
+        'PAYPAL_WEBHOOK_VERIFICATION_UNAVAILABLE',
+        'PayPal verify-webhook-signature returned malformed JSON. Failing closed.'
+      );
+    }
+
+    return String(parsed.verification_status ?? 'FAILURE').trim();
   }
 
   public listTransactionsByMilestone(milestoneId: string): PayPalTransactionRecord[] {

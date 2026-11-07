@@ -101,13 +101,13 @@ export class PaymentController {
     }
   };
 
-  public handleWebhook = (
+  public handleWebhook = async (
     req: ApiRequest,
     res: ApiResponse,
     next: NextFunction
-  ): void => {
+  ): Promise<void> => {
     try {
-      const result = this.paypalService.handleWebhook(req.headers, req.body);
+      const result = await this.paypalService.handleWebhook(req.headers, req.body);
       res.status(200).json(result);
     } catch (err) {
       next(err);

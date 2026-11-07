@@ -7,6 +7,69 @@ import {
   MilestoneProofClient,
 } from '../../sdk/MilestoneProofClient.ts';
 
+function createMockPayPalSandboxFetch(): typeof fetch {
+  let seq = 1;
+  return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.endsWith('/v1/oauth2/token')) {
+      return new Response(
+        JSON.stringify({ access_token: 'mock_paypal_sandbox_token_001', token_type: 'Bearer' }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    if (url.endsWith('/v2/checkout/orders')) {
+      const id = `ORD-SBX-${seq++}`;
+      return new Response(
+        JSON.stringify({ id, status: 'CREATED', intent: 'AUTHORIZE' }),
+        { status: 201, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    if (url.includes('/v2/checkout/orders/') && url.endsWith('/authorize')) {
+      const authId = `AUTH-SBX-${seq++}`;
+      const expiresAt = new Date(Date.now() + 29 * 86_400_000).toISOString();
+      return new Response(
+        JSON.stringify({
+          id: 'ORD-SBX-AUTH',
+          status: 'COMPLETED',
+          purchase_units: [
+            {
+              payments: {
+                authorizations: [
+                  {
+                    id: authId,
+                    status: 'CREATED',
+                    expiration_time: expiresAt,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    if (url.includes('/v2/payments/authorizations/') && url.endsWith('/capture')) {
+      const capId = `CAP-SBX-${seq++}`;
+      return new Response(
+        JSON.stringify({ id: capId, status: 'COMPLETED', final_capture: true }),
+        { status: 201, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    if (url.endsWith('/v1/notifications/verify-webhook-signature')) {
+      const bodyObj = init?.body ? JSON.parse(String(init.body)) : {};
+      const sig = String(bodyObj.transmission_sig ?? '');
+      const status =
+        sig.startsWith('sig_verified_') ? 'SUCCESS' : 'FAILURE';
+      return new Response(
+        JSON.stringify({ verification_status: status }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    return new Response(JSON.stringify({ message: 'Not found' }), { status: 404 });
+  };
+}
+
+
 describe('Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Control Tower + APIMatic SDK + PayPal Orders API v2', () => {
   it('1. Bryntum Gantt Control Tower: loads 3-milestone scenario (M1 Completed 100%, M2 Failed CI & Overdue, M3 Blocked by Dependency) and generates AI Schedule Recovery Proposal', async () => {
     const container = createServerApp({
@@ -161,6 +224,12 @@ describe('Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Control Tower 
     const container = createServerApp({
       dbPath: ':memory:',
       authOptions: { enableDemoImpersonation: true },
+      paypalOptions: {
+        clientId: 'sbx_client_id_test',
+        clientSecret: 'sbx_client_secret_test',
+        webhookId: 'WH-SBX-CONFIG-001',
+        fetchImpl: createMockPayPalSandboxFetch(),
+      },
     });
 
     const server = http.createServer(container.app);
@@ -335,6 +404,12 @@ describe('Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Control Tower 
     const container = createServerApp({
       dbPath: ':memory:',
       authOptions: { enableDemoImpersonation: true },
+      paypalOptions: {
+        clientId: 'sbx_client_id_test',
+        clientSecret: 'sbx_client_secret_test',
+        webhookId: 'WH-SBX-CONFIG-001',
+        fetchImpl: createMockPayPalSandboxFetch(),
+      },
     });
 
     const server = http.createServer(container.app);
