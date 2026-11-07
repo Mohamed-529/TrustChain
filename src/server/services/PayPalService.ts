@@ -61,6 +61,7 @@ export class PayPalService {
   private readonly settlementPolicyService: SettlementPolicyService;
   private readonly auditService: AuditService;
   private readonly options?: PayPalServiceOptions;
+  private readonly activeWebhookLocks = new Set<string>();
 
   constructor(
     db: AppDatabase,
@@ -1144,79 +1145,249 @@ export class PayPalService {
       );
     }
 
-    return this.db.withTransaction(() => {
+    const webhookRepo = this.options?.webhookEventRepo;
+
+    // Prevent concurrent duplicate deliveries of the exact same event_id
+    if (this.activeWebhookLocks.has(eventId)) {
       const nowIso = new Date().toISOString();
-      const resourceId = String(resource.id ?? '');
-      let matchedTx =
-        this.paymentRepo.findByPaypalAuthorizationId(resourceId) ??
-        this.paymentRepo.findByPaypalOrderId(resourceId);
-
-      let reconciledStatus = 'VERIFIED_LOGGED';
-
-      if (matchedTx) {
-        if (eventType === 'PAYMENT.AUTHORIZATION.VOIDED' && matchedTx.status === 'AUTHORIZED') {
-          matchedTx = {
-            ...matchedTx,
-            status: 'VOIDED',
-            updatedAt: nowIso,
-          };
-          this.paymentRepo.update(matchedTx);
-          this.milestoneRepo.updatePaymentStatus(matchedTx.milestoneId, 'VOIDED', null, nowIso);
-          reconciledStatus = 'RECONCILED_VOIDED';
-        } else if (
-          eventType === 'PAYMENT.CAPTURE.DENIED' ||
-          eventType === 'PAYMENT.AUTHORIZATION.EXPIRED'
-        ) {
-          const newPayStatus =
-            eventType === 'PAYMENT.AUTHORIZATION.EXPIRED' ? 'EXPIRED' : 'FAILED';
-          matchedTx = {
-            ...matchedTx,
-            status: newPayStatus,
-            updatedAt: nowIso,
-          };
-          this.paymentRepo.update(matchedTx);
-          this.milestoneRepo.updatePaymentStatus(
-            matchedTx.milestoneId,
-            newPayStatus,
-            newPayStatus === 'FAILED' ? 'PAY_FAILED' : null,
-            nowIso
-          );
-          reconciledStatus = `RECONCILED_${newPayStatus}`;
-        }
-      }
-
-      const milestone = matchedTx ? this.milestoneRepo.findById(matchedTx.milestoneId) : null;
-
-      this.auditService.appendWithinTx({
-        actorId: 'client_01',
-        actorRole: 'SYSTEM',
-        action: 'PAYPAL_WEBHOOK_VERIFIED',
-        entityType: 'PAYMENT',
-        entityId: matchedTx?.id ?? eventId,
-        contractId: milestone?.contractId ?? null,
-        milestoneId: matchedTx?.milestoneId ?? null,
-        previousState: null,
-        newState: reconciledStatus,
-        payload: {
-          eventId,
-          eventType,
-          transmissionId,
-          authAlgo,
-          resourceId,
-          verificationStatus: 'SUCCESS',
-          reconciledTransactionId: matchedTx?.id ?? null,
-        },
-        timestamp: nowIso,
+      this.db.withTransaction(() => {
+        this.auditService.appendWithinTx({
+          actorId: 'client_01',
+          actorRole: 'SYSTEM',
+          action: 'PAYPAL_WEBHOOK_DUPLICATE_IGNORED',
+          entityType: 'PAYMENT',
+          entityId: eventId,
+          contractId: null,
+          milestoneId: null,
+          previousState: 'PROCESSING',
+          newState: 'DUPLICATE_CONCURRENT_IGNORED',
+          payload: {
+            eventId,
+            eventType,
+            transmissionId,
+            reason: 'Concurrent duplicate delivery detected while event is in-flight.',
+          },
+          timestamp: nowIso,
+        });
       });
-
       return {
         verified: true,
         eventId,
         eventType,
-        status: reconciledStatus,
-        reconciledTransactionId: matchedTx?.id ?? null,
+        status: 'DUPLICATE_IGNORED',
+        duplicate: true,
+        reconciledTransactionId: null,
       };
-    });
+    }
+
+    this.activeWebhookLocks.add(eventId);
+    try {
+      // Check persistent webhook event table for already-processed or in-progress events
+      if (webhookRepo) {
+        const existingEvent = webhookRepo.findByEventId(eventId);
+        if (existingEvent && existingEvent.processingStatus === 'PROCESSED') {
+          const nowIso = new Date().toISOString();
+          this.db.withTransaction(() => {
+            this.auditService.appendWithinTx({
+              actorId: 'client_01',
+              actorRole: 'SYSTEM',
+              action: 'PAYPAL_WEBHOOK_DUPLICATE_IGNORED',
+              entityType: 'PAYMENT',
+              entityId: existingEvent.reconciledTransactionId ?? eventId,
+              contractId: null,
+              milestoneId: null,
+              previousState: existingEvent.processingResult,
+              newState: 'DUPLICATE_IGNORED',
+              payload: {
+                eventId,
+                eventType,
+                transmissionId,
+                originalReceivedAt: existingEvent.receivedAt,
+                reconciledTransactionId: existingEvent.reconciledTransactionId,
+              },
+              timestamp: nowIso,
+            });
+          });
+          return {
+            verified: true,
+            eventId,
+            eventType,
+            status: 'DUPLICATE_IGNORED',
+            duplicate: true,
+            reconciledTransactionId: existingEvent.reconciledTransactionId,
+          };
+        }
+
+        // Mark event as PROCESSING before running reconciliation
+        const markIso = new Date().toISOString();
+        this.db.withTransaction(() => {
+          if (!existingEvent) {
+            webhookRepo.create({
+              eventId,
+              eventType,
+              transmissionId,
+              verificationStatus: 'SUCCESS',
+              processingStatus: 'PROCESSING',
+              processingResult: null,
+              reconciledTransactionId: null,
+              errorMessage: null,
+              receivedAt: markIso,
+              updatedAt: markIso,
+            });
+          } else {
+            // Retry of a previously FAILED or REJECTED event
+            webhookRepo.update({
+              ...existingEvent,
+              eventType,
+              transmissionId,
+              verificationStatus: 'SUCCESS',
+              processingStatus: 'PROCESSING',
+              errorMessage: null,
+              updatedAt: markIso,
+            });
+          }
+        });
+      }
+
+      try {
+        return this.db.withTransaction(() => {
+          const nowIso = new Date().toISOString();
+          const resourceId = String(resource.id ?? '');
+
+          if (this.options?.beforeWebhookReconcileHook) {
+            this.options.beforeWebhookReconcileHook(eventId, eventType);
+          }
+
+          let matchedTx =
+            this.paymentRepo.findByPaypalAuthorizationId(resourceId) ??
+            this.paymentRepo.findByPaypalOrderId(resourceId);
+
+          let reconciledStatus = 'VERIFIED_LOGGED';
+
+          if (matchedTx) {
+            if (
+              eventType === 'PAYMENT.AUTHORIZATION.VOIDED' &&
+              (matchedTx.status === 'AUTHORIZED' || matchedTx.status === 'SIMULATED_AUTHORIZED')
+            ) {
+              matchedTx = {
+                ...matchedTx,
+                status: 'VOIDED',
+                updatedAt: nowIso,
+              };
+              this.paymentRepo.update(matchedTx);
+              this.milestoneRepo.updatePaymentStatus(matchedTx.milestoneId, 'VOIDED', null, nowIso);
+              reconciledStatus = 'RECONCILED_VOIDED';
+            } else if (
+              eventType === 'PAYMENT.CAPTURE.DENIED' ||
+              eventType === 'PAYMENT.AUTHORIZATION.EXPIRED'
+            ) {
+              const newPayStatus =
+                eventType === 'PAYMENT.AUTHORIZATION.EXPIRED' ? 'EXPIRED' : 'FAILED';
+              matchedTx = {
+                ...matchedTx,
+                status: newPayStatus,
+                updatedAt: nowIso,
+              };
+              this.paymentRepo.update(matchedTx);
+              this.milestoneRepo.updatePaymentStatus(
+                matchedTx.milestoneId,
+                newPayStatus,
+                newPayStatus === 'FAILED' ? 'PAY_FAILED' : null,
+                nowIso
+              );
+              reconciledStatus = `RECONCILED_${newPayStatus}`;
+            }
+          }
+
+          if (webhookRepo) {
+            const currentRec = webhookRepo.findByEventId(eventId);
+            if (currentRec) {
+              webhookRepo.update({
+                ...currentRec,
+                verificationStatus: 'SUCCESS',
+                processingStatus: 'PROCESSED',
+                processingResult: reconciledStatus,
+                reconciledTransactionId: matchedTx?.id ?? null,
+                errorMessage: null,
+                updatedAt: nowIso,
+              });
+            }
+          }
+
+          const milestone = matchedTx ? this.milestoneRepo.findById(matchedTx.milestoneId) : null;
+
+          this.auditService.appendWithinTx({
+            actorId: 'client_01',
+            actorRole: 'SYSTEM',
+            action: 'PAYPAL_WEBHOOK_VERIFIED',
+            entityType: 'PAYMENT',
+            entityId: matchedTx?.id ?? eventId,
+            contractId: milestone?.contractId ?? null,
+            milestoneId: matchedTx?.milestoneId ?? null,
+            previousState: null,
+            newState: reconciledStatus,
+            payload: {
+              eventId,
+              eventType,
+              transmissionId,
+              authAlgo,
+              resourceId,
+              verificationStatus: 'SUCCESS',
+              reconciledTransactionId: matchedTx?.id ?? null,
+            },
+            timestamp: nowIso,
+          });
+
+          return {
+            verified: true,
+            eventId,
+            eventType,
+            status: reconciledStatus,
+            duplicate: false,
+            reconciledTransactionId: matchedTx?.id ?? null,
+          };
+        });
+      } catch (processingErr) {
+        // Record FAILED processing state so the webhook event can be safely retried
+        const failIso = new Date().toISOString();
+        const errMsg =
+          processingErr instanceof Error ? processingErr.message : String(processingErr);
+        if (webhookRepo) {
+          this.db.withTransaction(() => {
+            const currentRec = webhookRepo.findByEventId(eventId);
+            if (currentRec) {
+              webhookRepo.update({
+                ...currentRec,
+                processingStatus: 'FAILED',
+                errorMessage: errMsg,
+                updatedAt: failIso,
+              });
+            }
+            this.auditService.appendWithinTx({
+              actorId: 'client_01',
+              actorRole: 'SYSTEM',
+              action: 'PAYPAL_WEBHOOK_PROCESSING_FAILED',
+              entityType: 'PAYMENT',
+              entityId: eventId,
+              contractId: null,
+              milestoneId: null,
+              previousState: 'PROCESSING',
+              newState: 'FAILED',
+              payload: {
+                eventId,
+                eventType,
+                transmissionId,
+                errorMessage: errMsg,
+              },
+              timestamp: failIso,
+            });
+          });
+        }
+        throw processingErr;
+      }
+    } finally {
+      this.activeWebhookLocks.delete(eventId);
+    }
   }
 
   private async verifyWebhookSignatureWithPayPal(params: {
