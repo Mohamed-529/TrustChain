@@ -135,6 +135,7 @@ Before implementing any task:
 8. Run relevant tests.
 9. Inspect the changes for regressions.
 10. Update PROJECT_STATUS.md.
+11. Follow the Mandatory Git Commit Policy (create 5–7 meaningful, logically separated Conventional Commits per implementation phase after running relevant tests, never commit secrets/databases, never force-push, and push verified commits to `origin/main`).
 
 Do not automatically proceed to the next phase without approval when a phase checkpoint is required.
 

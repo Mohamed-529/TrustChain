@@ -251,6 +251,12 @@ export class ScheduleControlTowerService {
           : 0;
       const lateDays = isComplete ? (latestEval?.policyCalculation.lateDays ?? 0) : rawLateDays;
 
+      const baseEndMs = new Date(baselineEndDate).getTime();
+      const baselineVarianceDays =
+        !Number.isNaN(baseEndMs) && !Number.isNaN(deadlineMs) && deadlineMs > baseEndMs
+          ? Math.ceil((deadlineMs - baseEndMs) / (1000 * 60 * 60 * 24))
+          : 0;
+
       // Determine blocking dependencies: any dependency that is not yet APPROVED or SETTLED
       const blockingMilestoneIds: string[] = [];
       for (const depId of m.dependencyMilestoneIds) {
@@ -409,6 +415,7 @@ export class ScheduleControlTowerService {
         isBlockedByDependency,
         blockingMilestoneIds,
         lateDays,
+        baselineVarianceDays,
         agreedAmountCents: m.agreedAmountCents,
         permittedAmountCents: latestEval ? latestEval.policyCalculation.permittedAmountCents : null,
         approvedAmountCents:

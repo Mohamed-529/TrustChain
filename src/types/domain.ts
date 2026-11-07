@@ -457,6 +457,7 @@ export interface ContractScheduleTask {
   isBlockedByDependency: boolean;
   blockingMilestoneIds: string[];
   lateDays: number;
+  baselineVarianceDays: number;
   agreedAmountCents: number;
   permittedAmountCents: number | null;
   approvedAmountCents: number | null;
