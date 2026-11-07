@@ -14,7 +14,7 @@
 
 ## Current Phase
 
-Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Evidence-Aware Software Delivery Control Tower + APIMatic TypeScript SDK & Developer Portal + PayPal Orders API v2 Settlement Engine (Completed & Verified — 21/21 automated tests passing across Phases 1–5).
+Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Evidence-Aware Software Delivery Control Tower + APIMatic TypeScript SDK & Developer Portal + PayPal Orders API v2 Settlement Engine (Completed & Verified — 22/22 automated tests passing across Phases 1–5).
 
 ## Overall Progress
 
@@ -33,14 +33,15 @@ Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Evidence-Aware Software 
 ## Test Results & Validation Status
 
 - **Automated Test Suite (`node --test src/server/__tests__/phase1.test.ts src/server/__tests__/phase2.test.ts src/server/__tests__/phase3.test.ts src/server/__tests__/phase4.test.ts src/server/__tests__/phase5.test.ts`):**
-  - **Status:** **PASSED (`21 / 21` tests across `5 / 5` suites passed, `0` failed in `5538.3ms`)**
+  - **Status:** **PASSED (`22 / 22` tests across `5 / 5` suites passed, `0` failed)**
   - **Phase 1 Suite (`7 / 7` passed)**
   - **Phase 2 Suite (`3 / 3` passed)**
   - **Phase 3 Suite (`4 / 4` passed)**
   - **Phase 4 Suite (`4 / 4` passed)**
-  - **Phase 5 Suite (`3 / 3` passed):**
-    1. `Bryntum Gantt Control Tower: loads 3-milestone scenario (M1 Completed 100%, M2 Failed CI & Overdue, M3 Blocked by Dependency) and generates AI Schedule Recovery Proposal` — **PASSED (`987.5ms`)**
-    2. `Human-Controlled Schedule Recovery: blocks DEVELOPER self-approval, allows CLIENT/REVIEWER approval, cascades Finish-to-Start dates, preserves baseline & contractual budget, and logs to audit chain` — **PASSED (`490.7ms`)**
-    3. `PayPal Orders API v2 & APIMatic SDK: enforces PayPal-Request-Id idempotency, blocks capture before human approval, captures after human approval, and verifies webhooks` — **PASSED (`981.3ms`)**
+  - **Phase 5 Suite (`4 / 4` passed):**
+    1. `Bryntum Gantt Control Tower: loads 3-milestone scenario (M1 Completed 100%, M2 Failed CI & Overdue, M3 Blocked by Dependency) and generates AI Schedule Recovery Proposal` — **PASSED**
+    2. `Human-Controlled Schedule Recovery: blocks DEVELOPER self-approval, allows CLIENT/REVIEWER approval, cascades Finish-to-Start dates, preserves baseline & contractual budget, and logs to audit chain` — **PASSED**
+    3. `PayPal Orders API v2 & APIMatic SDK: enforces PayPal-Request-Id idempotency, blocks capture before human approval, captures after human approval, and verifies webhooks` — **PASSED**
+    4. `PayPal Webhook Reconciliation & Partial Capture: handles partial approved capture (PARTIALLY_CAPTURED_VOIDED), webhook PAYMENT.AUTHORIZATION.VOIDED reconciliation, and cross-milestone idempotency key conflict (409)` — **PASSED**
 - **TypeScript Validation Status:**
   - **Status:** **PENDING (`tsc --noEmit` binary unavailable until `npm install` is executed — `GLOBAL_TSC_NOT_FOUND`)**. All TypeScript source, SDK, and test files execute cleanly under Node.js `v24.14.0` native TypeScript execution.
