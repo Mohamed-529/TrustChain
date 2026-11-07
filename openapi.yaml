@@ -1,0 +1,2097 @@
+openapi: 3.0.3
+info:
+  title: MilestoneProof AI — Evidence-to-Settlement Orchestration API
+  version: 1.0.0
+  description: |
+    Multi-Agent Evidence-to-Settlement Orchestration Platform for Software Development Contracts.
+    
+    ### Core Governance & Financial Safety Rules
+    1. **Advisory AI Only:** Specialized Gemini AI agents (`EvidenceAgent`, `RiskAgent`, `ArbitratorAgent`) evaluate delivery artifacts against milestone acceptance criteria and produce structured findings. AI agents **never** authorize, capture, or release payments.
+    2. **Deterministic Settlement Policy Engine:** Pure integer-cent mathematical business logic calculates `permittedAmountCents`, enforces mandatory security/CI gates (`ZeroCriticalRiskGate`, `CIPassGate`), and applies late-delivery penalties.
+    3. **Mandatory Human Approval:** An authenticated `REVIEWER` or `CLIENT` (`actor.id != contract.developerId`) must explicitly approve a milestone evaluation before any payment capture can be initiated.
+    4. **PayPal Orders API v2 (Non-Escrow Disclosure):** Uses PayPal Developer Sandbox Orders API v2 (`intent: "AUTHORIZE"`) and Authorizations API v2 (`/v2/payments/authorizations/{id}/capture` and `/void`) with `PayPal-Request-Id` idempotency keys. This is standard delayed-capture payment authorization, **not** a regulated custodial escrow service.
+  contact:
+    name: MilestoneProof AI Architecture Team
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local Modular Monolith Server (Node.js v24 Native HTTP + SQLite WAL)
+
+tags:
+  - name: System
+    description: Health status and OpenAPI 3.0 contract discovery
+  - name: Auth
+    description: Credential login, HMAC-SHA256 session management, demo persona switching, and token revocation
+  - name: Users
+    description: Registered actor profiles and role permissions
+  - name: Contracts
+    description: Software contract creation, milestone definitions, activation, and Bryntum Gantt scheduling
+  - name: Evidence
+    description: Developer delivery evidence ingestion and retrieval
+  - name: Evaluations
+    description: Multi-Agent Gemini AI evaluation pipeline outputs
+  - name: SettlementPolicy
+    description: Deterministic integer-cent policy calculation and AG Grid financial decision ledger
+  - name: Approvals
+    description: Human reviewer sign-off, revision requests, and rejection governance
+  - name: Payments
+    description: PayPal Sandbox Orders API v2 authorization, capture, void, and webhook verification
+  - name: Audit
+    description: Tamper-evident SHA-256 hash-chained audit logs and chain integrity verification
+
+paths:
+  /health:
+    get:
+      operationId: getSystemHealth
+      tags: [System]
+      summary: Retrieve server health and capability status
+      security: []
+      responses:
+        '200':
+          description: Server health and active capability flags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /openapi.json:
+    get:
+      operationId: getOpenApiJson
+      tags: [System]
+      summary: Retrieve OpenAPI 3.0.3 specification in JSON format
+      security: []
+      responses:
+        '200':
+          description: OpenAPI 3.0.3 JSON document
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /openapi.yaml:
+    get:
+      operationId: getOpenApiYaml
+      tags: [System]
+      summary: Retrieve OpenAPI 3.0.3 specification in YAML format
+      security: []
+      responses:
+        '200':
+          description: OpenAPI 3.0.3 YAML document
+          content:
+            text/yaml:
+              schema:
+                type: string
+
+  /auth/login:
+    post:
+      operationId: loginUser
+      tags: [Auth]
+      summary: Authenticate user via email and password (asynchronous scrypt)
+      description: |
+        Verifies user credentials using non-blocking asynchronous `crypto.scrypt()`, resolves the authoritative role from `users.role` in SQLite, records the session `jti` in `auth_sessions`, and returns an HMAC-SHA256 signed Bearer token. Clients cannot request or supply a `role` field.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated session token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/demo-switch:
+    post:
+      operationId: switchDemoPersona
+      tags: [Auth]
+      summary: Switch active demo persona (Development/Demo Mode Only)
+      description: |
+        Issues an HMAC-SHA256 signed Bearer token for a seeded demo account (`is_demo_account = 1`). Strictly disabled when `NODE_ENV=production` or `ENABLE_DEMO_IMPERSONATION!=true` (`403 DEMO_MODE_DISABLED`). Role is resolved exclusively from SQLite.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoSwitchRequest'
+      responses:
+        '200':
+          description: Demo persona session token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /auth/me:
+    get:
+      operationId: getCurrentSession
+      tags: [Auth]
+      summary: Get current authenticated actor profile and session claims
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active user and session claims
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentSessionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/logout:
+    post:
+      operationId: logoutSession
+      tags: [Auth]
+      summary: Revoke current session token (jti)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Session token revoked in SQLite auth_sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [Users]
+      summary: List registered users and role permissions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of registered users (excluding password hashes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /contracts:
+    get:
+      operationId: listContracts
+      tags: [Contracts]
+      summary: List all software contracts with embedded milestones
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of contracts and milestones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      operationId: createContract
+      tags: [Contracts]
+      summary: Create a new software contract with milestones (CLIENT role required)
+      description: |
+        Creates a contract in `DRAFT` status inside an atomic SQLite transaction (`BEGIN IMMEDIATE`) and appends a `CONTRACT_CREATED` hash-chained audit record. Validates that milestone `agreedAmountCents` sum exactly to `totalBudgetCents` and enforces separation of duties (`developerId != reviewerId` and `developerId != clientId`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContractRequest'
+      responses:
+        '201':
+          description: Contract and milestones created in DRAFT status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /contracts/{id}:
+    get:
+      operationId: getContractById
+      tags: [Contracts]
+      summary: Retrieve contract details and milestones by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Contract details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{id}/activate:
+    post:
+      operationId: activateContract
+      tags: [Contracts]
+      summary: Activate a DRAFT contract and lock contractual terms (CLIENT owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Contract and milestones transitioned from DRAFT to ACTIVE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /contracts/{id}/schedule:
+    get:
+      operationId: getContractSchedule
+      tags: [Contracts]
+      summary: Retrieve Bryntum Gantt milestone schedule, dependencies, and baseline variance
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Bryntum Gantt compatible tasks, dependencies, baselines, and delay metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractScheduleResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/evidence:
+    post:
+      operationId: submitMilestoneEvidence
+      tags: [Evidence]
+      summary: Submit delivery evidence for a milestone (DEVELOPER role required)
+      description: |
+        Validates GitHub repository URLs, 7-40 character hexadecimal commit SHAs, PR status, CI test execution metrics, and security scanner findings. Sanitizes untrusted text inputs and stores an immutable `EvidenceSubmission` attempt linked to the milestone.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitEvidenceRequest'
+      responses:
+        '201':
+          description: Delivery evidence recorded and milestone transitioned to SUBMITTED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceSubmissionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+    get:
+      operationId: listMilestoneEvidence
+      tags: [Evidence]
+      summary: List all submitted evidence attempts for a milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Historical evidence submission attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceSubmissionListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/evaluate:
+    post:
+      operationId: evaluateMilestoneEvidence
+      tags: [Evaluations]
+      summary: Execute Multi-Agent AI evaluation and Deterministic Policy Engine calculation
+      description: |
+        Triggers the Workflow Orchestrator to run `EvidenceAgent`, `RiskAgent`, and `ArbitratorAgent` (advisory findings only), followed by the deterministic `SettlementPolicyEngine` (`permittedAmountCents`). Prevents duplicate concurrent evaluations.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '200':
+          description: Completed multi-agent assessment and deterministic policy calculation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResultResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+
+  /milestones/{id}/evaluations:
+    get:
+      operationId: listMilestoneEvaluations
+      tags: [Evaluations]
+      summary: List AI evaluation results and policy calculations for a milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: List of evaluations for the milestone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/policy-preview:
+    post:
+      operationId: previewSettlementPolicy
+      tags: [SettlementPolicy]
+      summary: Calculate deterministic settlement policy cap from evidence and risk metrics
+      description: |
+        Pure deterministic mathematical calculation (`SettlementPolicyEngine`) using integer cents. Enforces mandatory CI and zero-critical-CVE gates, completion ratio, and late-delivery penalties without AI or payment side effects.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyPreviewRequest'
+      responses:
+        '200':
+          description: Deterministic policy calculation breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyCalculationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /ledger:
+    get:
+      operationId: getFinancialDecisionLedger
+      tags: [SettlementPolicy]
+      summary: Retrieve flattened financial decision ledger rows for AG Grid Community
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: AG Grid financial decision ledger dataset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialLedgerResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /milestones/{id}/review:
+    post:
+      operationId: submitHumanReview
+      tags: [Approvals]
+      summary: Record human reviewer approval, revision request, or rejection (REVIEWER or CLIENT only)
+      description: |
+        Enforces separation of duties (`actor.id != contract.developerId` and `actor.role in ['REVIEWER', 'CLIENT']`). Validates that `approvedAmountCents <= policyPermittedAmountCents` and requires a justification when overriding AI recommendations or adjusting amounts downward.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitReviewRequest'
+      responses:
+        '200':
+          description: Human review decision persisted and audited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanApprovalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /milestones/{id}/paypal/order:
+    post:
+      operationId: createPayPalOrder
+      tags: [Payments]
+      summary: Create PayPal Sandbox Order with intent AUTHORIZE (CLIENT only)
+      description: |
+        Creates a PayPal Orders API v2 order (`intent: "AUTHORIZE"`) for the milestone's `agreedAmountCents`. Note: PayPal authorization places a temporary hold (3-day honor period, 29-day validity window) and is **not** custodial escrow.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+        - $ref: '#/components/parameters/PayPalRequestIdHeader'
+      responses:
+        '201':
+          description: PayPal Order created in Sandbox
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPalTransactionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /milestones/{id}/paypal/authorize:
+    post:
+      operationId: authorizePayPalOrder
+      tags: [Payments]
+      summary: Authorize PayPal Sandbox Order and record authorization ID (CLIENT only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+        - $ref: '#/components/parameters/PayPalRequestIdHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizePayPalOrderRequest'
+      responses:
+        '200':
+          description: PayPal Order authorized and authorization expiry recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPalTransactionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+
+  /milestones/{id}/paypal/capture:
+    post:
+      operationId: capturePayPalAuthorization
+      tags: [Payments]
+      summary: Capture human-approved settlement against PayPal Authorization (REVIEWER or CLIENT only)
+      description: |
+        Requires a persisted `HUMAN_APPROVAL` record with `decision = APPROVE`. Validates `0 < approvedAmountCents <= permittedAmountCents <= authorizedAmountCents`, checks authorization expiry, and executes an idempotent capture (`PayPal-Request-Id` header) with `final_capture: true`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+        - $ref: '#/components/parameters/PayPalRequestIdHeader'
+      responses:
+        '200':
+          description: PayPal authorization captured and milestone transitioned to SETTLED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPalTransactionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+
+  /webhooks/paypal:
+    post:
+      operationId: handlePayPalWebhook
+      tags: [Payments]
+      summary: Receive and verify asynchronous PayPal Sandbox webhook notifications
+      security: []
+      parameters:
+        - name: PAYPAL-TRANSMISSION-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: PAYPAL-TRANSMISSION-TIME
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: PAYPAL-TRANSMISSION-SIG
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: PAYPAL-CERT-URL
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: PAYPAL-AUTH-ALGO
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayPalWebhookEvent'
+      responses:
+        '200':
+          description: Webhook verified and processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAckResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /audit:
+    get:
+      operationId: listAuditLogs
+      tags: [Audit]
+      summary: List immutable SHA-256 hash-chained audit log entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: milestoneId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: entityId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ordered list of hash-chained audit records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /audit/verify:
+    get:
+      operationId: verifyAuditHashChain
+      tags: [Audit]
+      summary: Verify cryptographic integrity of the entire audit log hash chain
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Hash chain verification result from seq=1 (AUDIT_GENESIS_HASH) to head
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditChainVerificationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: MPAI-JWT
+      description: |
+        Server-signed HMAC-SHA256 Bearer token (`alg: HS256, typ: MPAI-JWT`) containing `jti`, `sub`, `role`, `iss`, `aud`, `iat`, and `exp`. Validated against `auth_sessions` in SQLite. Unsigned `X-Actor-Id` headers are rejected.
+
+  parameters:
+    ResourceIdPathParam:
+      name: id
+      in: path
+      required: true
+      description: Unique resource identifier
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional client-supplied UUID idempotency key to prevent duplicate state mutations
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+    PayPalRequestIdHeader:
+      name: PayPal-Request-Id
+      in: header
+      required: true
+      description: Mandatory deterministic idempotency key (`PayPal-Request-Id`) for PayPal payment operations
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+  responses:
+    BadRequestError:
+      description: Validation or business rule error (HTTP 400)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Missing, expired, tampered, or revoked authentication token (HTTP 401)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Insufficient role permissions or separation-of-duties violation (HTTP 403)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Requested resource was not found (HTTP 404)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ConflictError:
+      description: State transition conflict or duplicate concurrent operation (HTTP 409)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntityError:
+      description: Upstream AI schema validation failure or PayPal Sandbox rejection (HTTP 422)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    UserRole:
+      type: string
+      enum: [CLIENT, DEVELOPER, REVIEWER]
+
+    AuditActorRole:
+      type: string
+      enum: [CLIENT, DEVELOPER, REVIEWER, SYSTEM]
+
+    ContractStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, COMPLETED, CANCELLED]
+
+    MilestoneStatus:
+      type: string
+      enum:
+        - DRAFT
+        - ACTIVE
+        - SUBMITTED
+        - EVALUATING
+        - PENDING_REVIEW
+        - APPROVED
+        - REVISION_REQUESTED
+        - REJECTED
+        - SETTLED
+        - PAY_FAILED
+
+    PaymentStatus:
+      type: string
+      enum:
+        - NOT_READY
+        - ORDER_CREATED
+        - AUTHORIZED
+        - CAPTURE_PENDING
+        - CAPTURED
+        - VOIDED
+        - FAILED
+        - EXPIRED
+
+    RequiredProofType:
+      type: string
+      enum: [CODE_COMMIT, PULL_REQUEST, CI_TESTS, SECURITY_SCAN, API_DOCS]
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, details, timestamp]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              example: BUDGET_MISMATCH
+            message:
+              type: string
+              example: Sum of milestone amounts must equal totalBudgetCents.
+            details:
+              type: object
+              additionalProperties: true
+            timestamp:
+              type: string
+              format: date-time
+
+    HealthResponse:
+      type: object
+      required: [status, service, version, runtime, capabilities]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+        version:
+          type: string
+        runtime:
+          type: string
+        capabilities:
+          type: object
+          required:
+            - sqlitePersistence
+            - hmacSessionAuth
+            - hashChainedAudit
+            - demoImpersonationEnabled
+            - geminiConfigured
+            - paypalConfigured
+          properties:
+            sqlitePersistence:
+              type: boolean
+            hmacSessionAuth:
+              type: boolean
+            hashChainedAudit:
+              type: boolean
+            demoImpersonationEnabled:
+              type: boolean
+            geminiConfigured:
+              type: boolean
+            paypalConfigured:
+              type: boolean
+
+    User:
+      type: object
+      required: [id, name, email, role, isActive, isDemoAccount, createdAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+        isActive:
+          type: boolean
+        isDemoAccount:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+        password:
+          type: string
+          minLength: 6
+          maxLength: 256
+
+    DemoSwitchRequest:
+      type: object
+      required: [userId]
+      additionalProperties: false
+      properties:
+        userId:
+          type: string
+          minLength: 1
+          maxLength: 64
+
+    AuthSessionResponse:
+      type: object
+      required: [token, user, expiresAt, jti]
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+        expiresAt:
+          type: integer
+        jti:
+          type: string
+
+    CurrentSessionResponse:
+      type: object
+      required: [user, session]
+      additionalProperties: false
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        session:
+          type: object
+          required: [jti, issuedAt, expiresAt, issuer, audience]
+          properties:
+            jti:
+              type: string
+            issuedAt:
+              type: integer
+            expiresAt:
+              type: integer
+            issuer:
+              type: string
+            audience:
+              type: string
+
+    LogoutResponse:
+      type: object
+      required: [status, jti]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [revoked]
+        jti:
+          type: string
+
+    UserListResponse:
+      type: object
+      required: [users]
+      additionalProperties: false
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    ContractPolicyRules:
+      type: object
+      required:
+        - requirePassingCi
+        - requireSecurityScan
+        - maxAllowedCriticalVulns
+        - maxAllowedHighVulns
+        - allowPartialPayout
+        - latePenaltyDailyBps
+      additionalProperties: false
+      properties:
+        requirePassingCi:
+          type: boolean
+        requireSecurityScan:
+          type: boolean
+        maxAllowedCriticalVulns:
+          type: integer
+          minimum: 0
+        maxAllowedHighVulns:
+          type: integer
+          minimum: 0
+        allowPartialPayout:
+          type: boolean
+        latePenaltyDailyBps:
+          type: integer
+          minimum: 0
+          maximum: 5000
+
+    AcceptanceCriterion:
+      type: object
+      required: [id, title, description, requiredProofType]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 32
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        requiredProofType:
+          $ref: '#/components/schemas/RequiredProofType'
+
+    CreateMilestoneInput:
+      type: object
+      required:
+        - sequenceOrder
+        - title
+        - description
+        - agreedAmountCents
+        - deadlineIso
+        - acceptanceCriteria
+      additionalProperties: false
+      properties:
+        sequenceOrder:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+        agreedAmountCents:
+          type: integer
+          minimum: 1
+          description: Milestone payment allocation in integer USD cents
+        deadlineIso:
+          type: string
+          format: date-time
+        dependencyMilestoneIds:
+          type: array
+          items:
+            type: string
+        acceptanceCriteria:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/AcceptanceCriterion'
+
+    CreateContractRequest:
+      type: object
+      required:
+        - title
+        - description
+        - totalBudgetCents
+        - currency
+        - developerId
+        - reviewerId
+        - policyRules
+        - milestones
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 4000
+        totalBudgetCents:
+          type: integer
+          minimum: 1
+          description: Total contract value in integer USD cents
+        currency:
+          type: string
+          enum: [USD]
+        developerId:
+          type: string
+          minLength: 1
+        reviewerId:
+          type: string
+          minLength: 1
+        policyRules:
+          $ref: '#/components/schemas/ContractPolicyRules'
+        milestones:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CreateMilestoneInput'
+
+    Milestone:
+      type: object
+      required:
+        - id
+        - contractId
+        - sequenceOrder
+        - title
+        - description
+        - agreedAmountCents
+        - deadlineIso
+        - dependencyMilestoneIds
+        - acceptanceCriteria
+        - status
+        - paymentStatus
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        contractId:
+          type: string
+        sequenceOrder:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        description:
+          type: string
+        agreedAmountCents:
+          type: integer
+          minimum: 1
+        deadlineIso:
+          type: string
+          format: date-time
+        dependencyMilestoneIds:
+          type: array
+          items:
+            type: string
+        acceptanceCriteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceptanceCriterion'
+        status:
+          $ref: '#/components/schemas/MilestoneStatus'
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Contract:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - totalBudgetCents
+        - currency
+        - clientId
+        - developerId
+        - reviewerId
+        - policyRules
+        - status
+        - version
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        totalBudgetCents:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+          enum: [USD]
+        clientId:
+          type: string
+        developerId:
+          type: string
+        reviewerId:
+          type: string
+        policyRules:
+          $ref: '#/components/schemas/ContractPolicyRules'
+        status:
+          $ref: '#/components/schemas/ContractStatus'
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Milestone'
+
+    ContractResponse:
+      type: object
+      required: [contract]
+      additionalProperties: false
+      properties:
+        contract:
+          $ref: '#/components/schemas/Contract'
+
+    ContractListResponse:
+      type: object
+      required: [contracts]
+      additionalProperties: false
+      properties:
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contract'
+
+    ContractScheduleTask:
+      type: object
+      required: [id, name, startDate, endDate, baselineEndDate, status, lateDays, agreedAmountCents]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        baselineEndDate:
+          type: string
+          format: date-time
+        actualSubmittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          $ref: '#/components/schemas/MilestoneStatus'
+        lateDays:
+          type: integer
+          minimum: 0
+        agreedAmountCents:
+          type: integer
+          minimum: 1
+
+    ContractScheduleDependency:
+      type: object
+      required: [id, fromTask, toTask, type]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        fromTask:
+          type: string
+        toTask:
+          type: string
+        type:
+          type: integer
+          description: 2 represents Finish-to-Start (FS) in Bryntum Gantt
+
+    ContractScheduleResponse:
+      type: object
+      required: [contractId, tasks, dependencies]
+      additionalProperties: false
+      properties:
+        contractId:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractScheduleTask'
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractScheduleDependency'
+
+    CiExecutionReport:
+      type: object
+      required: [provider, status, totalTests, passedTests, failedTests, coveragePct, logSummary]
+      additionalProperties: false
+      properties:
+        provider:
+          type: string
+        runUrl:
+          type: string
+        status:
+          type: string
+          enum: [SUCCESS, FAILURE, UNAVAILABLE]
+        totalTests:
+          type: integer
+          minimum: 0
+        passedTests:
+          type: integer
+          minimum: 0
+        failedTests:
+          type: integer
+          minimum: 0
+        coveragePct:
+          type: number
+          minimum: 0
+          maximum: 100
+        changedFiles:
+          type: array
+          items:
+            type: string
+        logSummary:
+          type: string
+          maxLength: 32768
+
+    SecurityFindingItem:
+      type: object
+      required: [id, packageName, severity, cvssScore, description]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          example: CVE-2024-3094
+        packageName:
+          type: string
+        severity:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+        cvssScore:
+          type: number
+          minimum: 0
+          maximum: 10
+        description:
+          type: string
+
+    SecurityScanReport:
+      type: object
+      required: [scanner, scannerVersion, status, findings]
+      additionalProperties: false
+      properties:
+        scanner:
+          type: string
+        scannerVersion:
+          type: string
+        status:
+          type: string
+          enum: [COMPLETED, UNAVAILABLE]
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityFindingItem'
+
+    SubmitEvidenceRequest:
+      type: object
+      required: [repoUrl, branch, commitSha, prUrl, prStatus, ciReport, securityScan]
+      additionalProperties: false
+      properties:
+        repoUrl:
+          type: string
+          pattern: '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?$'
+        branch:
+          type: string
+          minLength: 1
+          maxLength: 128
+        commitSha:
+          type: string
+          pattern: '^[0-9a-fA-F]{7,40}$'
+        prUrl:
+          type: string
+          pattern: '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+/?$'
+        prStatus:
+          type: string
+          enum: [MERGED, OPEN, CLOSED]
+        ciReport:
+          $ref: '#/components/schemas/CiExecutionReport'
+        securityScan:
+          $ref: '#/components/schemas/SecurityScanReport'
+        developerNotes:
+          type: string
+          maxLength: 4000
+
+    EvidenceSubmission:
+      type: object
+      required:
+        - id
+        - milestoneId
+        - attemptNumber
+        - submittedBy
+        - repoUrl
+        - branch
+        - commitSha
+        - prUrl
+        - prStatus
+        - ciReport
+        - securityScan
+        - developerNotes
+        - submittedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        milestoneId:
+          type: string
+        attemptNumber:
+          type: integer
+          minimum: 1
+        submittedBy:
+          type: string
+        repoUrl:
+          type: string
+        branch:
+          type: string
+        commitSha:
+          type: string
+        prUrl:
+          type: string
+        prStatus:
+          type: string
+          enum: [MERGED, OPEN, CLOSED]
+        ciReport:
+          $ref: '#/components/schemas/CiExecutionReport'
+        securityScan:
+          $ref: '#/components/schemas/SecurityScanReport'
+        developerNotes:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        canonicalReferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceReference'
+
+    EvidenceReference:
+      type: object
+      required: [evidenceId, sourceType, label, excerpt]
+      additionalProperties: false
+      properties:
+        evidenceId:
+          type: string
+        sourceType:
+          type: string
+          enum: [COMMIT, PULL_REQUEST, CI_REPORT, SECURITY_SCAN]
+        label:
+          type: string
+        verifiedUrl:
+          type: string
+        excerpt:
+          type: string
+
+    EvidenceSubmissionResponse:
+      type: object
+      required: [submission]
+      additionalProperties: false
+      properties:
+        submission:
+          $ref: '#/components/schemas/EvidenceSubmission'
+
+    EvidenceSubmissionListResponse:
+      type: object
+      required: [submissions]
+      additionalProperties: false
+      properties:
+        submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceSubmission'
+
+    CriterionVerificationResult:
+      type: object
+      required: [criterionId, status, confidence, evidenceCitations, explanation]
+      additionalProperties: false
+      properties:
+        criterionId:
+          type: string
+        status:
+          type: string
+          enum: [VERIFIED, PARTIAL, UNVERIFIED, CONTRADICTED]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        evidenceCitations:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+
+    EvidenceAgentOutput:
+      type: object
+      required: [agentName, model, isMock, criteriaResults, verifiedCount, totalCount, missingEvidence, factualObservations, evidenceReferences]
+      additionalProperties: false
+      properties:
+        agentName:
+          type: string
+          enum: [EvidenceAgent]
+        model:
+          type: string
+        isMock:
+          type: boolean
+        criteriaResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/CriterionVerificationResult'
+        verifiedCount:
+          type: integer
+          minimum: 0
+        totalCount:
+          type: integer
+          minimum: 1
+        missingEvidence:
+          type: array
+          items:
+            type: string
+        factualObservations:
+          type: array
+          items:
+            type: string
+        evidenceReferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceReference'
+
+    RiskAgentOutput:
+      type: object
+      required:
+        - agentName
+        - model
+        - isMock
+        - scannerStatus
+        - overallRiskSeverity
+        - criticalVulnCount
+        - highVulnCount
+        - ciBuildPassed
+        - findings
+        - suspiciousSignals
+        - contradictions
+        - missingTestSignals
+        - promptInjectionDetected
+        - promptInjectionIndicators
+        - summary
+      additionalProperties: false
+      properties:
+        agentName:
+          type: string
+          enum: [RiskAgent]
+        model:
+          type: string
+        isMock:
+          type: boolean
+        scannerStatus:
+          type: string
+          enum: [AVAILABLE, UNAVAILABLE]
+        overallRiskSeverity:
+          type: string
+          enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL]
+        criticalVulnCount:
+          type: integer
+          minimum: 0
+        highVulnCount:
+          type: integer
+          minimum: 0
+        ciBuildPassed:
+          type: boolean
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityFindingItem'
+        suspiciousSignals:
+          type: array
+          items:
+            type: string
+        contradictions:
+          type: array
+          items:
+            type: string
+        missingTestSignals:
+          type: array
+          items:
+            type: string
+        promptInjectionDetected:
+          type: boolean
+        promptInjectionIndicators:
+          type: array
+          items:
+            type: string
+        summary:
+          type: string
+
+    ArbitratorAgentOutput:
+      type: object
+      required: [agentName, model, isMock, recommendedOutcome, recommendation, disagreements, rationale, advisoryNotice, isAdvisoryOnly]
+      additionalProperties: false
+      properties:
+        agentName:
+          type: string
+          enum: [ArbitratorAgent]
+        model:
+          type: string
+        isMock:
+          type: boolean
+        recommendedOutcome:
+          type: string
+          enum: [PASS, FAIL, NEEDS_HUMAN_REVIEW]
+        recommendation:
+          type: string
+          enum: [RECOMMEND_APPROVAL, RECOMMEND_HOLD, RECOMMEND_REJECTION]
+        disagreements:
+          type: array
+          items:
+            type: string
+        rationale:
+          type: string
+        advisoryNotice:
+          type: string
+        isAdvisoryOnly:
+          type: boolean
+          enum: [true]
+
+    PolicyCalculationResult:
+      type: object
+      required:
+        - engineVersion
+        - agreedAmountCents
+        - verifiedCriteriaRatio
+        - gatesTripped
+        - gateBlocked
+        - lateDays
+        - latePenaltyCents
+        - permittedAmountCents
+        - currency
+        - formulaExplanation
+      additionalProperties: false
+      properties:
+        engineVersion:
+          type: string
+        agreedAmountCents:
+          type: integer
+          minimum: 0
+        verifiedCriteriaRatio:
+          type: number
+          minimum: 0
+          maximum: 1
+        gatesTripped:
+          type: array
+          items:
+            type: string
+        gateBlocked:
+          type: boolean
+        lateDays:
+          type: integer
+          minimum: 0
+        latePenaltyCents:
+          type: integer
+          minimum: 0
+        permittedAmountCents:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          enum: [USD]
+        formulaExplanation:
+          type: string
+
+    AIEvaluationRecord:
+      type: object
+      required:
+        - id
+        - milestoneId
+        - submissionId
+        - status
+        - evaluationMode
+        - isMockEvaluation
+        - evidenceAnalysis
+        - riskAnalysis
+        - arbitratorRecommendation
+        - policyCalculation
+        - evaluatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        milestoneId:
+          type: string
+        submissionId:
+          type: string
+        status:
+          type: string
+          enum: [RUNNING, COMPLETED, FAILED]
+        evaluationMode:
+          type: string
+          enum: [LIVE_GEMINI, DETERMINISTIC_MOCK]
+        isMockEvaluation:
+          type: boolean
+        evidenceAnalysis:
+          $ref: '#/components/schemas/EvidenceAgentOutput'
+        riskAnalysis:
+          $ref: '#/components/schemas/RiskAgentOutput'
+        arbitratorRecommendation:
+          $ref: '#/components/schemas/ArbitratorAgentOutput'
+        policyCalculation:
+          $ref: '#/components/schemas/PolicyCalculationResult'
+        evaluatedAt:
+          type: string
+          format: date-time
+
+    EvaluationResultResponse:
+      type: object
+      required: [evaluation]
+      additionalProperties: false
+      properties:
+        evaluation:
+          $ref: '#/components/schemas/AIEvaluationRecord'
+
+    EvaluationListResponse:
+      type: object
+      required: [evaluations]
+      additionalProperties: false
+      properties:
+        evaluations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIEvaluationRecord'
+
+    PolicyPreviewRequest:
+      type: object
+      required: [verifiedCriteriaCount, totalCriteriaCount, ciBuildPassed, criticalVulnCount, highVulnCount, scannerStatus]
+      additionalProperties: false
+      properties:
+        verifiedCriteriaCount:
+          type: integer
+          minimum: 0
+        totalCriteriaCount:
+          type: integer
+          minimum: 1
+        ciBuildPassed:
+          type: boolean
+        criticalVulnCount:
+          type: integer
+          minimum: 0
+        highVulnCount:
+          type: integer
+          minimum: 0
+        scannerStatus:
+          type: string
+          enum: [AVAILABLE, UNAVAILABLE]
+        submittedAtIso:
+          type: string
+          format: date-time
+
+    PolicyCalculationResponse:
+      type: object
+      required: [policyCalculation]
+      additionalProperties: false
+      properties:
+        policyCalculation:
+          $ref: '#/components/schemas/PolicyCalculationResult'
+
+    FinancialLedgerRow:
+      type: object
+      required:
+        - milestoneId
+        - contractId
+        - contractTitle
+        - milestoneTitle
+        - sequenceOrder
+        - milestoneStatus
+        - verifiedRatioPct
+        - riskSeverity
+        - aiRecommendation
+        - agreedAmountCents
+        - permittedAmountCents
+        - approvedAmountCents
+        - paymentStatus
+        - updatedAt
+      additionalProperties: false
+      properties:
+        milestoneId:
+          type: string
+        contractId:
+          type: string
+        contractTitle:
+          type: string
+        milestoneTitle:
+          type: string
+        sequenceOrder:
+          type: integer
+        milestoneStatus:
+          $ref: '#/components/schemas/MilestoneStatus'
+        verifiedRatioPct:
+          type: number
+        riskSeverity:
+          type: string
+          enum: [NONE, LOW, MEDIUM, HIGH, CRITICAL, UNAVAILABLE]
+        aiRecommendation:
+          type: string
+          enum: [RECOMMEND_APPROVAL, RECOMMEND_HOLD, RECOMMEND_REJECTION, PENDING]
+        agreedAmountCents:
+          type: integer
+        permittedAmountCents:
+          type: integer
+          nullable: true
+        approvedAmountCents:
+          type: integer
+          nullable: true
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
+        updatedAt:
+          type: string
+          format: date-time
+
+    FinancialLedgerResponse:
+      type: object
+      required: [rows]
+      additionalProperties: false
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/FinancialLedgerRow'
+
+    SubmitReviewRequest:
+      type: object
+      required: [evaluationId, decision, approvedAmountCents, justification]
+      additionalProperties: false
+      properties:
+        evaluationId:
+          type: string
+          minLength: 1
+        decision:
+          type: string
+          enum: [APPROVE, REQUEST_REVISIONS, REJECT]
+        approvedAmountCents:
+          type: integer
+          minimum: 0
+          description: Must be <= policyCalculation.permittedAmountCents when decision is APPROVE
+        justification:
+          type: string
+          minLength: 5
+          maxLength: 2000
+
+    HumanApprovalRecord:
+      type: object
+      required:
+        - id
+        - milestoneId
+        - evaluationId
+        - reviewerId
+        - decision
+        - approvedAmountCents
+        - isOverride
+        - justification
+        - decidedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        milestoneId:
+          type: string
+        evaluationId:
+          type: string
+        reviewerId:
+          type: string
+        decision:
+          type: string
+          enum: [APPROVE, REQUEST_REVISIONS, REJECT]
+        approvedAmountCents:
+          type: integer
+          minimum: 0
+        isOverride:
+          type: boolean
+        justification:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+
+    HumanApprovalResponse:
+      type: object
+      required: [approval, milestoneStatus]
+      additionalProperties: false
+      properties:
+        approval:
+          $ref: '#/components/schemas/HumanApprovalRecord'
+        milestoneStatus:
+          $ref: '#/components/schemas/MilestoneStatus'
+
+    AuthorizePayPalOrderRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        paypalOrderId:
+          type: string
+
+    PayPalTransactionRecord:
+      type: object
+      required:
+        - id
+        - milestoneId
+        - idempotencyKey
+        - authorizedAmountCents
+        - capturedAmountCents
+        - currency
+        - status
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        milestoneId:
+          type: string
+        approvalId:
+          type: string
+          nullable: true
+        paypalOrderId:
+          type: string
+          nullable: true
+        paypalAuthorizationId:
+          type: string
+          nullable: true
+        paypalCaptureId:
+          type: string
+          nullable: true
+        idempotencyKey:
+          type: string
+        authorizedAmountCents:
+          type: integer
+          minimum: 0
+        capturedAmountCents:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          enum: [USD]
+        status:
+          type: string
+          enum:
+            - ORDER_CREATED
+            - AUTHORIZED
+            - CAPTURED
+            - PARTIALLY_CAPTURED_VOIDED
+            - VOIDED
+            - FAILED
+            - EXPIRED
+        authExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+
+    PayPalTransactionResponse:
+      type: object
+      required: [transaction]
+      additionalProperties: false
+      properties:
+        transaction:
+          $ref: '#/components/schemas/PayPalTransactionRecord'
+
+    PayPalWebhookEvent:
+      type: object
+      required: [id, event_type, resource]
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        event_type:
+          type: string
+        resource:
+          type: object
+          additionalProperties: true
+
+    WebhookAckResponse:
+      type: object
+      required: [verified, eventId, status]
+      additionalProperties: false
+      properties:
+        verified:
+          type: boolean
+        eventId:
+          type: string
+        status:
+          type: string
+
+    AuditLogEntry:
+      type: object
+      required:
+        - seq
+        - id
+        - timestamp
+        - actorId
+        - actorRole
+        - action
+        - entityType
+        - entityId
+        - payload
+        - previousHash
+        - entryHash
+      additionalProperties: false
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        actorId:
+          type: string
+        actorRole:
+          $ref: '#/components/schemas/AuditActorRole'
+        action:
+          type: string
+        entityType:
+          type: string
+          enum: [CONTRACT, MILESTONE, EVIDENCE, EVALUATION, APPROVAL, PAYMENT, AUTH_SESSION, SYSTEM]
+        entityId:
+          type: string
+        contractId:
+          type: string
+          nullable: true
+        milestoneId:
+          type: string
+          nullable: true
+        previousState:
+          type: string
+          nullable: true
+        newState:
+          type: string
+          nullable: true
+        payload:
+          type: object
+          additionalProperties: true
+        previousHash:
+          type: string
+          minLength: 64
+          maxLength: 64
+        entryHash:
+          type: string
+          minLength: 64
+          maxLength: 64
+
+    AuditLogListResponse:
+      type: object
+      required: [logs]
+      additionalProperties: false
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+
+    AuditChainVerificationResponse:
+      type: object
+      required: [valid, verifiedCount, genesisHash, headHash]
+      additionalProperties: false
+      properties:
+        valid:
+          type: boolean
+        verifiedCount:
+          type: integer
+          minimum: 0
+        genesisHash:
+          type: string
+          minLength: 64
+          maxLength: 64
+        headHash:
+          type: string
+          minLength: 64
+          maxLength: 64
+        failedSeq:
+          type: integer
+        reason:
+          type: string
+          enum:
+            - MISSING_GENESIS_ENTRY
+            - INVALID_GENESIS_PREVIOUS_HASH
+            - SEQUENCE_GAP_DETECTED
+            - BROKEN_PREVIOUS_HASH_LINK
+            - ENTRY_HASH_MISMATCH
+            - INVALID_PAYLOAD_JSON
+        details:
+          type: string

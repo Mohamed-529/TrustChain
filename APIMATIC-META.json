@@ -1,0 +1,28 @@
+{
+  "ExportFormats": ["OpenApi3Yaml", "OpenApi3Json"],
+  "CodeGenSettings": {
+    "SynchronizePackageVersion": true,
+    "UseModelPrefix": false,
+    "UseMethodPrefix": true,
+    "UseEnumPrefix": false,
+    "UseControllerPrefix": true,
+    "CollectParameters": true,
+    "Timeout": 30,
+    "RetryConfiguration": {
+      "MaxNumberOfRetries": 2,
+      "RetryOnTimeout": false,
+      "RetryInterval": 1.0,
+      "MaximumRetryWaitTime": 10,
+      "BackoffFactor": 2,
+      "HttpStatusCodesToRetry": [408, 429, 502, 503, 504],
+      "HttpMethodsToRetry": ["GET", "POST"]
+    }
+  },
+  "ValidationConfiguration": {
+    "SpecificationFile": "openapi.yaml",
+    "EnforceUniqueOperationIds": true,
+    "EnforceStrictIntegerMonetaryCents": true,
+    "DisallowAdditionalPropertiesOnRequests": true,
+    "RequireRfc7807ErrorResponses": true
+  }
+}
