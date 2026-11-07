@@ -583,5 +583,27 @@ export interface PayPalTransactionRecord {
   updatedAt: string;
 }
 
+export type PayPalWebhookVerificationStatus = 'SUCCESS' | 'FAILURE' | 'UNVERIFIED';
+
+export type PayPalWebhookProcessingStatus =
+  | 'PROCESSING'
+  | 'PROCESSED'
+  | 'FAILED'
+  | 'REJECTED';
+
+export interface PayPalWebhookEventRecord {
+  eventId: string;
+  eventType: string;
+  transmissionId: string | null;
+  verificationStatus: PayPalWebhookVerificationStatus;
+  processingStatus: PayPalWebhookProcessingStatus;
+  processingResult: string | null;
+  reconciledTransactionId: string | null;
+  errorMessage: string | null;
+  receivedAt: string;
+  updatedAt: string;
+}
+
+
 
 

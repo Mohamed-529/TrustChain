@@ -334,6 +334,44 @@ export class AppDatabase {
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(2, '002_phase5_bryntum_schedule_and_paypal', new Date().toISOString());
     });
+
+    this.runPhase6WebhookMigrations();
+  }
+
+  private runPhase6WebhookMigrations(): void {
+    const existingV3 = this.raw
+      .prepare('SELECT version FROM schema_migrations WHERE version = 3')
+      .get() as { version: number } | undefined;
+    if (existingV3) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      this.raw.exec(`
+        CREATE TABLE IF NOT EXISTS paypal_webhook_events (
+          event_id TEXT PRIMARY KEY,
+          event_type TEXT NOT NULL,
+          transmission_id TEXT NULL,
+          verification_status TEXT NOT NULL CHECK (
+            verification_status IN ('SUCCESS', 'FAILURE', 'UNVERIFIED')
+          ),
+          processing_status TEXT NOT NULL CHECK (
+            processing_status IN ('PROCESSING', 'PROCESSED', 'FAILED', 'REJECTED')
+          ),
+          processing_result TEXT NULL,
+          reconciled_transaction_id TEXT NULL,
+          error_message TEXT NULL,
+          received_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_paypal_webhook_events_status
+          ON paypal_webhook_events(processing_status);
+      `);
+
+      this.raw
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+        .run(3, '003_phase6_paypal_webhook_idempotency', new Date().toISOString());
+    });
   }
 
   private seedIfEmpty(): void {

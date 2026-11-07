@@ -13,6 +13,7 @@ import {
   ScheduleProposalRepository,
   SessionRepository,
   UserRepository,
+  WebhookEventRepository,
 } from './repositories/DomainRepositories.ts';
 import { AuditService } from './services/AuditService.ts';
 import { AuthService, type AuthServiceOptions } from './services/AuthService.ts';
@@ -286,6 +287,7 @@ export interface ServerContainer {
   approvalRepo: HumanApprovalRepository;
   proposalRepo: ScheduleProposalRepository;
   paymentRepo: PaymentTransactionRepository;
+  webhookEventRepo: WebhookEventRepository;
   auditService: AuditService;
   authService: AuthService;
   contractService: ContractService;
@@ -313,6 +315,7 @@ export function createServerApp(options?: {
   const approvalRepo = new HumanApprovalRepository(db.raw);
   const proposalRepo = new ScheduleProposalRepository(db.raw, milestoneRepo);
   const paymentRepo = new PaymentTransactionRepository(db.raw);
+  const webhookEventRepo = new WebhookEventRepository(db.raw);
   const auditService = new AuditService(db.raw);
 
   const authService = new AuthService(
@@ -432,6 +435,7 @@ export function createServerApp(options?: {
     approvalRepo,
     proposalRepo,
     paymentRepo,
+    webhookEventRepo,
     auditService,
     authService,
     contractService,

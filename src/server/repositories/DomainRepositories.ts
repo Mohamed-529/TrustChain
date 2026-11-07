@@ -17,6 +17,9 @@ import type {
   PaymentStatus,
   PayPalTransactionRecord,
   PayPalTransactionStatus,
+  PayPalWebhookEventRecord,
+  PayPalWebhookProcessingStatus,
+  PayPalWebhookVerificationStatus,
   PolicyCalculationResult,
   ReviewSynthesis,
   RiskAssessment,
@@ -913,3 +916,97 @@ export class PaymentTransactionRepository {
       );
   }
 }
+
+export class WebhookEventRepository {
+  private readonly rawDb: DatabaseSync;
+
+  constructor(rawDb: DatabaseSync) {
+    this.rawDb = rawDb;
+  }
+
+  private mapRow(row: Record<string, unknown>): PayPalWebhookEventRecord {
+    return {
+      eventId: String(row.event_id),
+      eventType: String(row.event_type),
+      transmissionId: row.transmission_id ? String(row.transmission_id) : null,
+      verificationStatus: String(row.verification_status) as PayPalWebhookVerificationStatus,
+      processingStatus: String(row.processing_status) as PayPalWebhookProcessingStatus,
+      processingResult: row.processing_result ? String(row.processing_result) : null,
+      reconciledTransactionId: row.reconciled_transaction_id
+        ? String(row.reconciled_transaction_id)
+        : null,
+      errorMessage: row.error_message ? String(row.error_message) : null,
+      receivedAt: String(row.received_at),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  public findByEventId(eventId: string): PayPalWebhookEventRecord | null {
+    const row = this.rawDb
+      .prepare('SELECT * FROM paypal_webhook_events WHERE event_id = ?')
+      .get(eventId) as Record<string, unknown> | undefined;
+    return row ? this.mapRow(row) : null;
+  }
+
+  public listAll(): PayPalWebhookEventRecord[] {
+    const rows = this.rawDb
+      .prepare('SELECT * FROM paypal_webhook_events ORDER BY received_at DESC')
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  public create(record: PayPalWebhookEventRecord): void {
+    this.rawDb
+      .prepare(
+        `
+        INSERT INTO paypal_webhook_events (
+          event_id, event_type, transmission_id, verification_status,
+          processing_status, processing_result, reconciled_transaction_id,
+          error_message, received_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+      )
+      .run(
+        record.eventId,
+        record.eventType,
+        record.transmissionId,
+        record.verificationStatus,
+        record.processingStatus,
+        record.processingResult,
+        record.reconciledTransactionId,
+        record.errorMessage,
+        record.receivedAt,
+        record.updatedAt
+      );
+  }
+
+  public update(record: PayPalWebhookEventRecord): void {
+    this.rawDb
+      .prepare(
+        `
+        UPDATE paypal_webhook_events SET
+          event_type = ?,
+          transmission_id = ?,
+          verification_status = ?,
+          processing_status = ?,
+          processing_result = ?,
+          reconciled_transaction_id = ?,
+          error_message = ?,
+          updated_at = ?
+        WHERE event_id = ?
+      `
+      )
+      .run(
+        record.eventType,
+        record.transmissionId,
+        record.verificationStatus,
+        record.processingStatus,
+        record.processingResult,
+        record.reconciledTransactionId,
+        record.errorMessage,
+        record.updatedAt,
+        record.eventId
+      );
+  }
+}
+
