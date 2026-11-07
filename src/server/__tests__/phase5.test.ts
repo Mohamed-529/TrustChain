@@ -330,4 +330,103 @@ describe('Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Control Tower 
       container.db.close();
     }
   });
+
+  it('4. PayPal Webhook Reconciliation & Partial Capture: handles partial approved capture (PARTIALLY_CAPTURED_VOIDED), webhook PAYMENT.AUTHORIZATION.VOIDED reconciliation, and cross-milestone idempotency key conflict (409)', async () => {
+    const container = createServerApp({
+      dbPath: ':memory:',
+      authOptions: { enableDemoImpersonation: true },
+    });
+
+    const server = http.createServer(container.app);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') {
+      server.close();
+      container.db.close();
+      throw new Error('Failed to bind ephemeral port');
+    }
+
+    const baseUrl = `http://127.0.0.1:${addr.port}/api/v1`;
+    const sdk = new MilestoneProofClient({ baseUrl });
+
+    try {
+      // 4a. Create & authorize PayPal Order on Milestone 1 ($2,500.00 = 250000 cents)
+      await sdk.switchDemoPersona({ userId: 'client_01' });
+      await sdk.createPayPalOrder('ms_seed_01', 'idemp_partial_order_01');
+      await sdk.authorizePayPalOrder('ms_seed_01', 'idemp_partial_auth_01');
+
+      // Verify reusing Milestone 1's idempotency key on Milestone 2 throws 409 IDEMPOTENCY_KEY_REUSE_CONFLICT
+      await assert.rejects(
+        async () => {
+          await sdk.createPayPalOrder('ms_seed_02', 'idemp_partial_order_01');
+        },
+        (err: unknown) => {
+          assert.ok(err instanceof MilestoneProofApiError);
+          assert.equal(err.statusCode, 409);
+          assert.equal(err.code, 'IDEMPOTENCY_KEY_REUSE_CONFLICT');
+          return true;
+        }
+      );
+
+      // 4b. Submit evidence, evaluate, and approve a PARTIAL payout ($2,000.00 = 200000 cents < 250000 cents)
+      const devSession = await sdk.switchDemoPersona({ userId: 'dev_01' });
+      await fetch(`${baseUrl}/milestones/ms_seed_01/evidence`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${devSession.token}`,
+        },
+        body: JSON.stringify({ demoFixtureKey: 'SUCCESSFUL_SUBMISSION' }),
+      });
+
+      await sdk.switchDemoPersona({ userId: 'reviewer_01' });
+      const evalRes = await sdk.evaluateMilestoneEvidence('ms_seed_01');
+      await sdk.submitHumanReview('ms_seed_01', {
+        evaluationId: evalRes.evaluation.id,
+        decision: 'APPROVE',
+        approvedAmountCents: 200000, // Partial approval ($2,000.00 out of $2,500.00 authorized)
+        justification: 'Approved partial $2,000.00 settlement per agreed scope adjustment.',
+      });
+
+      const partialCap = await sdk.capturePayPalAuthorization(
+        'ms_seed_01',
+        'idemp_partial_cap_01'
+      );
+      assert.equal(partialCap.transaction.status, 'PARTIALLY_CAPTURED_VOIDED');
+      assert.equal(partialCap.transaction.authorizedAmountCents, 250000);
+      assert.equal(partialCap.transaction.capturedAmountCents, 200000);
+
+      // Verify listPayPalTransactions SDK method returns the transaction history
+      const txList = await sdk.listPayPalTransactions('ms_seed_01');
+      assert.equal(txList.transactions.length, 3);
+
+      // 4c. Create & authorize PayPal Order on Milestone 2, then reconcile PAYMENT.AUTHORIZATION.VOIDED webhook
+      await sdk.switchDemoPersona({ userId: 'client_01' });
+      await sdk.createPayPalOrder('ms_seed_02', 'idemp_ms2_order_01');
+      const authMs2 = await sdk.authorizePayPalOrder('ms_seed_02', 'idemp_ms2_auth_01');
+
+      const voidWebhook = await sdk.handlePayPalWebhook(
+        {
+          'PAYPAL-TRANSMISSION-ID': 'wh_void_tx_01',
+          'PAYPAL-TRANSMISSION-TIME': '2026-11-07T08:15:00Z',
+          'PAYPAL-TRANSMISSION-SIG': 'sig_verified_paypal_void_event_12345',
+          'PAYPAL-CERT-URL': 'https://api.sandbox.paypal.com/v1/notifications/certs/CERT-123',
+          'PAYPAL-AUTH-ALGO': 'SHA256withRSA',
+        },
+        {
+          id: 'WH-EVT-VOID-002',
+          event_type: 'PAYMENT.AUTHORIZATION.VOIDED',
+          resource: { id: authMs2.transaction.paypalAuthorizationId },
+        }
+      );
+      assert.equal(voidWebhook.verified, true);
+      assert.equal(voidWebhook.status, 'RECONCILED_VOIDED');
+
+      const ms2Txs = await sdk.listPayPalTransactions('ms_seed_02');
+      assert.equal(ms2Txs.transactions[0].status, 'VOIDED');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      container.db.close();
+    }
+  });
 });
