@@ -25,9 +25,9 @@ Implemented in [`openapi.yaml`](./openapi.yaml), [`APIMATIC-META.json`](./APIMAT
 - **TypeScript Client SDK & Developer Portal:** Strongly-typed client SDK (`src/sdk/MilestoneProofClient.ts`) generated from our OpenAPI contract with retry handling, Bearer token management, and `PayPal-Request-Id` idempotency headers, paired with developer documentation in [`docs/DEVELOPER_PORTAL.md`](./docs/DEVELOPER_PORTAL.md).
 - **PayPal Context Plugin Grounding & PayPal Orders API v2:** Grounded in the authoritative APIMatic/PayPal Server SDK (`@paypal/paypal-server-sdk`) Orders v2 & Authorizations v2 specifications:
   - `POST /api/v1/milestones/:id/paypal/order`: Creates a PayPal Order with `intent: "AUTHORIZE"` (`CLIENT` only). Includes explicit non-escrow disclosure (PayPal authorization is a temporary 29-day hold, **not** custodial escrow).
-  - `POST /api/v1/milestones/:id/paypal/authorize`: Authorizes the order and records `paypalAuthorizationId` and `authExpiresAt`.
-  - `POST /api/v1/milestones/:id/paypal/capture`: Captures settlement **only** after a persisted `HUMAN_APPROVAL` (`decision === 'APPROVE'`), verifying `0 < approvedAmountCents <= permittedAmountCents <= authorizedAmountCents` and enforcing `PayPal-Request-Id` idempotency.
-  - `POST /api/v1/webhooks/paypal`: Verifies `PAYPAL-TRANSMISSION-*` webhook headers and certificate domain authenticity (`https://api.sandbox.paypal.com`), reconciles payment state, and logs to the hash-chained audit trail.
+  - `POST /api/v1/milestones/:id/paypal/authorize`: Authorizes the order, extracts `purchase_units[0].payments.authorizations[0].id` from PayPal's authorization response, and records `paypalAuthorizationId` and `authExpiresAt`.
+  - `POST /api/v1/milestones/:id/paypal/capture`: Captures settlement **only** after a persisted `HUMAN_APPROVAL` (`decision === 'APPROVE'`), verifying `0 < approvedAmountCents <= permittedAmountCents <= authorizedAmountCents` and enforcing `PayPal-Request-Id` idempotency. Explicitly separates `PAYPAL_SANDBOX` (`SETTLED` / `CAPTURED`) from `SANDBOX_SIMULATION` (`SIMULATED_CAPTURED`, keeping milestone `APPROVED`).
+  - `POST /api/v1/webhooks/paypal`: Verifies webhook authenticity via PayPal's official `POST /v1/notifications/verify-webhook-signature` endpoint (`verification_status === 'SUCCESS'`), fails closed (`503`) when webhook configuration or PayPal's verification service is unavailable, enforces event idempotency via `paypal_webhook_events`, reconciles payment state, and logs to the hash-chained audit trail.
 
 ---
 
@@ -85,4 +85,5 @@ Implemented in [`openapi.yaml`](./openapi.yaml), [`APIMATIC-META.json`](./APIMAT
 - [openapi.yaml](./openapi.yaml) — Normative OpenAPI 3.0.3 Specification
 - [docs/DEVELOPER_PORTAL.md](./docs/DEVELOPER_PORTAL.md) — APIMatic SDK & Developer Portal Integration Guide
 - [PHASE4_IMPLEMENTATION_REPORT.md](./PHASE4_IMPLEMENTATION_REPORT.md) — Phase 4 Settlement Policy & Human Review Report
+- [PHASE6_PAYPAL_SECURITY_REPORT.md](./PHASE6_PAYPAL_SECURITY_REPORT.md) — Phase 6 PayPal Security Remediation & Payment Integrity Report
 - [PROJECT_STATUS.md](./PROJECT_STATUS.md) — Current Implementation & Verification Status

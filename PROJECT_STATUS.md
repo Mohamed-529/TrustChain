@@ -14,7 +14,7 @@
 
 ## Current Phase
 
-Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Evidence-Aware Software Delivery Control Tower + APIMatic TypeScript SDK & Developer Portal + PayPal Orders API v2 Settlement Engine (Completed & Verified — 22/22 automated tests passing across Phases 1–5).
+Phase 6 — PayPal Security Remediation & Payment Integrity (Completed & Verified — 26/26 automated tests passing across Phases 1–6).
 
 ## Overall Progress
 
@@ -26,22 +26,28 @@ Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Evidence-Aware Software 
 - Phase 4 — Dedicated `SettlementPolicyService`, Human Review & Fiduciary Approval Workflow (`HumanReviewService`, `ReviewController`), Audit-Traceable Financial Decision Ledger (`GET /api/v1/ledger`), and Human-Review Workbench UI (`src/App.tsx`) (Completed & Verified — 4/4 Phase 4 tests passing).
 - Phase 5 — Primary Sponsor Integrations:
   - **Primary Integration A (Bryntum Gantt):** `ScheduleControlTowerService`, `ScheduleController`, `schedule_proposals` table, Finish-to-Start (`type: 2`) dependency modeling, Baseline vs. Actual variance, Critical Path detection, AI Schedule-Risk Recovery Proposals citing canonical `evidenceId`s, Human-Controlled Schedule Recovery (`CLIENT`/`REVIEWER` only, preserves `agreedAmountCents`), and 3-Milestone Control Tower Demo (`M1 Completed 100%`, `M2 Failed CI & Overdue`, `M3 Blocked by Dependency`).
-  - **Primary Integration B (APIMatic & PayPal Orders API v2):** Extended `openapi.yaml` (28 operations across 10 controller groups), generated strongly-typed `MilestoneProofClient` TypeScript SDK (`src/sdk/MilestoneProofClient.ts`), created `docs/DEVELOPER_PORTAL.md`, and implemented `PayPalService` + `PaymentController` (`intent: "AUTHORIZE"`, 29-day hold, mandatory human approval gate before capture, `PayPal-Request-Id` idempotency, and `POST /api/v1/webhooks/paypal` signature & certificate verification) (Completed & Verified — 3/3 Phase 5 tests passing; **21/21 total tests passing**).
+  - **Primary Integration B (APIMatic & PayPal Orders API v2):** Extended `openapi.yaml` (28 operations across 10 controller groups), generated strongly-typed `MilestoneProofClient` TypeScript SDK (`src/sdk/MilestoneProofClient.ts`), created `docs/DEVELOPER_PORTAL.md`, and implemented `PayPalService` + `PaymentController` (Completed & Verified — 4/4 Phase 5 tests passing).
+- Phase 6 — PayPal Security Remediation & Payment Integrity:
+  - **Real Authorization ID Extraction:** Extracts and validates `purchase_units[0].payments.authorizations[0].id` from PayPal's authorization response, rejects missing/malformed IDs without synthetic fallback in live sandbox mode, and captures against the persisted real authorization ID.
+  - **Official PayPal Webhook Signature Verification (Fail-Closed):** Verifies webhooks via `POST /v1/notifications/verify-webhook-signature` using server-side credentials and `PAYPAL_WEBHOOK_ID`, accepting only `verification_status === 'SUCCESS'` and failing closed (`503`) when config or PayPal's verification service is unavailable.
+  - **Persistent Webhook Event Idempotency (`paypal_webhook_events`):** Prevents duplicate and concurrent duplicate deliveries, rolls back on DB failure while marking events `FAILED` for safe retry, and records all attempts in the hash-chained audit trail.
+  - **Simulation vs. Real Sandbox Separation:** Explicitly separates `SANDBOX_SIMULATION` (`SIMULATED_ORDER_CREATED`, `SIMULATED_AUTHORIZED`, `SIMULATED_CAPTURED`, `SIMULATED_PARTIALLY_CAPTURED`) from `PAYPAL_SANDBOX` so simulated captures never transition a milestone to `SETTLED` or `CAPTURED` (Completed & Verified — 4/4 Phase 6 tests passing; **26/26 total tests passing**).
 
 ---
 
 ## Test Results & Validation Status
 
-- **Automated Test Suite (`node --test src/server/__tests__/phase1.test.ts src/server/__tests__/phase2.test.ts src/server/__tests__/phase3.test.ts src/server/__tests__/phase4.test.ts src/server/__tests__/phase5.test.ts`):**
-  - **Status:** **PASSED (`22 / 22` tests across `5 / 5` suites passed, `0` failed)**
+- **Automated Test Suite (`node --test src/server/__tests__/phase1.test.ts src/server/__tests__/phase2.test.ts src/server/__tests__/phase3.test.ts src/server/__tests__/phase4.test.ts src/server/__tests__/phase5.test.ts src/server/__tests__/phase6.test.ts`):**
+  - **Status:** **PASSED (`26 / 26` tests across `6 / 6` suites passed, `0` failed)**
   - **Phase 1 Suite (`7 / 7` passed)**
   - **Phase 2 Suite (`3 / 3` passed)**
   - **Phase 3 Suite (`4 / 4` passed)**
   - **Phase 4 Suite (`4 / 4` passed)**
-  - **Phase 5 Suite (`4 / 4` passed):**
-    1. `Bryntum Gantt Control Tower: loads 3-milestone scenario (M1 Completed 100%, M2 Failed CI & Overdue, M3 Blocked by Dependency) and generates AI Schedule Recovery Proposal` — **PASSED**
-    2. `Human-Controlled Schedule Recovery: blocks DEVELOPER self-approval, allows CLIENT/REVIEWER approval, cascades Finish-to-Start dates, preserves baseline & contractual budget, and logs to audit chain` — **PASSED**
-    3. `PayPal Orders API v2 & APIMatic SDK: enforces PayPal-Request-Id idempotency, blocks capture before human approval, captures after human approval, and verifies webhooks` — **PASSED**
-    4. `PayPal Webhook Reconciliation & Partial Capture: handles partial approved capture (PARTIALLY_CAPTURED_VOIDED), webhook PAYMENT.AUTHORIZATION.VOIDED reconciliation, and cross-milestone idempotency key conflict (409)` — **PASSED**
+  - **Phase 5 Suite (`4 / 4` passed)**
+  - **Phase 6 Suite (`4 / 4` passed):**
+    1. `Authorization ID Extraction & Persistence: extracts real PayPal authorization ID, rejects missing/malformed authorization IDs without synthetic fallback, and captures using the persisted real authorization ID` — **PASSED**
+    2. `Genuine Webhook Verification (Fail-Closed): calls POST /v1/notifications/verify-webhook-signature, rejects FAILURE signatures (401), fails closed when config is missing (503) or service is down (503), and never mutates payment state on unverified webhooks` — **PASSED**
+    3. `Webhook Idempotency, Concurrency & Failure Recovery: prevents duplicate and concurrent duplicate deliveries, allows two distinct events for the same transaction, rolls back on DB failure, and succeeds on retry after failure` — **PASSED**
+    4. `Simulation vs. Real Sandbox Separation & Financial Safety Guards: SANDBOX_SIMULATION never marks a milestone SETTLED or CAPTURED, and over-capture / approval-bypass attempts are blocked` — **PASSED**
 - **TypeScript Validation Status:**
   - **Status:** **PENDING (`tsc --noEmit` binary unavailable until `npm install` is executed — `GLOBAL_TSC_NOT_FOUND`)**. All TypeScript source, SDK, and test files execute cleanly under Node.js `v24.14.0` native TypeScript execution.
