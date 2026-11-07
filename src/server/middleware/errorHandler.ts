@@ -9,6 +9,7 @@ export interface ApiRequest {
   params: Record<string, string>;
   query: Record<string, string | undefined>;
   body: unknown;
+  rawBody?: string;
   actor?: User;
   tokenClaims?: SessionTokenClaims;
 }

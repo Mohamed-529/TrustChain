@@ -68,6 +68,13 @@ export function createApiRouter(params: {
         paypalConfigured: Boolean(
           process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET
         ),
+        githubConfigured: Boolean(
+          process.env.GITHUB_TOKEN && process.env.GITHUB_TOKEN !== 'MY_GITHUB_TOKEN'
+        ),
+        githubWebhookConfigured: Boolean(
+          process.env.GITHUB_WEBHOOK_SECRET &&
+            process.env.GITHUB_WEBHOOK_SECRET !== 'MY_GITHUB_WEBHOOK_SECRET'
+        ),
       },
     });
   });
@@ -158,6 +165,16 @@ export function createApiRouter(params: {
     evidenceController.submitEvidence
   );
   router.get('/milestones/:id/evidence', authenticate, evidenceController.listEvidence);
+  router.post(
+    '/milestones/:id/evidence/verify',
+    authenticate,
+    evidenceController.verifyProvenance
+  );
+  router.get(
+    '/milestones/:id/evidence/provenance',
+    authenticate,
+    evidenceController.getProvenance
+  );
   router.post('/milestones/:id/evaluate', authenticate, evidenceController.evaluateMilestone);
   router.get('/milestones/:id/evaluations', authenticate, evidenceController.listEvaluations);
   router.post(
@@ -209,8 +226,9 @@ export function createApiRouter(params: {
     paymentController.listTransactions
   );
 
-  // Public (signature-verified) PayPal Sandbox Webhook Notification endpoint
+  // Public (signature-verified) PayPal Sandbox & GitHub Webhook Notification endpoints
   router.post('/webhooks/paypal', paymentController.handleWebhook);
+  router.post('/webhooks/github', evidenceController.handleGitHubWebhook);
 
   // Protected tamper-evident audit endpoints
   router.get('/audit', authenticate, contractController.listAuditLogs);

@@ -448,6 +448,52 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
 
+  /milestones/{id}/evidence/verify:
+    post:
+      operationId: verifyMilestoneEvidenceProvenance
+      tags: [Evidence]
+      summary: Independently verify submitted GitHub repository, commit, PR, workflow run, and SHA-256 payload integrity
+      description: |
+        Calls GitHub's official REST API (`GET /repos/{owner}/{repo}`, `GET /repos/{owner}/{repo}/commits/{ref}`, `GET /repos/{owner}/{repo}/pulls/{pull_number}`, and `GET /repos/{owner}/{repo}/actions/runs/{run_id}`) and verifies the submission's SHA-256 payload digest. Never approves milestones or releases payment directly.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Provenance verification record
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/evidence/provenance:
+    get:
+      operationId: getMilestoneEvidenceProvenance
+      tags: [Evidence]
+      summary: Retrieve latest provenance verification and historical provenance records for a milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Provenance verification history
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /milestones/{id}/evaluate:
     post:
       operationId: evaluateMilestoneEvidence
@@ -745,6 +791,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WebhookAckResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /webhooks/github:
+    post:
+      operationId: handleGitHubWebhook
+      tags: [Evidence]
+      summary: Receive and verify asynchronous GitHub repository/PR/workflow webhook events
+      security: []
+      parameters:
+        - name: X-GitHub-Delivery
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-GitHub-Event
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: GitHub webhook verified and processed idempotently
+          content:
+            application/json:
+              schema:
+                type: object
         '400':
           $ref: '#/components/responses/BadRequestError'
         '401':

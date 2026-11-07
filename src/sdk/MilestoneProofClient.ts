@@ -25,6 +25,7 @@ import type {
   ContractScheduleResponse,
   CreateContractInput,
   EvaluationRun,
+  EvidenceProvenanceVerificationRecord,
   EvidenceSubmission,
   FinancialLedgerRow,
   HumanApprovalRecord,
@@ -328,6 +329,53 @@ export class MilestoneProofClient {
     return this.request({
       method: 'GET',
       path: `/milestones/${encodeURIComponent(milestoneId)}/evidence`,
+    });
+  }
+
+  public async verifyMilestoneEvidenceProvenance(
+    milestoneId: string,
+    submissionId?: string
+  ): Promise<{ provenance: EvidenceProvenanceVerificationRecord }> {
+    return this.request({
+      method: 'POST',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/evidence/verify`,
+      body: submissionId ? { submissionId } : {},
+    });
+  }
+
+  public async getMilestoneEvidenceProvenance(
+    milestoneId: string
+  ): Promise<{
+    latestProvenance: EvidenceProvenanceVerificationRecord | null;
+    provenanceHistory: EvidenceProvenanceVerificationRecord[];
+  }> {
+    return this.request({
+      method: 'GET',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/evidence/provenance`,
+    });
+  }
+
+  public async handleGitHubWebhook(
+    headers: {
+      'X-GitHub-Delivery': string;
+      'X-GitHub-Event': string;
+      'X-Hub-Signature-256': string;
+    },
+    payload: Record<string, unknown>
+  ): Promise<{
+    verified: boolean;
+    deliveryId: string;
+    eventType: string;
+    status: string;
+    duplicate: boolean;
+    matchedSubmissionId: string | null;
+  }> {
+    return this.request({
+      method: 'POST',
+      path: '/webhooks/github',
+      headers,
+      body: payload,
+      requiresAuth: false,
     });
   }
 

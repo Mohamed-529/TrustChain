@@ -6,7 +6,9 @@ import { AppDatabase } from './repositories/Database.ts';
 import {
   ContractRepository,
   EvaluationRepository,
+  EvidenceProvenanceRepository,
   EvidenceRepository,
+  GitHubWebhookEventRepository,
   HumanApprovalRepository,
   MilestoneRepository,
   PaymentTransactionRepository,
@@ -23,6 +25,10 @@ import {
   EvaluationService,
   type MultiAgentEvaluatorProvider,
 } from './services/EvaluationService.ts';
+import {
+  GitHubVerificationService,
+  type GitHubVerificationServiceOptions,
+} from './services/GitHubVerificationService.ts';
 import { SettlementPolicyService } from './services/SettlementPolicyService.ts';
 import { HumanReviewService } from './services/HumanReviewService.ts';
 import { ScheduleControlTowerService } from './services/ScheduleControlTowerService.ts';
@@ -83,7 +89,9 @@ function matchRoutePattern(
   return params;
 }
 
-async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
+async function readJsonBody(
+  req: http.IncomingMessage
+): Promise<{ parsed: unknown; rawText: string }> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let totalBytes = 0;
@@ -101,16 +109,17 @@ async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
 
     req.on('end', () => {
       if (chunks.length === 0) {
-        resolve({});
+        resolve({ parsed: {}, rawText: '' });
         return;
       }
-      const rawText = Buffer.concat(chunks).toString('utf8').trim();
-      if (!rawText) {
-        resolve({});
+      const rawBufferText = Buffer.concat(chunks).toString('utf8');
+      const trimmed = rawBufferText.trim();
+      if (!trimmed) {
+        resolve({ parsed: {}, rawText: rawBufferText });
         return;
       }
       try {
-        resolve(JSON.parse(rawText));
+        resolve({ parsed: JSON.parse(trimmed), rawText: rawBufferText });
       } catch {
         reject(new AppError(400, 'INVALID_JSON_BODY', 'Request body is not valid JSON.'));
       }
@@ -231,7 +240,9 @@ function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpAp
 
     try {
       if (method === 'POST' || method === 'PUT') {
-        apiReq.body = await readJsonBody(rawReq);
+        const { parsed, rawText } = await readJsonBody(rawReq);
+        apiReq.body = parsed;
+        apiReq.rawBody = rawText;
       }
 
       const handlers = matchedRoute.handlers;
@@ -283,15 +294,18 @@ export interface ServerContainer {
   contractRepo: ContractRepository;
   milestoneRepo: MilestoneRepository;
   evidenceRepo: EvidenceRepository;
+  provenanceRepo: EvidenceProvenanceRepository;
   evaluationRepo: EvaluationRepository;
   approvalRepo: HumanApprovalRepository;
   proposalRepo: ScheduleProposalRepository;
   paymentRepo: PaymentTransactionRepository;
   webhookEventRepo: WebhookEventRepository;
+  githubWebhookRepo: GitHubWebhookEventRepository;
   auditService: AuditService;
   authService: AuthService;
   contractService: ContractService;
   evidenceService: EvidenceService;
+  githubVerificationService: GitHubVerificationService;
   evaluationService: EvaluationService;
   settlementPolicyService: SettlementPolicyService;
   humanReviewService: HumanReviewService;
@@ -304,6 +318,7 @@ export function createServerApp(options?: {
   authOptions?: AuthServiceOptions;
   evaluatorProvider?: MultiAgentEvaluatorProvider;
   paypalOptions?: PayPalServiceOptions;
+  githubOptions?: GitHubVerificationServiceOptions;
 }): ServerContainer {
   const db = new AppDatabase(options?.dbPath);
   const userRepo = new UserRepository(db.raw);
@@ -311,11 +326,13 @@ export function createServerApp(options?: {
   const milestoneRepo = new MilestoneRepository(db.raw);
   const contractRepo = new ContractRepository(db.raw, milestoneRepo);
   const evidenceRepo = new EvidenceRepository(db.raw);
+  const provenanceRepo = new EvidenceProvenanceRepository(db.raw);
   const evaluationRepo = new EvaluationRepository(db.raw);
   const approvalRepo = new HumanApprovalRepository(db.raw);
   const proposalRepo = new ScheduleProposalRepository(db.raw, milestoneRepo);
   const paymentRepo = new PaymentTransactionRepository(db.raw);
   const webhookEventRepo = new WebhookEventRepository(db.raw);
+  const githubWebhookRepo = new GitHubWebhookEventRepository(db.raw);
   const auditService = new AuditService(db.raw);
 
   const authService = new AuthService(
@@ -342,6 +359,17 @@ export function createServerApp(options?: {
     auditService
   );
 
+  const githubVerificationService = new GitHubVerificationService(
+    db,
+    contractRepo,
+    milestoneRepo,
+    evidenceRepo,
+    provenanceRepo,
+    githubWebhookRepo,
+    auditService,
+    options?.githubOptions
+  );
+
   const evaluationService = new EvaluationService(
     db,
     contractRepo,
@@ -349,7 +377,8 @@ export function createServerApp(options?: {
     evidenceRepo,
     evaluationRepo,
     auditService,
-    options?.evaluatorProvider
+    options?.evaluatorProvider,
+    githubVerificationService
   );
 
   const settlementPolicyService = new SettlementPolicyService(
@@ -366,7 +395,8 @@ export function createServerApp(options?: {
     approvalRepo,
     settlementPolicyService,
     auditService,
-    paymentRepo
+    paymentRepo,
+    provenanceRepo
   );
 
   const scheduleControlTowerService = new ScheduleControlTowerService(
@@ -404,7 +434,8 @@ export function createServerApp(options?: {
   );
   const evidenceController = new EvidenceController(
     evidenceService,
-    evaluationService
+    evaluationService,
+    githubVerificationService
   );
   const reviewController = new ReviewController(humanReviewService);
   const scheduleController = new ScheduleController(
@@ -435,15 +466,18 @@ export function createServerApp(options?: {
     contractRepo,
     milestoneRepo,
     evidenceRepo,
+    provenanceRepo,
     evaluationRepo,
     approvalRepo,
     proposalRepo,
     paymentRepo,
     webhookEventRepo,
+    githubWebhookRepo,
     auditService,
     authService,
     contractService,
     evidenceService,
+    githubVerificationService,
     evaluationService,
     settlementPolicyService,
     humanReviewService,

@@ -968,6 +968,12 @@ export class GitHubVerificationService {
     });
   }
 
+  public getLatestProvenance(
+    milestoneId: string
+  ): EvidenceProvenanceVerificationRecord | null {
+    return this.getLatestProvenanceForMilestone(milestoneId);
+  }
+
   public getLatestProvenanceForMilestone(
     milestoneId: string
   ): EvidenceProvenanceVerificationRecord | null {
@@ -1033,7 +1039,8 @@ export class GitHubVerificationService {
    */
   public async handleGitHubWebhook(
     headers: Record<string, string | string[] | undefined>,
-    rawBody: unknown
+    rawBody: unknown,
+    rawBodyString?: string
   ): Promise<{
     verified: boolean;
     deliveryId: string;
@@ -1064,7 +1071,10 @@ export class GitHubVerificationService {
     }
 
     const bodyObj = rawBody as Record<string, unknown>;
-    const rawBodySerialized = JSON.stringify(bodyObj);
+    const rawBodySerialized =
+      typeof rawBodyString === 'string' && rawBodyString.length > 0
+        ? rawBodyString
+        : JSON.stringify(bodyObj);
     const payloadSha256 = crypto
       .createHash('sha256')
       .update(rawBodySerialized)
