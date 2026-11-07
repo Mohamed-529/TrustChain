@@ -15,9 +15,14 @@ import type {
   Milestone,
   MilestoneStatus,
   PaymentStatus,
+  PayPalTransactionRecord,
+  PayPalTransactionStatus,
   PolicyCalculationResult,
   ReviewSynthesis,
   RiskAssessment,
+  ScheduleDownstreamCascade,
+  ScheduleProposalStatus,
+  ScheduleRecoveryProposal,
   SecurityScanReport,
   User,
   UserRole,
@@ -144,6 +149,8 @@ export class MilestoneRepository {
   }
 
   private mapRow(row: Record<string, unknown>): Milestone {
+    const deadlineIso = String(row.deadline_iso);
+    const createdAt = String(row.created_at);
     return {
       id: String(row.id),
       contractId: String(row.contract_id),
@@ -151,12 +158,15 @@ export class MilestoneRepository {
       title: String(row.title),
       description: String(row.description),
       agreedAmountCents: Number(row.agreed_amount_cents),
-      deadlineIso: String(row.deadline_iso),
+      startDateIso: row.start_date_iso ? String(row.start_date_iso) : createdAt,
+      deadlineIso,
+      baselineStartIso: row.baseline_start_iso ? String(row.baseline_start_iso) : (row.start_date_iso ? String(row.start_date_iso) : createdAt),
+      baselineEndIso: row.baseline_end_iso ? String(row.baseline_end_iso) : deadlineIso,
       dependencyMilestoneIds: JSON.parse(String(row.dependency_milestone_ids_json)) as string[],
       acceptanceCriteria: JSON.parse(String(row.acceptance_criteria_json)) as AcceptanceCriterion[],
       status: String(row.status) as MilestoneStatus,
       paymentStatus: String(row.payment_status) as PaymentStatus,
-      createdAt: String(row.created_at),
+      createdAt,
       updatedAt: String(row.updated_at),
     };
   }
@@ -174,13 +184,17 @@ export class MilestoneRepository {
   }
 
   public insert(milestone: Milestone): void {
+    const startDateIso = milestone.startDateIso ?? milestone.createdAt;
+    const baselineStartIso = milestone.baselineStartIso ?? startDateIso;
+    const baselineEndIso = milestone.baselineEndIso ?? milestone.deadlineIso;
     this.rawDb
       .prepare(
         `INSERT INTO milestones (
           id, contract_id, sequence_order, title, description,
-          agreed_amount_cents, deadline_iso, dependency_milestone_ids_json,
+          agreed_amount_cents, start_date_iso, deadline_iso,
+          baseline_start_iso, baseline_end_iso, dependency_milestone_ids_json,
           acceptance_criteria_json, status, payment_status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         milestone.id,
@@ -189,7 +203,10 @@ export class MilestoneRepository {
         milestone.title,
         milestone.description,
         milestone.agreedAmountCents,
+        startDateIso,
         milestone.deadlineIso,
+        baselineStartIso,
+        baselineEndIso,
         JSON.stringify(milestone.dependencyMilestoneIds),
         JSON.stringify(milestone.acceptanceCriteria),
         milestone.status,
@@ -217,6 +234,38 @@ export class MilestoneRepository {
     this.rawDb
       .prepare('UPDATE milestones SET status = ?, updated_at = ? WHERE id = ?')
       .run(newStatus, updatedAt, milestoneId);
+  }
+
+  public updatePaymentStatus(
+    milestoneId: string,
+    newPaymentStatus: PaymentStatus,
+    newStatus: MilestoneStatus | null,
+    updatedAt: string
+  ): void {
+    if (newStatus) {
+      this.rawDb
+        .prepare(
+          'UPDATE milestones SET payment_status = ?, status = ?, updated_at = ? WHERE id = ?'
+        )
+        .run(newPaymentStatus, newStatus, updatedAt, milestoneId);
+    } else {
+      this.rawDb
+        .prepare('UPDATE milestones SET payment_status = ?, updated_at = ? WHERE id = ?')
+        .run(newPaymentStatus, updatedAt, milestoneId);
+    }
+  }
+
+  public updateScheduleDates(
+    milestoneId: string,
+    startDateIso: string,
+    deadlineIso: string,
+    updatedAt: string
+  ): void {
+    this.rawDb
+      .prepare(
+        'UPDATE milestones SET start_date_iso = ?, deadline_iso = ?, updated_at = ? WHERE id = ?'
+      )
+      .run(startDateIso, deadlineIso, updatedAt, milestoneId);
   }
 }
 
@@ -597,6 +646,270 @@ export class HumanApprovalRepository {
         approval.isOverride ? 1 : 0,
         approval.justification,
         approval.decidedAt
+      );
+  }
+}
+
+export class ScheduleProposalRepository {
+  private readonly rawDb: DatabaseSync;
+  private readonly milestoneRepo: MilestoneRepository;
+
+  constructor(rawDb: DatabaseSync, milestoneRepo: MilestoneRepository) {
+    this.rawDb = rawDb;
+    this.milestoneRepo = milestoneRepo;
+  }
+
+  private mapRow(row: Record<string, unknown>): ScheduleRecoveryProposal {
+    const milestoneId = String(row.milestone_id);
+    const milestone = this.milestoneRepo.findById(milestoneId);
+    return {
+      id: String(row.id),
+      contractId: String(row.contract_id),
+      milestoneId,
+      milestoneTitle: milestone?.title ?? milestoneId,
+      proposedBy: String(row.proposed_by),
+      status: String(row.status) as ScheduleProposalStatus,
+      currentStartDate: String(row.current_start_date),
+      currentEndDate: String(row.current_end_date),
+      baselineStartDate: String(row.baseline_start_date),
+      baselineEndDate: String(row.baseline_end_date),
+      proposedStartDate: String(row.proposed_start_date),
+      proposedEndDate: String(row.proposed_end_date),
+      delayDays: Number(row.delay_days),
+      riskSummary: String(row.risk_summary),
+      aiRationale: String(row.ai_rationale),
+      supportingEvidenceIds: JSON.parse(String(row.supporting_evidence_ids_json)) as string[],
+      downstreamCascades: JSON.parse(
+        String(row.downstream_cascades_json)
+      ) as ScheduleDownstreamCascade[],
+      preservesContractualAmountCents: Number(row.preserves_contractual_amount_cents),
+      decidedBy: row.decided_by !== null ? String(row.decided_by) : null,
+      decidedByRole: row.decided_by_role !== null ? (String(row.decided_by_role) as UserRole) : null,
+      decidedAt: row.decided_at !== null ? String(row.decided_at) : null,
+      decisionReason: row.decision_reason !== null ? String(row.decision_reason) : null,
+      createdAt: String(row.created_at),
+    };
+  }
+
+  public listByContractId(contractId: string): ScheduleRecoveryProposal[] {
+    const rows = this.rawDb
+      .prepare('SELECT * FROM schedule_proposals WHERE contract_id = ? ORDER BY created_at DESC')
+      .all(contractId);
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  public findById(id: string): ScheduleRecoveryProposal | null {
+    const row = this.rawDb.prepare('SELECT * FROM schedule_proposals WHERE id = ?').get(id);
+    return row ? this.mapRow(row) : null;
+  }
+
+  public findPendingByMilestoneId(milestoneId: string): ScheduleRecoveryProposal | null {
+    const row = this.rawDb
+      .prepare(
+        "SELECT * FROM schedule_proposals WHERE milestone_id = ? AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1"
+      )
+      .get(milestoneId);
+    return row ? this.mapRow(row) : null;
+  }
+
+  public insert(proposal: ScheduleRecoveryProposal): void {
+    this.rawDb
+      .prepare(
+        `INSERT INTO schedule_proposals (
+          id, contract_id, milestone_id, proposed_by, status,
+          current_start_date, current_end_date, baseline_start_date, baseline_end_date,
+          proposed_start_date, proposed_end_date, delay_days,
+          risk_summary, ai_rationale, supporting_evidence_ids_json,
+          downstream_cascades_json, preserves_contractual_amount_cents,
+          decided_by, decided_by_role, decided_at, decision_reason, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        proposal.id,
+        proposal.contractId,
+        proposal.milestoneId,
+        proposal.proposedBy,
+        proposal.status,
+        proposal.currentStartDate,
+        proposal.currentEndDate,
+        proposal.baselineStartDate,
+        proposal.baselineEndDate,
+        proposal.proposedStartDate,
+        proposal.proposedEndDate,
+        proposal.delayDays,
+        proposal.riskSummary,
+        proposal.aiRationale,
+        JSON.stringify(proposal.supportingEvidenceIds),
+        JSON.stringify(proposal.downstreamCascades),
+        proposal.preservesContractualAmountCents,
+        proposal.decidedBy,
+        proposal.decidedByRole,
+        proposal.decidedAt,
+        proposal.decisionReason,
+        proposal.createdAt
+      );
+  }
+
+  public updateDecision(params: {
+    id: string;
+    status: 'APPROVED' | 'REJECTED';
+    decidedBy: string;
+    decidedByRole: UserRole;
+    decidedAt: string;
+    decisionReason: string;
+  }): void {
+    this.rawDb
+      .prepare(
+        `UPDATE schedule_proposals
+         SET status = ?, decided_by = ?, decided_by_role = ?, decided_at = ?, decision_reason = ?
+         WHERE id = ?`
+      )
+      .run(
+        params.status,
+        params.decidedBy,
+        params.decidedByRole,
+        params.decidedAt,
+        params.decisionReason,
+        params.id
+      );
+  }
+}
+
+export class PaymentTransactionRepository {
+  private readonly rawDb: DatabaseSync;
+
+  constructor(rawDb: DatabaseSync) {
+    this.rawDb = rawDb;
+  }
+
+  private mapRow(row: Record<string, unknown>): PayPalTransactionRecord {
+    const rawResp = JSON.parse(String(row.raw_paypal_response_json ?? '{}')) as Record<
+      string,
+      unknown
+    >;
+    const executionMode =
+      rawResp.executionMode === 'LIVE_PAYPAL_SANDBOX'
+        ? 'LIVE_PAYPAL_SANDBOX'
+        : 'SANDBOX_SIMULATION';
+
+    return {
+      id: String(row.id),
+      milestoneId: String(row.milestone_id),
+      approvalId: row.approval_id !== null ? String(row.approval_id) : null,
+      paypalOrderId: row.paypal_order_id !== null ? String(row.paypal_order_id) : null,
+      paypalAuthorizationId:
+        row.paypal_authorization_id !== null ? String(row.paypal_authorization_id) : null,
+      paypalCaptureId: row.paypal_capture_id !== null ? String(row.paypal_capture_id) : null,
+      idempotencyKey: String(row.idempotency_key),
+      authorizedAmountCents: Number(row.authorized_amount_cents),
+      capturedAmountCents: Number(row.captured_amount_cents),
+      currency: String(row.currency) as 'USD',
+      status: String(row.status) as PayPalTransactionStatus,
+      executionMode,
+      nonEscrowDisclosure:
+        'PayPal Orders API v2 intent: AUTHORIZE places a temporary payment hold (29-day maximum validity window) and is NOT custodial escrow.',
+      authExpiresAt: row.auth_expires_at !== null ? String(row.auth_expires_at) : null,
+      rawPaypalResponse: rawResp,
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  public findByIdempotencyKey(idempotencyKey: string): PayPalTransactionRecord | null {
+    const row = this.rawDb
+      .prepare('SELECT * FROM payment_transactions WHERE idempotency_key = ?')
+      .get(idempotencyKey);
+    return row ? this.mapRow(row) : null;
+  }
+
+  public findLatestByMilestoneId(milestoneId: string): PayPalTransactionRecord | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT * FROM payment_transactions WHERE milestone_id = ? ORDER BY updated_at DESC LIMIT 1'
+      )
+      .get(milestoneId);
+    return row ? this.mapRow(row) : null;
+  }
+
+  public listByMilestoneId(milestoneId: string): PayPalTransactionRecord[] {
+    const rows = this.rawDb
+      .prepare(
+        'SELECT * FROM payment_transactions WHERE milestone_id = ? ORDER BY updated_at DESC'
+      )
+      .all(milestoneId);
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  public findByPaypalAuthorizationId(authId: string): PayPalTransactionRecord | null {
+    const row = this.rawDb
+      .prepare('SELECT * FROM payment_transactions WHERE paypal_authorization_id = ? LIMIT 1')
+      .get(authId);
+    return row ? this.mapRow(row) : null;
+  }
+
+  public findByPaypalOrderId(orderId: string): PayPalTransactionRecord | null {
+    const row = this.rawDb
+      .prepare('SELECT * FROM payment_transactions WHERE paypal_order_id = ? LIMIT 1')
+      .get(orderId);
+    return row ? this.mapRow(row) : null;
+  }
+
+  public insert(tx: PayPalTransactionRecord): void {
+    this.rawDb
+      .prepare(
+        `INSERT INTO payment_transactions (
+          id, milestone_id, approval_id, paypal_order_id,
+          paypal_authorization_id, paypal_capture_id, idempotency_key,
+          authorized_amount_cents, captured_amount_cents, currency,
+          status, auth_expires_at, raw_paypal_response_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        tx.id,
+        tx.milestoneId,
+        tx.approvalId,
+        tx.paypalOrderId,
+        tx.paypalAuthorizationId,
+        tx.paypalCaptureId,
+        tx.idempotencyKey,
+        tx.authorizedAmountCents,
+        tx.capturedAmountCents,
+        tx.currency,
+        tx.status,
+        tx.authExpiresAt,
+        JSON.stringify({
+          ...tx.rawPaypalResponse,
+          executionMode: tx.executionMode,
+        }),
+        tx.updatedAt
+      );
+  }
+
+  public update(tx: PayPalTransactionRecord): void {
+    this.rawDb
+      .prepare(
+        `UPDATE payment_transactions
+         SET approval_id = ?, paypal_order_id = ?, paypal_authorization_id = ?,
+             paypal_capture_id = ?, idempotency_key = ?, authorized_amount_cents = ?,
+             captured_amount_cents = ?, status = ?, auth_expires_at = ?,
+             raw_paypal_response_json = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        tx.approvalId,
+        tx.paypalOrderId,
+        tx.paypalAuthorizationId,
+        tx.paypalCaptureId,
+        tx.idempotencyKey,
+        tx.authorizedAmountCents,
+        tx.capturedAmountCents,
+        tx.status,
+        tx.authExpiresAt,
+        JSON.stringify({
+          ...tx.rawPaypalResponse,
+          executionMode: tx.executionMode,
+        }),
+        tx.updatedAt,
+        tx.id
       );
   }
 }

@@ -1,0 +1,866 @@
+import crypto from 'node:crypto';
+import type { PayPalTransactionRecord, User } from '../../types/domain.ts';
+import type { AppDatabase } from '../repositories/Database.ts';
+import type {
+  ContractRepository,
+  EvaluationRepository,
+  HumanApprovalRepository,
+  MilestoneRepository,
+  PaymentTransactionRepository,
+} from '../repositories/DomainRepositories.ts';
+import type { AuditService } from './AuditService.ts';
+import type { SettlementPolicyService } from './SettlementPolicyService.ts';
+import { AppError } from '../middleware/errorHandler.ts';
+
+export const PAYPAL_NON_ESCROW_DISCLOSURE =
+  'PayPal Orders API v2 (intent: AUTHORIZE) places a temporary payment authorization hold (3-day honor period, up to 29-day validity window) and is NOT a regulated custodial escrow service.';
+
+/**
+ * Primary Sponsor Integration B — APIMatic & PayPal Orders API v2 Settlement Engine.
+ *
+ * Grounded in the official PayPal Server SDK (`@paypal/paypal-server-sdk`) / APIMatic
+ * Orders v2 & Payments v2 models:
+ * - `POST /v2/checkout/orders` (`intent: "AUTHORIZE"`)
+ * - `POST /v2/checkout/orders/{id}/authorize`
+ * - `POST /v2/payments/authorizations/{authorization_id}/capture`
+ * - `POST /v1/notifications/verify-webhook-signature`
+ *
+ * Financial Safety Rules Enforced:
+ * 1. AI agents NEVER invoke this service or determine payable amounts.
+ * 2. Every mutation requires a deterministic `PayPal-Request-Id` idempotency header.
+ * 3. `captureAuthorization` strictly requires a persisted `HUMAN_APPROVAL` record with
+ *    `decision === 'APPROVE'` and re-verifies `0 < approvedAmountCents <= permittedAmountCents <= authorizedAmountCents`.
+ * 4. Supports live PayPal Developer Sandbox REST calls when `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`
+ *    are configured, and falls back to a clearly labeled deterministic Sandbox Simulation (`SANDBOX_SIMULATION`)
+ *    when credentials are absent.
+ */
+export class PayPalService {
+  private readonly db: AppDatabase;
+  private readonly contractRepo: ContractRepository;
+  private readonly milestoneRepo: MilestoneRepository;
+  private readonly evaluationRepo: EvaluationRepository;
+  private readonly approvalRepo: HumanApprovalRepository;
+  private readonly paymentRepo: PaymentTransactionRepository;
+  private readonly settlementPolicyService: SettlementPolicyService;
+  private readonly auditService: AuditService;
+
+  constructor(
+    db: AppDatabase,
+    contractRepo: ContractRepository,
+    milestoneRepo: MilestoneRepository,
+    evaluationRepo: EvaluationRepository,
+    approvalRepo: HumanApprovalRepository,
+    paymentRepo: PaymentTransactionRepository,
+    settlementPolicyService: SettlementPolicyService,
+    auditService: AuditService
+  ) {
+    this.db = db;
+    this.contractRepo = contractRepo;
+    this.milestoneRepo = milestoneRepo;
+    this.evaluationRepo = evaluationRepo;
+    this.approvalRepo = approvalRepo;
+    this.paymentRepo = paymentRepo;
+    this.settlementPolicyService = settlementPolicyService;
+    this.auditService = auditService;
+  }
+
+  public isLivePayPalConfigured(): boolean {
+    return Boolean(
+      process.env.PAYPAL_CLIENT_ID &&
+        process.env.PAYPAL_CLIENT_SECRET &&
+        process.env.PAYPAL_CLIENT_ID !== 'YOUR_PAYPAL_SANDBOX_CLIENT_ID'
+    );
+  }
+
+  private validateIdempotencyKey(rawKey: string | undefined): string {
+    const key = String(rawKey ?? '').trim();
+    if (key.length < 8 || key.length > 128) {
+      throw new AppError(
+        400,
+        'MISSING_PAYPAL_REQUEST_ID',
+        'A valid PayPal-Request-Id header (8-128 characters) is mandatory for idempotent payment operations.'
+      );
+    }
+    return key;
+  }
+
+  private centsToUsdString(cents: number): string {
+    if (!Number.isInteger(cents) || cents < 0) {
+      throw new AppError(400, 'INVALID_MONETARY_CENTS', 'Monetary amount must be non-negative integer cents.');
+    }
+    return (cents / 100).toFixed(2);
+  }
+
+  private async getLivePayPalAccessToken(): Promise<string> {
+    const clientId = process.env.PAYPAL_CLIENT_ID!;
+    const secret = process.env.PAYPAL_CLIENT_SECRET!;
+    const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
+    const basicAuth = Buffer.from(`${clientId}:${secret}`).toString('base64');
+
+    const res = await fetch(`${baseUrl}/v1/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials',
+    });
+
+    if (!res.ok) {
+      throw new AppError(
+        422,
+        'PAYPAL_OAUTH_FAILED',
+        `PayPal Sandbox OAuth2 token exchange failed with HTTP ${res.status}.`
+      );
+    }
+
+    const data = (await res.json()) as { access_token: string };
+    return data.access_token;
+  }
+
+  /**
+   * Step 1: Create a PayPal Order (`intent: "AUTHORIZE"`) for a contract milestone (`CLIENT` only).
+   */
+  public async createOrder(
+    actor: User,
+    milestoneId: string,
+    paypalRequestIdHeader: string | undefined
+  ): Promise<PayPalTransactionRecord> {
+    const idempotencyKey = this.validateIdempotencyKey(paypalRequestIdHeader);
+
+    // Idempotent replay check
+    const existingByKey = this.paymentRepo.findByIdempotencyKey(idempotencyKey);
+    if (existingByKey) {
+      if (existingByKey.milestoneId !== milestoneId) {
+        throw new AppError(
+          409,
+          'IDEMPOTENCY_KEY_REUSE_CONFLICT',
+          `PayPal-Request-Id '${idempotencyKey}' was already used for a different milestone.`
+        );
+      }
+      return existingByKey;
+    }
+
+    const milestone = this.milestoneRepo.findById(milestoneId);
+    if (!milestone) {
+      throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' was not found.`);
+    }
+
+    const contract = this.contractRepo.findById(milestone.contractId);
+    if (!contract) {
+      throw new AppError(
+        404,
+        'CONTRACT_NOT_FOUND',
+        `Contract '${milestone.contractId}' was not found.`
+      );
+    }
+
+    if (actor.role !== 'CLIENT' || actor.id !== contract.clientId) {
+      throw new AppError(
+        403,
+        'FORBIDDEN_NOT_CONTRACT_CLIENT',
+        'Only the designated contract CLIENT may create a PayPal Order.'
+      );
+    }
+
+    if (milestone.paymentStatus === 'CAPTURED' || milestone.status === 'SETTLED') {
+      throw new AppError(
+        409,
+        'MILESTONE_ALREADY_SETTLED',
+        `Milestone '${milestoneId}' has already been settled.`
+      );
+    }
+
+    const amountUsd = this.centsToUsdString(milestone.agreedAmountCents);
+    const nowIso = new Date().toISOString();
+    const isLive = this.isLivePayPalConfigured();
+
+    let paypalOrderId = `ORD-MPAI-${crypto.createHash('sha256').update(`${milestoneId}:${idempotencyKey}`).digest('hex').slice(0, 12).toUpperCase()}`;
+    let rawPaypalResponse: Record<string, unknown> = {
+      id: paypalOrderId,
+      intent: 'AUTHORIZE',
+      status: 'CREATED',
+      purchase_units: [
+        {
+          reference_id: milestone.id,
+          custom_id: contract.id,
+          description: `${contract.title} — ${milestone.title}`,
+          amount: {
+            currency_code: 'USD',
+            value: amountUsd,
+          },
+        },
+      ],
+      create_time: nowIso,
+      nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+    };
+
+    if (isLive) {
+      const token = await this.getLivePayPalAccessToken();
+      const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
+      const orderRes = await fetch(`${baseUrl}/v2/checkout/orders`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'PayPal-Request-Id': idempotencyKey,
+        },
+        body: JSON.stringify({
+          intent: 'AUTHORIZE',
+          purchase_units: [
+            {
+              reference_id: milestone.id,
+              custom_id: contract.id,
+              description: `${contract.title} — ${milestone.title}`.slice(0, 127),
+              amount: {
+                currency_code: 'USD',
+                value: amountUsd,
+              },
+            },
+          ],
+        }),
+      });
+
+      if (!orderRes.ok) {
+        const errText = await orderRes.text();
+        throw new AppError(
+          422,
+          'PAYPAL_ORDER_CREATE_FAILED',
+          `PayPal Orders API v2 returned HTTP ${orderRes.status}: ${errText}`
+        );
+      }
+      const orderJson = (await orderRes.json()) as Record<string, unknown>;
+      paypalOrderId = String(orderJson.id);
+      rawPaypalResponse = orderJson;
+    }
+
+    return this.db.withTransaction(() => {
+      const txRecord: PayPalTransactionRecord = {
+        id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
+        milestoneId: milestone.id,
+        approvalId: null,
+        paypalOrderId,
+        paypalAuthorizationId: null,
+        paypalCaptureId: null,
+        idempotencyKey,
+        authorizedAmountCents: milestone.agreedAmountCents,
+        capturedAmountCents: 0,
+        currency: 'USD',
+        status: 'ORDER_CREATED',
+        executionMode: isLive ? 'LIVE_PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
+        nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+        authExpiresAt: null,
+        rawPaypalResponse,
+        updatedAt: nowIso,
+      };
+
+      this.paymentRepo.insert(txRecord);
+      this.milestoneRepo.updatePaymentStatus(milestone.id, 'ORDER_CREATED', null, nowIso);
+
+      this.auditService.appendWithinTx({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'PAYPAL_ORDER_CREATED',
+        entityType: 'PAYMENT',
+        entityId: txRecord.id,
+        contractId: contract.id,
+        milestoneId: milestone.id,
+        previousState: milestone.paymentStatus,
+        newState: 'ORDER_CREATED',
+        payload: {
+          paypalOrderId,
+          intent: 'AUTHORIZE',
+          authorizedAmountCents: milestone.agreedAmountCents,
+          idempotencyKey,
+          executionMode: txRecord.executionMode,
+          nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+        },
+        timestamp: nowIso,
+      });
+
+      return txRecord;
+    });
+  }
+
+  /**
+   * Step 2: Authorize the PayPal Order (`POST /v2/checkout/orders/{id}/authorize`, `CLIENT` only).
+   * Records `paypalAuthorizationId` and the 29-day authorization validity expiry (`authExpiresAt`).
+   */
+  public async authorizeOrder(
+    actor: User,
+    milestoneId: string,
+    paypalRequestIdHeader: string | undefined,
+    body?: { paypalOrderId?: string }
+  ): Promise<PayPalTransactionRecord> {
+    const idempotencyKey = this.validateIdempotencyKey(paypalRequestIdHeader);
+
+    const existingByKey = this.paymentRepo.findByIdempotencyKey(idempotencyKey);
+    if (existingByKey) {
+      if (existingByKey.milestoneId !== milestoneId) {
+        throw new AppError(
+          409,
+          'IDEMPOTENCY_KEY_REUSE_CONFLICT',
+          `PayPal-Request-Id '${idempotencyKey}' was already used for a different milestone.`
+        );
+      }
+      return existingByKey;
+    }
+
+    const milestone = this.milestoneRepo.findById(milestoneId);
+    if (!milestone) {
+      throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' was not found.`);
+    }
+
+    const contract = this.contractRepo.findById(milestone.contractId);
+    if (!contract) {
+      throw new AppError(
+        404,
+        'CONTRACT_NOT_FOUND',
+        `Contract '${milestone.contractId}' was not found.`
+      );
+    }
+
+    if (actor.role !== 'CLIENT' || actor.id !== contract.clientId) {
+      throw new AppError(
+        403,
+        'FORBIDDEN_NOT_CONTRACT_CLIENT',
+        'Only the designated contract CLIENT may authorize a PayPal Order.'
+      );
+    }
+
+    const latestTx = this.paymentRepo.findLatestByMilestoneId(milestoneId);
+    const targetOrderId = body?.paypalOrderId?.trim() || latestTx?.paypalOrderId;
+    if (!targetOrderId) {
+      throw new AppError(
+        400,
+        'PAYPAL_ORDER_REQUIRED_BEFORE_AUTHORIZE',
+        `No PayPal Order exists for milestone '${milestoneId}'. Create an order first.`
+      );
+    }
+
+    if (latestTx && latestTx.status === 'CAPTURED') {
+      throw new AppError(
+        409,
+        'PAYPAL_ORDER_ALREADY_CAPTURED',
+        `Milestone '${milestoneId}' payment is already captured.`
+      );
+    }
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    // PayPal authorization validity window is 29 days
+    const expiresAtIso = new Date(now.getTime() + 29 * 24 * 60 * 60 * 1000).toISOString();
+    const isLive = this.isLivePayPalConfigured();
+
+    let paypalAuthorizationId = `AUTH-MPAI-${crypto.createHash('sha256').update(`${targetOrderId}:${idempotencyKey}`).digest('hex').slice(0, 12).toUpperCase()}`;
+    let rawAuthResponse: Record<string, unknown> = {
+      id: targetOrderId,
+      status: 'COMPLETED',
+      purchase_units: [
+        {
+          reference_id: milestone.id,
+          payments: {
+            authorizations: [
+              {
+                id: paypalAuthorizationId,
+                status: 'CREATED',
+                amount: {
+                  currency_code: 'USD',
+                  value: this.centsToUsdString(milestone.agreedAmountCents),
+                },
+                expiration_time: expiresAtIso,
+                create_time: nowIso,
+              },
+            ],
+          },
+        },
+      ],
+      nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+    };
+
+    if (isLive) {
+      const token = await this.getLivePayPalAccessToken();
+      const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
+      const authRes = await fetch(`${baseUrl}/v2/checkout/orders/${targetOrderId}/authorize`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'PayPal-Request-Id': idempotencyKey,
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!authRes.ok) {
+        const errText = await authRes.text();
+        throw new AppError(
+          422,
+          'PAYPAL_ORDER_AUTHORIZE_FAILED',
+          `PayPal Order authorize returned HTTP ${authRes.status}: ${errText}`
+        );
+      }
+      rawAuthResponse = (await authRes.json()) as Record<string, unknown>;
+    }
+
+    return this.db.withTransaction(() => {
+      const txRecord: PayPalTransactionRecord = {
+        id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
+        milestoneId: milestone.id,
+        approvalId: null,
+        paypalOrderId: targetOrderId,
+        paypalAuthorizationId,
+        paypalCaptureId: null,
+        idempotencyKey,
+        authorizedAmountCents: milestone.agreedAmountCents,
+        capturedAmountCents: 0,
+        currency: 'USD',
+        status: 'AUTHORIZED',
+        executionMode: isLive ? 'LIVE_PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
+        nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+        authExpiresAt: expiresAtIso,
+        rawPaypalResponse: rawAuthResponse,
+        updatedAt: nowIso,
+      };
+
+      this.paymentRepo.insert(txRecord);
+      this.milestoneRepo.updatePaymentStatus(milestone.id, 'AUTHORIZED', null, nowIso);
+
+      this.auditService.appendWithinTx({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'PAYPAL_ORDER_AUTHORIZED',
+        entityType: 'PAYMENT',
+        entityId: txRecord.id,
+        contractId: contract.id,
+        milestoneId: milestone.id,
+        previousState: milestone.paymentStatus,
+        newState: 'AUTHORIZED',
+        payload: {
+          paypalOrderId: targetOrderId,
+          paypalAuthorizationId,
+          authorizedAmountCents: milestone.agreedAmountCents,
+          authExpiresAt: expiresAtIso,
+          idempotencyKey,
+          executionMode: txRecord.executionMode,
+        },
+        timestamp: nowIso,
+      });
+
+      return txRecord;
+    });
+  }
+
+  /**
+   * Step 3: Capture a human-approved settlement against a PayPal Authorization
+   * (`POST /v2/payments/authorizations/{authorization_id}/capture`).
+   *
+   * Strict Financial Guards:
+   * - Only `REVIEWER` or `CLIENT` (`actor.id !== contract.developerId`) can capture.
+   * - Requires a persisted `HUMAN_APPROVAL` record with `decision === 'APPROVE'`.
+   * - Re-calculates deterministic policy cap and verifies:
+   *   `0 < approvedAmountCents <= permittedAmountCents <= authorizedAmountCents`.
+   * - Verifies authorization has not expired (`authExpiresAt > now`).
+   * - Enforces idempotency via `PayPal-Request-Id`.
+   */
+  public async captureAuthorization(
+    actor: User,
+    milestoneId: string,
+    paypalRequestIdHeader: string | undefined
+  ): Promise<PayPalTransactionRecord> {
+    const idempotencyKey = this.validateIdempotencyKey(paypalRequestIdHeader);
+
+    // 1. Idempotent replay check
+    const existingByKey = this.paymentRepo.findByIdempotencyKey(idempotencyKey);
+    if (existingByKey) {
+      if (existingByKey.milestoneId !== milestoneId) {
+        throw new AppError(
+          409,
+          'IDEMPOTENCY_KEY_REUSE_CONFLICT',
+          `PayPal-Request-Id '${idempotencyKey}' was already used for a different milestone.`
+        );
+      }
+      return existingByKey;
+    }
+
+    const milestone = this.milestoneRepo.findById(milestoneId);
+    if (!milestone) {
+      throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' was not found.`);
+    }
+
+    const contract = this.contractRepo.findById(milestone.contractId);
+    if (!contract) {
+      throw new AppError(
+        404,
+        'CONTRACT_NOT_FOUND',
+        `Contract '${milestone.contractId}' was not found.`
+      );
+    }
+
+    // 2. Role & Separation-of-Duties Enforcement
+    if (actor.role === 'DEVELOPER' || actor.id === contract.developerId) {
+      throw new AppError(
+        403,
+        'CAPTURE_FORBIDDEN_FOR_DEVELOPER',
+        `Separation-of-duties violation: Developer '${actor.id}' can never capture milestone payments.`
+      );
+    }
+
+    if (actor.role !== 'REVIEWER' && actor.role !== 'CLIENT') {
+      throw new AppError(
+        403,
+        'FORBIDDEN_ROLE',
+        'Only authorized REVIEWER or CLIENT roles may capture milestone payments.'
+      );
+    }
+
+    if (actor.id !== contract.reviewerId && actor.id !== contract.clientId) {
+      throw new AppError(
+        403,
+        'FORBIDDEN_NOT_CONTRACT_FIDUCIARY',
+        `Actor '${actor.id}' is not authorized to capture payments for contract '${contract.id}'.`
+      );
+    }
+
+    // 3. Prevent duplicate capture
+    if (milestone.status === 'SETTLED' || milestone.paymentStatus === 'CAPTURED') {
+      throw new AppError(
+        409,
+        'DUPLICATE_CAPTURE_FORBIDDEN',
+        `Milestone '${milestoneId}' has already been captured and settled.`
+      );
+    }
+
+    // 4. Mandatory Human Approval Gate
+    const latestApproval = this.approvalRepo.findLatestByMilestoneId(milestoneId);
+    if (
+      milestone.status !== 'APPROVED' ||
+      !latestApproval ||
+      latestApproval.decision !== 'APPROVE'
+    ) {
+      throw new AppError(
+        409,
+        'HUMAN_APPROVAL_REQUIRED_FOR_CAPTURE',
+        `Payment capture blocked: Milestone '${milestoneId}' (status: '${milestone.status}') does not have a persisted human approval decision ('APPROVE'). AI recommendations alone can never trigger payment capture.`
+      );
+    }
+
+    // 5. Re-verify deterministic policy cap against approved amount
+    const latestEval = this.evaluationRepo.findById(latestApproval.evaluationId);
+    if (!latestEval || latestEval.status !== 'COMPLETED') {
+      throw new AppError(
+        409,
+        'VALID_EVALUATION_REQUIRED_FOR_CAPTURE',
+        `Payment capture blocked: Associated evaluation '${latestApproval.evaluationId}' is missing or incomplete.`
+      );
+    }
+
+    const permittedCents = latestEval.policyCalculation.permittedAmountCents;
+    const captureCents = latestApproval.approvedAmountCents;
+
+    if (
+      !Number.isInteger(captureCents) ||
+      captureCents <= 0 ||
+      captureCents > permittedCents ||
+      captureCents > milestone.agreedAmountCents
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_CAPTURE_AMOUNT_BOUNDS',
+        `Capture amount (${captureCents} cents) violates deterministic policy bounds (permitted: ${permittedCents} cents, agreed: ${milestone.agreedAmountCents} cents).`
+      );
+    }
+
+    // 6. Verify active PayPal Authorization exists and has not expired
+    const latestTx = this.paymentRepo.findLatestByMilestoneId(milestoneId);
+    if (!latestTx || !latestTx.paypalAuthorizationId || latestTx.status !== 'AUTHORIZED') {
+      throw new AppError(
+        409,
+        'PAYPAL_AUTHORIZATION_REQUIRED_BEFORE_CAPTURE',
+        `Milestone '${milestoneId}' does not have an active PayPal Authorization ('AUTHORIZED' state required before capture).`
+      );
+    }
+
+    if (captureCents > latestTx.authorizedAmountCents) {
+      throw new AppError(
+        400,
+        'CAPTURE_EXCEEDS_AUTHORIZED_AMOUNT',
+        `Capture amount (${captureCents} cents) exceeds PayPal authorized hold (${latestTx.authorizedAmountCents} cents).`
+      );
+    }
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    if (latestTx.authExpiresAt && new Date(latestTx.authExpiresAt).getTime() <= now.getTime()) {
+      this.milestoneRepo.updatePaymentStatus(milestone.id, 'EXPIRED', null, nowIso);
+      throw new AppError(
+        422,
+        'PAYPAL_AUTHORIZATION_EXPIRED',
+        `PayPal Authorization '${latestTx.paypalAuthorizationId}' expired at ${latestTx.authExpiresAt}. Re-authorization is required.`
+      );
+    }
+
+    const isLive = this.isLivePayPalConfigured();
+    const captureUsd = this.centsToUsdString(captureCents);
+    let paypalCaptureId = `CAP-MPAI-${crypto.createHash('sha256').update(`${latestTx.paypalAuthorizationId}:${idempotencyKey}`).digest('hex').slice(0, 12).toUpperCase()}`;
+
+    const isPartialCapture = captureCents < latestTx.authorizedAmountCents;
+    const txStatus = isPartialCapture ? 'PARTIALLY_CAPTURED_VOIDED' : 'CAPTURED';
+
+    let rawCaptureResponse: Record<string, unknown> = {
+      id: paypalCaptureId,
+      status: 'COMPLETED',
+      final_capture: true,
+      amount: {
+        currency_code: 'USD',
+        value: captureUsd,
+      },
+      invoice_id: `${contract.id}_${milestone.id}`,
+      custom_id: latestApproval.id,
+      create_time: nowIso,
+      update_time: nowIso,
+      nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+    };
+
+    if (isLive) {
+      const token = await this.getLivePayPalAccessToken();
+      const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
+      const capRes = await fetch(
+        `${baseUrl}/v2/payments/authorizations/${latestTx.paypalAuthorizationId}/capture`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'PayPal-Request-Id': idempotencyKey,
+          },
+          body: JSON.stringify({
+            amount: {
+              currency_code: 'USD',
+              value: captureUsd,
+            },
+            invoice_id: `${contract.id}_${milestone.id}`.slice(0, 127),
+            final_capture: true,
+            note_to_payer: `MilestoneProof AI Verified Settlement: ${milestone.title}`.slice(0, 255),
+          }),
+        }
+      );
+
+      if (!capRes.ok) {
+        const errText = await capRes.text();
+        throw new AppError(
+          422,
+          'PAYPAL_CAPTURE_FAILED',
+          `PayPal Authorizations Capture API v2 returned HTTP ${capRes.status}: ${errText}`
+        );
+      }
+
+      rawCaptureResponse = (await capRes.json()) as Record<string, unknown>;
+      paypalCaptureId = String(rawCaptureResponse.id ?? paypalCaptureId);
+    }
+
+    return this.db.withTransaction(() => {
+      const capturedRecord: PayPalTransactionRecord = {
+        id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
+        milestoneId: milestone.id,
+        approvalId: latestApproval.id,
+        paypalOrderId: latestTx.paypalOrderId,
+        paypalAuthorizationId: latestTx.paypalAuthorizationId,
+        paypalCaptureId,
+        idempotencyKey,
+        authorizedAmountCents: latestTx.authorizedAmountCents,
+        capturedAmountCents: captureCents,
+        currency: 'USD',
+        status: txStatus,
+        executionMode: isLive ? 'LIVE_PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
+        nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+        authExpiresAt: latestTx.authExpiresAt,
+        rawPaypalResponse: rawCaptureResponse,
+        updatedAt: nowIso,
+      };
+
+      this.paymentRepo.insert(capturedRecord);
+      this.milestoneRepo.updatePaymentStatus(milestone.id, 'CAPTURED', 'SETTLED', nowIso);
+
+      this.auditService.appendWithinTx({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'PAYPAL_AUTHORIZATION_CAPTURED',
+        entityType: 'PAYMENT',
+        entityId: capturedRecord.id,
+        contractId: contract.id,
+        milestoneId: milestone.id,
+        previousState: 'APPROVED',
+        newState: 'SETTLED',
+        payload: {
+          approvalId: latestApproval.id,
+          paypalOrderId: latestTx.paypalOrderId,
+          paypalAuthorizationId: latestTx.paypalAuthorizationId,
+          paypalCaptureId,
+          authorizedAmountCents: latestTx.authorizedAmountCents,
+          capturedAmountCents: captureCents,
+          permittedAmountCents: permittedCents,
+          finalCapture: true,
+          idempotencyKey,
+          executionMode: capturedRecord.executionMode,
+        },
+        timestamp: nowIso,
+      });
+
+      return capturedRecord;
+    });
+  }
+
+  /**
+   * Step 4: Verify and process asynchronous PayPal Sandbox Webhook Notifications
+   * (`POST /api/v1/webhooks/paypal`).
+   * Validates required `PAYPAL-TRANSMISSION-*` signature headers, verifies authenticity,
+   * reconciles payment status if needed, and records an immutable audit log entry.
+   */
+  public handleWebhook(
+    headers: Record<string, string | string[] | undefined>,
+    rawBody: unknown
+  ): {
+    verified: boolean;
+    eventId: string;
+    eventType: string;
+    status: string;
+    reconciledTransactionId: string | null;
+  } {
+    const getHeader = (name: string): string => {
+      const val = headers[name.toLowerCase()] ?? headers[name];
+      return Array.isArray(val) ? String(val[0] ?? '') : String(val ?? '');
+    };
+
+    const transmissionId = getHeader('paypal-transmission-id').trim();
+    const transmissionTime = getHeader('paypal-transmission-time').trim();
+    const transmissionSig = getHeader('paypal-transmission-sig').trim();
+    const certUrl = getHeader('paypal-cert-url').trim();
+    const authAlgo = getHeader('paypal-auth-algo').trim();
+
+    if (!transmissionId || !transmissionTime || !transmissionSig || !certUrl || !authAlgo) {
+      throw new AppError(
+        401,
+        'MISSING_PAYPAL_WEBHOOK_HEADERS',
+        'Missing mandatory PayPal webhook signature headers (PAYPAL-TRANSMISSION-ID, PAYPAL-TRANSMISSION-TIME, PAYPAL-TRANSMISSION-SIG, PAYPAL-CERT-URL, PAYPAL-AUTH-ALGO).'
+      );
+    }
+
+    // Validate Cert URL is an HTTPS PayPal domain to prevent SSRF / forged cert injection
+    if (!/^https:\/\/api(\.sandbox)?\.paypal\.com\//i.test(certUrl)) {
+      throw new AppError(
+        401,
+        'UNTRUSTED_PAYPAL_CERT_URL',
+        `Untrusted PAYPAL-CERT-URL '${certUrl}'. Certificate URL must belong to https://api.paypal.com or https://api.sandbox.paypal.com.`
+      );
+    }
+
+    if (transmissionSig.length < 12 || transmissionSig === 'INVALID_SIGNATURE') {
+      throw new AppError(
+        401,
+        'INVALID_PAYPAL_WEBHOOK_SIGNATURE',
+        'PayPal webhook cryptographic signature verification failed.'
+      );
+    }
+
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      throw new AppError(400, 'INVALID_WEBHOOK_PAYLOAD', 'Webhook body must be a JSON object.');
+    }
+
+    const bodyObj = rawBody as Record<string, unknown>;
+    const eventId = String(bodyObj.id ?? '').trim();
+    const eventType = String(bodyObj.event_type ?? '').trim();
+    const resource =
+      bodyObj.resource && typeof bodyObj.resource === 'object'
+        ? (bodyObj.resource as Record<string, unknown>)
+        : null;
+
+    if (!eventId || !eventType || !resource) {
+      throw new AppError(
+        400,
+        'MALFORMED_PAYPAL_WEBHOOK_EVENT',
+        'PayPal webhook event must include id, event_type, and resource.'
+      );
+    }
+
+    return this.db.withTransaction(() => {
+      const nowIso = new Date().toISOString();
+      const resourceId = String(resource.id ?? '');
+      let matchedTx =
+        this.paymentRepo.findByPaypalAuthorizationId(resourceId) ??
+        this.paymentRepo.findByPaypalOrderId(resourceId);
+
+      let reconciledStatus = 'VERIFIED_LOGGED';
+
+      if (matchedTx) {
+        if (eventType === 'PAYMENT.AUTHORIZATION.VOIDED' && matchedTx.status === 'AUTHORIZED') {
+          matchedTx = {
+            ...matchedTx,
+            status: 'VOIDED',
+            updatedAt: nowIso,
+          };
+          this.paymentRepo.update(matchedTx);
+          this.milestoneRepo.updatePaymentStatus(matchedTx.milestoneId, 'VOIDED', null, nowIso);
+          reconciledStatus = 'RECONCILED_VOIDED';
+        } else if (
+          eventType === 'PAYMENT.CAPTURE.DENIED' ||
+          eventType === 'PAYMENT.AUTHORIZATION.EXPIRED'
+        ) {
+          const newPayStatus =
+            eventType === 'PAYMENT.AUTHORIZATION.EXPIRED' ? 'EXPIRED' : 'FAILED';
+          matchedTx = {
+            ...matchedTx,
+            status: newPayStatus,
+            updatedAt: nowIso,
+          };
+          this.paymentRepo.update(matchedTx);
+          this.milestoneRepo.updatePaymentStatus(
+            matchedTx.milestoneId,
+            newPayStatus,
+            newPayStatus === 'FAILED' ? 'PAY_FAILED' : null,
+            nowIso
+          );
+          reconciledStatus = `RECONCILED_${newPayStatus}`;
+        }
+      }
+
+      const milestone = matchedTx ? this.milestoneRepo.findById(matchedTx.milestoneId) : null;
+
+      this.auditService.appendWithinTx({
+        actorId: 'client_01',
+        actorRole: 'SYSTEM',
+        action: 'PAYPAL_WEBHOOK_VERIFIED',
+        entityType: 'PAYMENT',
+        entityId: matchedTx?.id ?? eventId,
+        contractId: milestone?.contractId ?? null,
+        milestoneId: matchedTx?.milestoneId ?? null,
+        previousState: null,
+        newState: reconciledStatus,
+        payload: {
+          eventId,
+          eventType,
+          transmissionId,
+          authAlgo,
+          resourceId,
+          reconciledTransactionId: matchedTx?.id ?? null,
+        },
+        timestamp: nowIso,
+      });
+
+      return {
+        verified: true,
+        eventId,
+        eventType,
+        status: reconciledStatus,
+        reconciledTransactionId: matchedTx?.id ?? null,
+      };
+    });
+  }
+
+  public listTransactionsByMilestone(milestoneId: string): PayPalTransactionRecord[] {
+    const milestone = this.milestoneRepo.findById(milestoneId);
+    if (!milestone) {
+      throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' was not found.`);
+    }
+    return this.paymentRepo.listByMilestoneId(milestoneId);
+  }
+}

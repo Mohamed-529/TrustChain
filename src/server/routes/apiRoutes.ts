@@ -5,6 +5,8 @@ import type { AuthController } from '../controllers/AuthController.ts';
 import type { ContractController } from '../controllers/ContractController.ts';
 import type { EvidenceController } from '../controllers/EvidenceController.ts';
 import type { ReviewController } from '../controllers/ReviewController.ts';
+import type { ScheduleController } from '../controllers/ScheduleController.ts';
+import type { PaymentController } from '../controllers/PaymentController.ts';
 import { createAuthMiddleware, requireRole } from '../middleware/authMiddleware.ts';
 import { OPENAPI_REQUEST_SCHEMAS, validateRequestSchema } from '../middleware/validateRequest.ts';
 import type { RequestHandler } from '../middleware/errorHandler.ts';
@@ -33,6 +35,8 @@ export function createApiRouter(params: {
   contractController: ContractController;
   evidenceController: EvidenceController;
   reviewController: ReviewController;
+  scheduleController: ScheduleController;
+  paymentController: PaymentController;
 }): ApiRouter {
   const router = new ApiRouter();
   const {
@@ -41,6 +45,8 @@ export function createApiRouter(params: {
     contractController,
     evidenceController,
     reviewController,
+    scheduleController,
+    paymentController,
   } = params;
   const authenticate = createAuthMiddleware(authService);
 
@@ -126,6 +132,24 @@ export function createApiRouter(params: {
     contractController.activateContract
   );
 
+  // Protected Phase 5 Bryntum Gantt Evidence-Aware Software Delivery Control Tower endpoints
+  router.get('/contracts/:id/schedule', authenticate, scheduleController.getContractSchedule);
+  router.post(
+    '/contracts/:id/schedule/analyze-risk',
+    authenticate,
+    scheduleController.analyzeScheduleRisk
+  );
+  router.post(
+    '/contracts/:id/schedule/proposals/:proposalId/review',
+    authenticate,
+    scheduleController.reviewProposal
+  );
+  router.post(
+    '/contracts/:id/schedule/demo-scenario',
+    authenticate,
+    scheduleController.loadDemoScenario
+  );
+
   // Protected Phase 3 Evidence Ingestion & Multi-Agent AI Evaluation endpoints
   router.post(
     '/milestones/:id/evidence',
@@ -162,6 +186,31 @@ export function createApiRouter(params: {
     reviewController.requestChanges
   );
   router.get('/ledger', authenticate, reviewController.getLedger);
+
+  // Protected Phase 5 PayPal Orders API v2 Settlement Engine endpoints
+  router.post(
+    '/milestones/:id/paypal/order',
+    authenticate,
+    paymentController.createOrder
+  );
+  router.post(
+    '/milestones/:id/paypal/authorize',
+    authenticate,
+    paymentController.authorizeOrder
+  );
+  router.post(
+    '/milestones/:id/paypal/capture',
+    authenticate,
+    paymentController.captureAuthorization
+  );
+  router.get(
+    '/milestones/:id/paypal/transactions',
+    authenticate,
+    paymentController.listTransactions
+  );
+
+  // Public (signature-verified) PayPal Sandbox Webhook Notification endpoint
+  router.post('/webhooks/paypal', paymentController.handleWebhook);
 
   // Protected tamper-evident audit endpoints
   router.get('/audit', authenticate, contractController.listAuditLogs);

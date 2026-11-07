@@ -90,7 +90,11 @@ export interface Milestone {
   title: string;
   description: string;
   agreedAmountCents: number;
+  startDateIso?: string;
   deadlineIso: string;
+  baselineStartIso?: string;
+  baselineEndIso?: string;
+  assignedDeveloperId?: string;
   dependencyMilestoneIds: string[];
   acceptanceCriteria: AcceptanceCriterion[];
   status: MilestoneStatus;
@@ -408,5 +412,175 @@ export interface FinancialLedgerRow {
   latestAuditEntryHash: string | null;
   updatedAt: string;
 }
+
+/**
+ * ============================================================================
+ * PHASE 5 — Primary Sponsor Integrations:
+ *   A. Bryntum Gantt Evidence-Aware Software Delivery Control Tower
+ *   B. APIMatic SDK & PayPal Orders API v2 Settlement Engine
+ * ============================================================================
+ */
+
+export type ScheduleHealthStatus =
+  | 'COMPLETED'
+  | 'ON_TRACK'
+  | 'AT_RISK'
+  | 'OVERDUE'
+  | 'BLOCKED_BY_DEPENDENCY';
+
+export interface BryntumBaselineItem {
+  startDate: string;
+  endDate: string;
+  label: string;
+}
+
+export interface ContractScheduleTask {
+  id: string;
+  milestoneId: string;
+  sequenceOrder: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  duration: number;
+  durationUnit: 'day';
+  percentDone: number;
+  baselineStartDate: string;
+  baselineEndDate: string;
+  baselines: BryntumBaselineItem[];
+  actualSubmittedAt: string | null;
+  status: MilestoneStatus;
+  paymentStatus: PaymentStatus;
+  scheduleHealth: ScheduleHealthStatus;
+  critical: boolean;
+  isOverdue: boolean;
+  isAtRisk: boolean;
+  isBlockedByDependency: boolean;
+  blockingMilestoneIds: string[];
+  lateDays: number;
+  agreedAmountCents: number;
+  permittedAmountCents: number | null;
+  approvedAmountCents: number | null;
+  assignedDeveloperId: string;
+  assignedDeveloperName: string;
+  evidenceStatus: 'NONE' | 'SUBMITTED' | 'VERIFIED' | 'CONTRADICTED_OR_INCOMPLETE';
+  ciStatus: 'NONE' | 'SUCCESS' | 'FAILURE' | 'UNAVAILABLE';
+  evaluationStatus: 'NONE' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  riskSeverity: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'UNAVAILABLE';
+  evidenceReferences: string[];
+  riskExplanation: string;
+}
+
+export interface ContractScheduleDependency {
+  id: string;
+  fromTask: string;
+  toTask: string;
+  fromEvent: string;
+  toEvent: string;
+  type: number; // 2 = Finish-to-Start (FS) in Bryntum Gantt
+  lag: number;
+  lagUnit: 'day';
+  isBlocking: boolean;
+}
+
+export interface ContractScheduleResource {
+  id: string;
+  name: string;
+  role: UserRole;
+}
+
+export interface ContractScheduleAssignment {
+  id: string;
+  event: string;
+  resource: string;
+  units: number;
+}
+
+export interface ScheduleDownstreamCascade {
+  milestoneId: string;
+  milestoneTitle: string;
+  previousStartDate: string;
+  previousEndDate: string;
+  proposedStartDate: string;
+  proposedEndDate: string;
+  shiftDays: number;
+}
+
+export type ScheduleProposalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface ScheduleRecoveryProposal {
+  id: string;
+  contractId: string;
+  milestoneId: string;
+  milestoneTitle: string;
+  proposedBy: string;
+  status: ScheduleProposalStatus;
+  currentStartDate: string;
+  currentEndDate: string;
+  baselineStartDate: string;
+  baselineEndDate: string;
+  proposedStartDate: string;
+  proposedEndDate: string;
+  delayDays: number;
+  riskSummary: string;
+  aiRationale: string;
+  supportingEvidenceIds: string[];
+  downstreamCascades: ScheduleDownstreamCascade[];
+  preservesContractualAmountCents: number;
+  decidedBy: string | null;
+  decidedByRole: UserRole | null;
+  decidedAt: string | null;
+  decisionReason: string | null;
+  createdAt: string;
+}
+
+export interface ContractScheduleResponse {
+  contractId: string;
+  contractTitle: string;
+  referenceTimeIso: string;
+  tasks: ContractScheduleTask[];
+  dependencies: ContractScheduleDependency[];
+  resources: ContractScheduleResource[];
+  assignments: ContractScheduleAssignment[];
+  criticalPathTaskIds: string[];
+  proposals: ScheduleRecoveryProposal[];
+  summary: {
+    totalMilestones: number;
+    completedCount: number;
+    overdueCount: number;
+    atRiskCount: number;
+    blockedByDependencyCount: number;
+    criticalPathCount: number;
+    pendingProposalsCount: number;
+  };
+}
+
+export type PayPalTransactionStatus =
+  | 'ORDER_CREATED'
+  | 'AUTHORIZED'
+  | 'CAPTURED'
+  | 'PARTIALLY_CAPTURED_VOIDED'
+  | 'VOIDED'
+  | 'FAILED'
+  | 'EXPIRED';
+
+export interface PayPalTransactionRecord {
+  id: string;
+  milestoneId: string;
+  approvalId: string | null;
+  paypalOrderId: string | null;
+  paypalAuthorizationId: string | null;
+  paypalCaptureId: string | null;
+  idempotencyKey: string;
+  authorizedAmountCents: number;
+  capturedAmountCents: number;
+  currency: 'USD';
+  status: PayPalTransactionStatus;
+  executionMode: 'LIVE_PAYPAL_SANDBOX' | 'SANDBOX_SIMULATION';
+  nonEscrowDisclosure: string;
+  authExpiresAt: string | null;
+  rawPaypalResponse: Record<string, unknown>;
+  updatedAt: string;
+}
+
 
 

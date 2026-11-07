@@ -95,6 +95,7 @@ export class AppDatabase {
       .get();
 
     if (applied) {
+      this.runPhase5Migrations();
       return;
     }
 
@@ -271,6 +272,68 @@ export class AppDatabase {
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(1, '001_initial_phase1_schema', new Date().toISOString());
     });
+
+    this.runPhase5Migrations();
+  }
+
+  private runPhase5Migrations(): void {
+    const applied2 = this.raw
+      .prepare('SELECT version FROM schema_migrations WHERE version = 2')
+      .get();
+
+    if (applied2) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      const columns = this.raw
+        .prepare('PRAGMA table_info(milestones)')
+        .all() as Array<{ name: string }>;
+      const colNames = new Set(columns.map((c) => c.name));
+
+      if (!colNames.has('start_date_iso')) {
+        this.raw.exec('ALTER TABLE milestones ADD COLUMN start_date_iso TEXT NULL;');
+      }
+      if (!colNames.has('baseline_start_iso')) {
+        this.raw.exec('ALTER TABLE milestones ADD COLUMN baseline_start_iso TEXT NULL;');
+      }
+      if (!colNames.has('baseline_end_iso')) {
+        this.raw.exec('ALTER TABLE milestones ADD COLUMN baseline_end_iso TEXT NULL;');
+      }
+
+      this.raw.exec(`
+        CREATE TABLE IF NOT EXISTS schedule_proposals (
+          id TEXT PRIMARY KEY,
+          contract_id TEXT NOT NULL REFERENCES contracts(id) ON DELETE RESTRICT,
+          milestone_id TEXT NOT NULL REFERENCES milestones(id) ON DELETE RESTRICT,
+          proposed_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          status TEXT NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
+          current_start_date TEXT NOT NULL,
+          current_end_date TEXT NOT NULL,
+          baseline_start_date TEXT NOT NULL,
+          baseline_end_date TEXT NOT NULL,
+          proposed_start_date TEXT NOT NULL,
+          proposed_end_date TEXT NOT NULL,
+          delay_days INTEGER NOT NULL CHECK (delay_days >= 0),
+          risk_summary TEXT NOT NULL,
+          ai_rationale TEXT NOT NULL,
+          supporting_evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+          downstream_cascades_json TEXT NOT NULL DEFAULT '[]',
+          preserves_contractual_amount_cents INTEGER NOT NULL CHECK (preserves_contractual_amount_cents > 0),
+          decided_by TEXT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          decided_by_role TEXT NULL CHECK (decided_by_role IN ('CLIENT', 'DEVELOPER', 'REVIEWER')),
+          decided_at TEXT NULL,
+          decision_reason TEXT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_schedule_proposals_contract_id ON schedule_proposals(contract_id);
+        CREATE INDEX IF NOT EXISTS idx_schedule_proposals_milestone_id ON schedule_proposals(milestone_id);
+      `);
+
+      this.raw
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+        .run(2, '002_phase5_bryntum_schedule_and_paypal', new Date().toISOString());
+    });
   }
 
   private seedIfEmpty(): void {
@@ -349,9 +412,10 @@ export class AppDatabase {
       const insertMilestone = this.raw.prepare(`
         INSERT INTO milestones (
           id, contract_id, sequence_order, title, description,
-          agreed_amount_cents, deadline_iso, dependency_milestone_ids_json,
+          agreed_amount_cents, start_date_iso, deadline_iso,
+          baseline_start_iso, baseline_end_iso, dependency_milestone_ids_json,
           acceptance_criteria_json, status, payment_status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 'NOT_READY', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 'NOT_READY', ?, ?)
       `);
 
       insertMilestone.run(
@@ -361,6 +425,9 @@ export class AppDatabase {
         'Milestone 1: OAuth2 Service & Unit Test Suite',
         'Implement OAuth2 token exchange with >=80% unit test coverage and zero critical vulnerabilities.',
         250000, // $2,500.00
+        '2026-11-01T09:00:00.000Z',
+        '2026-11-10T23:59:59.000Z',
+        '2026-11-01T09:00:00.000Z',
         '2026-11-10T23:59:59.000Z',
         JSON.stringify([]),
         JSON.stringify([
@@ -388,6 +455,9 @@ export class AppDatabase {
         'Milestone 2: OpenAPI 3.0 Spec & Settlement Webhook Engine',
         'Deliver validated OpenAPI 3.0 contract and idempotent webhook processor.',
         350000, // $3,500.00
+        '2026-11-11T09:00:00.000Z',
+        '2026-11-20T23:59:59.000Z',
+        '2026-11-11T09:00:00.000Z',
         '2026-11-20T23:59:59.000Z',
         JSON.stringify(['ms_seed_01']),
         JSON.stringify([
@@ -415,6 +485,9 @@ export class AppDatabase {
         'Milestone 3: Production Security Hardening & Ledger Reconciliation',
         'Deliver merged reconciliation PR, passing CI tests, and zero critical dependency vulnerabilities.',
         250000, // $2,500.00
+        '2026-11-21T09:00:00.000Z',
+        '2026-11-30T23:59:59.000Z',
+        '2026-11-21T09:00:00.000Z',
         '2026-11-30T23:59:59.000Z',
         JSON.stringify(['ms_seed_02']),
         JSON.stringify([

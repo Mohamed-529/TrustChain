@@ -9,6 +9,8 @@ import {
   EvidenceRepository,
   HumanApprovalRepository,
   MilestoneRepository,
+  PaymentTransactionRepository,
+  ScheduleProposalRepository,
   SessionRepository,
   UserRepository,
 } from './repositories/DomainRepositories.ts';
@@ -22,10 +24,14 @@ import {
 } from './services/EvaluationService.ts';
 import { SettlementPolicyService } from './services/SettlementPolicyService.ts';
 import { HumanReviewService } from './services/HumanReviewService.ts';
+import { ScheduleControlTowerService } from './services/ScheduleControlTowerService.ts';
+import { PayPalService } from './services/PayPalService.ts';
 import { AuthController } from './controllers/AuthController.ts';
 import { ContractController } from './controllers/ContractController.ts';
 import { EvidenceController } from './controllers/EvidenceController.ts';
 import { ReviewController } from './controllers/ReviewController.ts';
+import { ScheduleController } from './controllers/ScheduleController.ts';
+import { PaymentController } from './controllers/PaymentController.ts';
 import { createApiRouter, type RouteDefinition } from './routes/apiRoutes.ts';
 import {
   AppError,
@@ -278,6 +284,8 @@ export interface ServerContainer {
   evidenceRepo: EvidenceRepository;
   evaluationRepo: EvaluationRepository;
   approvalRepo: HumanApprovalRepository;
+  proposalRepo: ScheduleProposalRepository;
+  paymentRepo: PaymentTransactionRepository;
   auditService: AuditService;
   authService: AuthService;
   contractService: ContractService;
@@ -285,6 +293,8 @@ export interface ServerContainer {
   evaluationService: EvaluationService;
   settlementPolicyService: SettlementPolicyService;
   humanReviewService: HumanReviewService;
+  scheduleControlTowerService: ScheduleControlTowerService;
+  paypalService: PayPalService;
 }
 
 export function createServerApp(options?: {
@@ -300,6 +310,8 @@ export function createServerApp(options?: {
   const evidenceRepo = new EvidenceRepository(db.raw);
   const evaluationRepo = new EvaluationRepository(db.raw);
   const approvalRepo = new HumanApprovalRepository(db.raw);
+  const proposalRepo = new ScheduleProposalRepository(db.raw, milestoneRepo);
+  const paymentRepo = new PaymentTransactionRepository(db.raw);
   const auditService = new AuditService(db.raw);
 
   const authService = new AuthService(
@@ -352,6 +364,29 @@ export function createServerApp(options?: {
     auditService
   );
 
+  const scheduleControlTowerService = new ScheduleControlTowerService(
+    db,
+    userRepo,
+    contractRepo,
+    milestoneRepo,
+    evidenceRepo,
+    evaluationRepo,
+    approvalRepo,
+    proposalRepo,
+    auditService
+  );
+
+  const paypalService = new PayPalService(
+    db,
+    contractRepo,
+    milestoneRepo,
+    evaluationRepo,
+    approvalRepo,
+    paymentRepo,
+    settlementPolicyService,
+    auditService
+  );
+
   const authController = new AuthController(authService);
   const contractController = new ContractController(
     contractService,
@@ -363,6 +398,13 @@ export function createServerApp(options?: {
     evaluationService
   );
   const reviewController = new ReviewController(humanReviewService);
+  const scheduleController = new ScheduleController(
+    scheduleControlTowerService,
+    evidenceService,
+    evaluationService,
+    humanReviewService
+  );
+  const paymentController = new PaymentController(paypalService);
 
   const apiRouter = createApiRouter({
     authService,
@@ -370,6 +412,8 @@ export function createServerApp(options?: {
     contractController,
     evidenceController,
     reviewController,
+    scheduleController,
+    paymentController,
   });
 
   const app = createMountedHttpApp('/api/v1', apiRouter.routes);
@@ -384,6 +428,8 @@ export function createServerApp(options?: {
     evidenceRepo,
     evaluationRepo,
     approvalRepo,
+    proposalRepo,
+    paymentRepo,
     auditService,
     authService,
     contractService,
@@ -391,6 +437,8 @@ export function createServerApp(options?: {
     evaluationService,
     settlementPolicyService,
     humanReviewService,
+    scheduleControlTowerService,
+    paypalService,
   };
 }
 

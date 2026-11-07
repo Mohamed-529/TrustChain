@@ -287,14 +287,14 @@ paths:
     get:
       operationId: getContractSchedule
       tags: [Contracts]
-      summary: Retrieve Bryntum Gantt milestone schedule, dependencies, and baseline variance
+      summary: Retrieve Bryntum Gantt milestone schedule, dependencies, critical path, and baseline variance
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ResourceIdPathParam'
       responses:
         '200':
-          description: Bryntum Gantt compatible tasks, dependencies, baselines, and delay metrics
+          description: Bryntum Gantt compatible tasks, dependencies, baselines, critical path, and AI schedule-risk proposals
           content:
             application/json:
               schema:
@@ -303,6 +303,71 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{id}/schedule/analyze-risk:
+    post:
+      operationId: analyzeContractScheduleRisk
+      tags: [Contracts]
+      summary: Detect overdue/blocked milestones and generate AI schedule recovery proposals
+      description: |
+        Inspects the Bryntum Gantt schedule, detects overdue or failed-CI milestones and blocked downstream Finish-to-Start dependencies, cites supporting `evidenceId`s, and creates pending `ScheduleRecoveryProposal` records. Never modifies milestone deadlines or payment terms without human approval.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeScheduleRiskRequest'
+      responses:
+        '200':
+          description: Schedule risk analysis completed and recovery proposals generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeScheduleRiskResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{id}/schedule/proposals/{proposalId}/review:
+    post:
+      operationId: reviewScheduleProposal
+      tags: [Contracts]
+      summary: Approve or reject a schedule recovery proposal (CLIENT or REVIEWER only)
+      description: |
+        Enforces human-controlled schedule governance (`actor.role in ['CLIENT', 'REVIEWER']` and `actor.id != contract.developerId`). When approved, updates milestone schedule dates, recalculates downstream Finish-to-Start dependencies, preserves original baseline dates, never modifies `agreedAmountCents` or `acceptanceCriteria`, and records a hash-chained audit entry.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+        - $ref: '#/components/parameters/ProposalIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewScheduleProposalRequest'
+      responses:
+        '200':
+          description: Schedule recovery proposal decision persisted and dependencies recalculated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewScheduleProposalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
 
   /milestones/{id}/evidence:
     post:
@@ -706,6 +771,16 @@ components:
       in: path
       required: true
       description: Unique resource identifier
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+    ProposalIdPathParam:
+      name: proposalId
+      in: path
+      required: true
+      description: Unique schedule recovery proposal identifier
       schema:
         type: string
         minLength: 1
@@ -1231,17 +1306,32 @@ components:
 
     ContractScheduleTask:
       type: object
-      required: [id, name, startDate, endDate, baselineEndDate, status, lateDays, agreedAmountCents]
-      additionalProperties: false
+      required: [id, milestoneId, sequenceOrder, name, startDate, endDate, duration, percentDone, baselineStartDate, baselineEndDate, status, scheduleHealth, critical, isOverdue, isBlockedByDependency, lateDays, agreedAmountCents]
+      additionalProperties: true
       properties:
         id:
           type: string
+        milestoneId:
+          type: string
+        sequenceOrder:
+          type: integer
+          minimum: 1
         name:
           type: string
         startDate:
           type: string
           format: date-time
         endDate:
+          type: string
+          format: date-time
+        duration:
+          type: integer
+          minimum: 1
+        percentDone:
+          type: number
+          minimum: 0
+          maximum: 100
+        baselineStartDate:
           type: string
           format: date-time
         baselineEndDate:
@@ -1253,17 +1343,38 @@ components:
           nullable: true
         status:
           $ref: '#/components/schemas/MilestoneStatus'
+        scheduleHealth:
+          type: string
+          enum: [COMPLETED, ON_TRACK, AT_RISK, OVERDUE, BLOCKED_BY_DEPENDENCY]
+        critical:
+          type: boolean
+        isOverdue:
+          type: boolean
+        isAtRisk:
+          type: boolean
+        isBlockedByDependency:
+          type: boolean
+        blockingMilestoneIds:
+          type: array
+          items:
+            type: string
         lateDays:
           type: integer
           minimum: 0
         agreedAmountCents:
           type: integer
           minimum: 1
+        evidenceReferences:
+          type: array
+          items:
+            type: string
+        riskExplanation:
+          type: string
 
     ContractScheduleDependency:
       type: object
       required: [id, fromTask, toTask, type]
-      additionalProperties: false
+      additionalProperties: true
       properties:
         id:
           type: string
@@ -1274,11 +1385,143 @@ components:
         type:
           type: integer
           description: 2 represents Finish-to-Start (FS) in Bryntum Gantt
+        isBlocking:
+          type: boolean
+
+    ScheduleRecoveryProposal:
+      type: object
+      required:
+        - id
+        - contractId
+        - milestoneId
+        - milestoneTitle
+        - proposedBy
+        - status
+        - currentStartDate
+        - currentEndDate
+        - baselineStartDate
+        - baselineEndDate
+        - proposedStartDate
+        - proposedEndDate
+        - delayDays
+        - riskSummary
+        - aiRationale
+        - supportingEvidenceIds
+        - downstreamCascades
+        - preservesContractualAmountCents
+        - createdAt
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        contractId:
+          type: string
+        milestoneId:
+          type: string
+        milestoneTitle:
+          type: string
+        proposedBy:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        currentStartDate:
+          type: string
+          format: date-time
+        currentEndDate:
+          type: string
+          format: date-time
+        baselineStartDate:
+          type: string
+          format: date-time
+        baselineEndDate:
+          type: string
+          format: date-time
+        proposedStartDate:
+          type: string
+          format: date-time
+        proposedEndDate:
+          type: string
+          format: date-time
+        delayDays:
+          type: integer
+          minimum: 0
+        riskSummary:
+          type: string
+        aiRationale:
+          type: string
+        supportingEvidenceIds:
+          type: array
+          items:
+            type: string
+        downstreamCascades:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        preservesContractualAmountCents:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+
+    AnalyzeScheduleRiskRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        milestoneId:
+          type: string
+        recoveryDays:
+          type: integer
+          minimum: 1
+          maximum: 90
+        referenceTimeIso:
+          type: string
+          format: date-time
+
+    AnalyzeScheduleRiskResponse:
+      type: object
+      required: [schedule, createdProposals]
+      additionalProperties: false
+      properties:
+        schedule:
+          $ref: '#/components/schemas/ContractScheduleResponse'
+        createdProposals:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduleRecoveryProposal'
+
+    ReviewScheduleProposalRequest:
+      type: object
+      required: [decision, reason]
+      additionalProperties: false
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT]
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 2000
+        referenceTimeIso:
+          type: string
+          format: date-time
+
+    ReviewScheduleProposalResponse:
+      type: object
+      required: [proposal, schedule]
+      additionalProperties: false
+      properties:
+        proposal:
+          $ref: '#/components/schemas/ScheduleRecoveryProposal'
+        schedule:
+          $ref: '#/components/schemas/ContractScheduleResponse'
 
     ContractScheduleResponse:
       type: object
-      required: [contractId, tasks, dependencies]
-      additionalProperties: false
+      required: [contractId, tasks, dependencies, proposals]
+      additionalProperties: true
       properties:
         contractId:
           type: string
@@ -1290,6 +1533,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ContractScheduleDependency'
+        proposals:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduleRecoveryProposal'
 
     CiExecutionReport:
       type: object
