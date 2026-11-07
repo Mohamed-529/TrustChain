@@ -161,7 +161,9 @@ export class AppDatabase {
           )),
           payment_status TEXT NOT NULL CHECK (payment_status IN (
             'NOT_READY', 'ORDER_CREATED', 'AUTHORIZED', 'CAPTURE_PENDING',
-            'CAPTURED', 'VOIDED', 'FAILED', 'EXPIRED'
+            'CAPTURED', 'SIMULATED_ORDER_CREATED', 'SIMULATED_AUTHORIZED',
+            'SIMULATED_CAPTURED', 'SIMULATED_PARTIALLY_CAPTURED',
+            'VOIDED', 'FAILED', 'EXPIRED'
           )),
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
@@ -226,7 +228,10 @@ export class AppDatabase {
           captured_amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (captured_amount_cents >= 0),
           currency TEXT NOT NULL CHECK (currency = 'USD'),
           status TEXT NOT NULL CHECK (status IN (
-            'ORDER_CREATED', 'AUTHORIZED', 'CAPTURED', 'PARTIALLY_CAPTURED_VOIDED', 'VOIDED', 'FAILED', 'EXPIRED'
+            'ORDER_CREATED', 'AUTHORIZED', 'CAPTURED', 'PARTIALLY_CAPTURED_VOIDED',
+            'SIMULATED_ORDER_CREATED', 'SIMULATED_AUTHORIZED',
+            'SIMULATED_CAPTURED', 'SIMULATED_PARTIALLY_CAPTURED',
+            'VOIDED', 'FAILED', 'EXPIRED'
           )),
           auth_expires_at TEXT NULL,
           raw_paypal_response_json TEXT NOT NULL DEFAULT '{}',

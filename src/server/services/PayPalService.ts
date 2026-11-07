@@ -326,7 +326,12 @@ export class PayPalService {
       );
     }
 
-    if (milestone.paymentStatus === 'CAPTURED' || milestone.status === 'SETTLED') {
+    if (
+      milestone.paymentStatus === 'CAPTURED' ||
+      milestone.paymentStatus === 'SIMULATED_CAPTURED' ||
+      milestone.paymentStatus === 'SIMULATED_PARTIALLY_CAPTURED' ||
+      milestone.status === 'SETTLED'
+    ) {
       throw new AppError(
         409,
         'MILESTONE_ALREADY_SETTLED',
@@ -414,6 +419,8 @@ export class PayPalService {
       rawPaypalResponse = orderJson;
     }
 
+    const orderStatus = isLive ? 'ORDER_CREATED' : 'SIMULATED_ORDER_CREATED';
+
     return this.db.withTransaction(() => {
       const txRecord: PayPalTransactionRecord = {
         id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
@@ -426,8 +433,8 @@ export class PayPalService {
         authorizedAmountCents: milestone.agreedAmountCents,
         capturedAmountCents: 0,
         currency: 'USD',
-        status: 'ORDER_CREATED',
-        executionMode: isLive ? 'LIVE_PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
+        status: orderStatus,
+        executionMode: isLive ? 'PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
         nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
         authExpiresAt: null,
         rawPaypalResponse,
@@ -435,18 +442,18 @@ export class PayPalService {
       };
 
       this.paymentRepo.insert(txRecord);
-      this.milestoneRepo.updatePaymentStatus(milestone.id, 'ORDER_CREATED', null, nowIso);
+      this.milestoneRepo.updatePaymentStatus(milestone.id, orderStatus, null, nowIso);
 
       this.auditService.appendWithinTx({
         actorId: actor.id,
         actorRole: actor.role,
-        action: 'PAYPAL_ORDER_CREATED',
+        action: isLive ? 'PAYPAL_ORDER_CREATED' : 'PAYPAL_SIMULATED_ORDER_CREATED',
         entityType: 'PAYMENT',
         entityId: txRecord.id,
         contractId: contract.id,
         milestoneId: milestone.id,
         previousState: milestone.paymentStatus,
-        newState: 'ORDER_CREATED',
+        newState: orderStatus,
         payload: {
           paypalOrderId,
           intent: 'AUTHORIZE',
@@ -518,7 +525,13 @@ export class PayPalService {
       );
     }
 
-    if (latestTx && latestTx.status === 'CAPTURED') {
+    if (
+      latestTx &&
+      (latestTx.status === 'CAPTURED' ||
+        latestTx.status === 'PARTIALLY_CAPTURED_VOIDED' ||
+        latestTx.status === 'SIMULATED_CAPTURED' ||
+        latestTx.status === 'SIMULATED_PARTIALLY_CAPTURED')
+    ) {
       throw new AppError(
         409,
         'PAYPAL_ORDER_ALREADY_CAPTURED',
@@ -614,6 +627,8 @@ export class PayPalService {
       };
     }
 
+    const authStatus = isLive ? 'AUTHORIZED' : 'SIMULATED_AUTHORIZED';
+
     return this.db.withTransaction(() => {
       const txRecord: PayPalTransactionRecord = {
         id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
@@ -626,8 +641,8 @@ export class PayPalService {
         authorizedAmountCents: milestone.agreedAmountCents,
         capturedAmountCents: 0,
         currency: 'USD',
-        status: 'AUTHORIZED',
-        executionMode: isLive ? 'LIVE_PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
+        status: authStatus,
+        executionMode: isLive ? 'PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
         nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
         authExpiresAt: expiresAtIso,
         rawPaypalResponse: rawAuthResponse,
@@ -635,18 +650,18 @@ export class PayPalService {
       };
 
       this.paymentRepo.insert(txRecord);
-      this.milestoneRepo.updatePaymentStatus(milestone.id, 'AUTHORIZED', null, nowIso);
+      this.milestoneRepo.updatePaymentStatus(milestone.id, authStatus, null, nowIso);
 
       this.auditService.appendWithinTx({
         actorId: actor.id,
         actorRole: actor.role,
-        action: 'PAYPAL_ORDER_AUTHORIZED',
+        action: isLive ? 'PAYPAL_ORDER_AUTHORIZED' : 'PAYPAL_SIMULATED_ORDER_AUTHORIZED',
         entityType: 'PAYMENT',
         entityId: txRecord.id,
         contractId: contract.id,
         milestoneId: milestone.id,
         previousState: milestone.paymentStatus,
-        newState: 'AUTHORIZED',
+        newState: authStatus,
         payload: {
           paypalOrderId: persistedOrderId,
           paypalAuthorizationId,
@@ -734,7 +749,12 @@ export class PayPalService {
     }
 
     // 3. Prevent duplicate capture
-    if (milestone.status === 'SETTLED' || milestone.paymentStatus === 'CAPTURED') {
+    if (
+      milestone.status === 'SETTLED' ||
+      milestone.paymentStatus === 'CAPTURED' ||
+      milestone.paymentStatus === 'SIMULATED_CAPTURED' ||
+      milestone.paymentStatus === 'SIMULATED_PARTIALLY_CAPTURED'
+    ) {
       throw new AppError(
         409,
         'DUPLICATE_CAPTURE_FORBIDDEN',
@@ -784,7 +804,11 @@ export class PayPalService {
 
     // 6. Verify active PayPal Authorization exists and has not expired
     const latestTx = this.paymentRepo.findLatestByMilestoneId(milestoneId);
-    if (!latestTx || !latestTx.paypalAuthorizationId || latestTx.status !== 'AUTHORIZED') {
+    if (
+      !latestTx ||
+      !latestTx.paypalAuthorizationId ||
+      (latestTx.status !== 'AUTHORIZED' && latestTx.status !== 'SIMULATED_AUTHORIZED')
+    ) {
       throw new AppError(
         409,
         'PAYPAL_AUTHORIZATION_REQUIRED_BEFORE_CAPTURE',
@@ -816,7 +840,13 @@ export class PayPalService {
     let paypalCaptureId: string;
 
     const isPartialCapture = captureCents < latestTx.authorizedAmountCents;
-    const txStatus = isPartialCapture ? 'PARTIALLY_CAPTURED_VOIDED' : 'CAPTURED';
+    const txStatus = isLive
+      ? isPartialCapture
+        ? 'PARTIALLY_CAPTURED_VOIDED'
+        : 'CAPTURED'
+      : isPartialCapture
+        ? 'SIMULATED_PARTIALLY_CAPTURED'
+        : 'SIMULATED_CAPTURED';
 
     let rawCaptureResponse: Record<string, unknown>;
 
@@ -918,7 +948,7 @@ export class PayPalService {
         capturedAmountCents: captureCents,
         currency: 'USD',
         status: txStatus,
-        executionMode: isLive ? 'LIVE_PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
+        executionMode: isLive ? 'PAYPAL_SANDBOX' : 'SANDBOX_SIMULATION',
         nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
         authExpiresAt: latestTx.authExpiresAt,
         rawPaypalResponse: rawCaptureResponse,
@@ -926,18 +956,30 @@ export class PayPalService {
       };
 
       this.paymentRepo.insert(capturedRecord);
-      this.milestoneRepo.updatePaymentStatus(milestone.id, 'CAPTURED', 'SETTLED', nowIso);
+
+      if (isLive) {
+        // Real verified PayPal Sandbox settlement transitions milestone to SETTLED & CAPTURED
+        this.milestoneRepo.updatePaymentStatus(milestone.id, 'CAPTURED', 'SETTLED', nowIso);
+      } else {
+        // Simulation mode NEVER transitions milestone.status to SETTLED or paymentStatus to CAPTURED
+        this.milestoneRepo.updatePaymentStatus(
+          milestone.id,
+          isPartialCapture ? 'SIMULATED_PARTIALLY_CAPTURED' : 'SIMULATED_CAPTURED',
+          null,
+          nowIso
+        );
+      }
 
       this.auditService.appendWithinTx({
         actorId: actor.id,
         actorRole: actor.role,
-        action: 'PAYPAL_AUTHORIZATION_CAPTURED',
+        action: isLive ? 'PAYPAL_AUTHORIZATION_CAPTURED' : 'PAYPAL_SIMULATED_CAPTURE_RECORDED',
         entityType: 'PAYMENT',
         entityId: capturedRecord.id,
         contractId: contract.id,
         milestoneId: milestone.id,
         previousState: 'APPROVED',
-        newState: 'SETTLED',
+        newState: isLive ? 'SETTLED' : txStatus,
         payload: {
           approvalId: latestApproval.id,
           paypalOrderId: latestTx.paypalOrderId,
@@ -949,6 +991,7 @@ export class PayPalService {
           finalCapture: true,
           idempotencyKey,
           executionMode: capturedRecord.executionMode,
+          simulatedOnly: !isLive,
         },
         timestamp: nowIso,
       });

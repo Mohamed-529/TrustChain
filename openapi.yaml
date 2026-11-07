@@ -923,6 +923,10 @@ components:
         - AUTHORIZED
         - CAPTURE_PENDING
         - CAPTURED
+        - SIMULATED_ORDER_CREATED
+        - SIMULATED_AUTHORIZED
+        - SIMULATED_CAPTURED
+        - SIMULATED_PARTIALLY_CAPTURED
         - VOIDED
         - FAILED
         - EXPIRED
@@ -2242,9 +2246,18 @@ components:
             - AUTHORIZED
             - CAPTURED
             - PARTIALLY_CAPTURED_VOIDED
+            - SIMULATED_ORDER_CREATED
+            - SIMULATED_AUTHORIZED
+            - SIMULATED_CAPTURED
+            - SIMULATED_PARTIALLY_CAPTURED
             - VOIDED
             - FAILED
             - EXPIRED
+        executionMode:
+          type: string
+          enum:
+            - PAYPAL_SANDBOX
+            - SANDBOX_SIMULATION
         authExpiresAt:
           type: string
           format: date-time

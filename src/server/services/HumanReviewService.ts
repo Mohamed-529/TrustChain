@@ -15,6 +15,7 @@ import type {
   EvidenceRepository,
   HumanApprovalRepository,
   MilestoneRepository,
+  PaymentTransactionRepository,
 } from '../repositories/DomainRepositories.ts';
 import type { AuditService } from './AuditService.ts';
 import {
@@ -32,6 +33,7 @@ export class HumanReviewService {
   private readonly approvalRepo: HumanApprovalRepository;
   private readonly settlementPolicyService: SettlementPolicyService;
   private readonly auditService: AuditService;
+  private readonly paymentRepo?: PaymentTransactionRepository;
   private readonly activeReviewLocks = new Set<string>();
 
   constructor(
@@ -42,7 +44,8 @@ export class HumanReviewService {
     evaluationRepo: EvaluationRepository,
     approvalRepo: HumanApprovalRepository,
     settlementPolicyService: SettlementPolicyService,
-    auditService: AuditService
+    auditService: AuditService,
+    paymentRepo?: PaymentTransactionRepository
   ) {
     this.db = db;
     this.contractRepo = contractRepo;
@@ -52,6 +55,7 @@ export class HumanReviewService {
     this.approvalRepo = approvalRepo;
     this.settlementPolicyService = settlementPolicyService;
     this.auditService = auditService;
+    this.paymentRepo = paymentRepo;
   }
 
   private toStateMachineStatus(status: MilestoneStatus): MilestoneStatus | 'NEEDS_CHANGES' {
@@ -456,6 +460,14 @@ export class HumanReviewService {
           contractAuditLogs.length > 0
             ? contractAuditLogs[contractAuditLogs.length - 1]
             : null;
+        const latestPaymentTx = this.paymentRepo?.findLatestByMilestoneId(milestone.id) ?? null;
+        const paymentExecutionMode = latestPaymentTx
+          ? latestPaymentTx.executionMode
+          : milestone.paymentStatus.startsWith('SIMULATED_')
+            ? 'SANDBOX_SIMULATION'
+            : milestone.paymentStatus !== 'NOT_READY'
+              ? 'PAYPAL_SANDBOX'
+              : 'NONE';
 
         rows.push({
           milestoneId: milestone.id,
@@ -484,6 +496,7 @@ export class HumanReviewService {
           decidedAt: latestApproval?.decidedAt ?? null,
           paymentEligible,
           paymentStatus: milestone.paymentStatus,
+          paymentExecutionMode,
           auditEventCount: contractAuditLogs.length,
           auditTrailIds: contractAuditLogs.map((l) => l.id),
           latestAuditEntryHash: latestAudit?.entryHash ?? null,

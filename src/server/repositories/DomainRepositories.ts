@@ -791,8 +791,9 @@ export class PaymentTransactionRepository {
       unknown
     >;
     const executionMode =
+      rawResp.executionMode === 'PAYPAL_SANDBOX' ||
       rawResp.executionMode === 'LIVE_PAYPAL_SANDBOX'
-        ? 'LIVE_PAYPAL_SANDBOX'
+        ? 'PAYPAL_SANDBOX'
         : 'SANDBOX_SIMULATION';
 
     return {

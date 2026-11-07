@@ -27,6 +27,10 @@ export type PaymentStatus =
   | 'AUTHORIZED'
   | 'CAPTURE_PENDING'
   | 'CAPTURED'
+  | 'SIMULATED_ORDER_CREATED'
+  | 'SIMULATED_AUTHORIZED'
+  | 'SIMULATED_CAPTURED'
+  | 'SIMULATED_PARTIALLY_CAPTURED'
   | 'VOIDED'
   | 'FAILED'
   | 'EXPIRED';
@@ -407,6 +411,7 @@ export interface FinancialLedgerRow {
   decidedAt: string | null;
   paymentEligible: boolean;
   paymentStatus: PaymentStatus;
+  paymentExecutionMode?: 'PAYPAL_SANDBOX' | 'SANDBOX_SIMULATION' | 'NONE';
   auditEventCount: number;
   auditTrailIds: string[];
   latestAuditEntryHash: string | null;
@@ -560,9 +565,15 @@ export type PayPalTransactionStatus =
   | 'AUTHORIZED'
   | 'CAPTURED'
   | 'PARTIALLY_CAPTURED_VOIDED'
+  | 'SIMULATED_ORDER_CREATED'
+  | 'SIMULATED_AUTHORIZED'
+  | 'SIMULATED_CAPTURED'
+  | 'SIMULATED_PARTIALLY_CAPTURED'
   | 'VOIDED'
   | 'FAILED'
   | 'EXPIRED';
+
+export type PayPalExecutionMode = 'PAYPAL_SANDBOX' | 'SANDBOX_SIMULATION';
 
 export interface PayPalTransactionRecord {
   id: string;
@@ -576,7 +587,7 @@ export interface PayPalTransactionRecord {
   capturedAmountCents: number;
   currency: 'USD';
   status: PayPalTransactionStatus;
-  executionMode: 'LIVE_PAYPAL_SANDBOX' | 'SANDBOX_SIMULATION';
+  executionMode: PayPalExecutionMode;
   nonEscrowDisclosure: string;
   authExpiresAt: string | null;
   rawPaypalResponse: Record<string, unknown>;

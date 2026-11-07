@@ -365,7 +365,8 @@ export function createServerApp(options?: {
     evaluationRepo,
     approvalRepo,
     settlementPolicyService,
-    auditService
+    auditService,
+    paymentRepo
   );
 
   const scheduleControlTowerService = new ScheduleControlTowerService(

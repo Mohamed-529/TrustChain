@@ -1065,7 +1065,14 @@ export default function App() {
                       {row.milestoneTitle}
                     </td>
                     <td className="py-2.5 px-3">{row.stateMachineStatus}</td>
-                    <td className="py-2.5 px-3 text-indigo-300">{row.paymentStatus}</td>
+                    <td className="py-2.5 px-3 text-indigo-300">
+                      {row.paymentStatus}
+                      {row.paymentExecutionMode && row.paymentExecutionMode !== 'NONE' && (
+                        <span className="ml-1.5 text-[10px] text-slate-400">
+                          [{row.paymentExecutionMode}]
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-3">{row.aiRecommendation}</td>
                     <td className="py-2.5 px-3">{formatUsdCents(row.agreedAmountCents)}</td>
                     <td className="py-2.5 px-3">{formatUsdCents(row.permittedAmountCents)}</td>
