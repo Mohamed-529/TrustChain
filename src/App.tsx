@@ -13,6 +13,7 @@ import type {
   ScheduleRecoveryProposal,
   User,
 } from './types/domain';
+import { BryntumGanttViewer } from './components/BryntumGanttViewer';
 
 function formatUsdCents(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return '—';
@@ -549,140 +550,15 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Bryntum Gantt Task & Timeline Matrix */}
-              <div className="overflow-x-auto bg-slate-950 rounded border border-slate-800 p-4">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="py-2 pr-3">Bryntum Task / Milestone</th>
-                      <th className="py-2 px-3">Dependency (FS)</th>
-                      <th className="py-2 px-3">Baseline vs. Current Schedule</th>
-                      <th className="py-2 px-3">Evidence-Backed Progress</th>
-                      <th className="py-2 px-3">Schedule Health</th>
-                      <th className="py-2 pl-3">Visual Timeline & Baseline Bar</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/70">
-                    {scheduleData.tasks.map((task) => {
-                      const isSelected = task.milestoneId === selectedMilestoneId;
-                      const healthBadgeClass =
-                        task.scheduleHealth === 'COMPLETED'
-                          ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                          : task.scheduleHealth === 'OVERDUE' || task.scheduleHealth === 'AT_RISK'
-                            ? 'bg-rose-950 text-rose-300 border-rose-700'
-                            : task.scheduleHealth === 'BLOCKED_BY_DEPENDENCY'
-                              ? 'bg-amber-950 text-amber-300 border-amber-700'
-                              : 'bg-slate-800 text-slate-300 border-slate-700';
-
-                      return (
-                        <tr
-                          key={task.id}
-                          onClick={() => setSelectedMilestoneId(task.milestoneId)}
-                          className={`cursor-pointer transition ${
-                            isSelected ? 'bg-indigo-950/40' : 'hover:bg-slate-900/60'
-                          }`}
-                        >
-                          <td className="py-3 pr-3">
-                            <div className="font-semibold text-white flex items-center gap-1.5">
-                              <span>{task.name}</span>
-                              {task.critical && (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-rose-950 text-rose-300 border border-rose-800">
-                                  CRITICAL PATH
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-slate-400 font-mono">
-                              ID: {task.milestoneId} • Resource: {task.assignedDeveloperName} • Budget:{' '}
-                              {formatUsdCents(task.agreedAmountCents)}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px]">
-                            {task.blockingMilestoneIds.length > 0 ? (
-                              <span className="text-amber-300">
-                                Blocked by: {task.blockingMilestoneIds.join(', ')}
-                              </span>
-                            ) : task.sequenceOrder > 1 ? (
-                              <span className="text-emerald-400">FS Predecessor Complete</span>
-                            ) : (
-                              <span className="text-slate-500">Start Node</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px]">
-                            <div className="text-slate-200">
-                              Active: {task.startDate.slice(0, 10)} → {task.endDate.slice(0, 10)} (
-                              {task.duration}d)
-                            </div>
-                            <div className="text-slate-400">
-                              Baseline: {task.baselineStartDate.slice(0, 10)} →{' '}
-                              {task.baselineEndDate.slice(0, 10)}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px]">
-                            <div className="flex items-center gap-2">
-                              <div className="w-20 h-2 bg-slate-800 rounded overflow-hidden">
-                                <div
-                                  className={`h-full ${
-                                    task.percentDone === 100
-                                      ? 'bg-emerald-500'
-                                      : task.isOverdue || task.isAtRisk
-                                        ? 'bg-rose-500'
-                                        : 'bg-indigo-500'
-                                  }`}
-                                  style={{ width: `${task.percentDone}%` }}
-                                />
-                              </div>
-                              <span>{task.percentDone}%</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              Evidence: {task.evidenceStatus} | CI: {task.ciStatus}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[11px] font-mono border ${healthBadgeClass}`}
-                            >
-                              {task.scheduleHealth}
-                            </span>
-                            <div className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                              {task.riskExplanation}
-                            </div>
-                          </td>
-                          <td className="py-3 pl-3 w-56">
-                            {/* Dual-bar Baseline vs. Actual Gantt Visualization */}
-                            <div className="space-y-1">
-                              <div className="relative h-4 bg-slate-900 rounded border border-slate-800 overflow-hidden">
-                                <div
-                                  className={`h-full rounded ${
-                                    task.scheduleHealth === 'COMPLETED'
-                                      ? 'bg-emerald-600/80'
-                                      : task.scheduleHealth === 'OVERDUE' ||
-                                          task.scheduleHealth === 'AT_RISK'
-                                        ? 'bg-rose-600/80'
-                                        : task.scheduleHealth === 'BLOCKED_BY_DEPENDENCY'
-                                          ? 'bg-amber-600/70'
-                                          : 'bg-indigo-600/80'
-                                  }`}
-                                  style={{
-                                    marginLeft: `${(task.sequenceOrder - 1) * 28}%`,
-                                    width: '38%',
-                                  }}
-                                />
-                              </div>
-                              <div
-                                className="h-1.5 bg-slate-600/60 rounded"
-                                style={{
-                                  marginLeft: `${(task.sequenceOrder - 1) * 28}%`,
-                                  width: '32%',
-                                }}
-                                title="Signed Baseline Bar"
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              {/* Genuine Bryntum Gantt Delivery Control Tower */}
+              <div className="pt-2">
+                <BryntumGanttViewer
+                  schedule={scheduleData}
+                  tasks={scheduleData.tasks}
+                  dependencies={scheduleData.dependencies}
+                  readOnly={true}
+                  height="440px"
+                />
               </div>
 
               {/* Human-Controlled Schedule Recovery Proposals */}

@@ -536,6 +536,28 @@ async function startDevOrProdServer(): Promise<void> {
   } else {
     const distPath = path.join(rootDir, 'dist');
     app.useFallback((req, res) => {
+      const parsedUrl = new URL(req.url ?? '/', 'http://localhost');
+      const safePath = path.normalize(parsedUrl.pathname).replace(/^(\.\.[/\\])+/, '');
+      const filePath = path.join(distPath, safePath);
+
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        const ext = path.extname(filePath).toLowerCase();
+        const contentTypes: Record<string, string> = {
+          '.html': 'text/html; charset=utf-8',
+          '.js': 'application/javascript; charset=utf-8',
+          '.css': 'text/css; charset=utf-8',
+          '.json': 'application/json; charset=utf-8',
+          '.svg': 'image/svg+xml',
+          '.png': 'image/png',
+          '.woff2': 'font/woff2',
+          '.woff': 'font/woff',
+        };
+        const contentType = contentTypes[ext] ?? 'application/octet-stream';
+        res.writeHead(200, { 'content-type': contentType });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
+
       const indexHtmlPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexHtmlPath)) {
         const html = fs.readFileSync(indexHtmlPath, 'utf8');
