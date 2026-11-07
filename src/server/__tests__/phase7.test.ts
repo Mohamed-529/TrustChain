@@ -5,6 +5,12 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createServerApp } from '../index.ts';
 import {
+  canonicalizeJsonValue,
+  computeEvidencePayloadSha256,
+  EVIDENCE_CANONICALIZATION_VERSION,
+  EVIDENCE_HASH_ALGORITHM,
+} from '../repositories/DomainRepositories.ts';
+import {
   MilestoneProofApiError,
   MilestoneProofClient,
 } from '../../sdk/MilestoneProofClient.ts';
@@ -666,6 +672,519 @@ describe('Phase 7 — Evidence Provenance & Independent GitHub Verification', ()
       const chainVerification = await reviewerSdk.verifyAuditHashChain();
       assert.equal(chainVerification.valid, true);
       assert.ok(chainVerification.verifiedCount >= 8);
+    } finally {
+      await close();
+    }
+  });
+
+  it('5. Comprehensive GitHub Artifact Edge Cases: API timeout, HTTP 429 rate-limit, closed-unmerged PR, wrong-repo PR, still-running workflow (PENDING), and workflow API 503', async () => {
+    let mode:
+      | 'API_TIMEOUT'
+      | 'RATE_LIMIT_429'
+      | 'CLOSED_UNMERGED_PR'
+      | 'STILL_RUNNING_WORKFLOW'
+      | 'WORKFLOW_API_503'
+      | 'COMMIT_DIFFERENT_REPO_FILES' = 'API_TIMEOUT';
+
+    const mockGitHubFetch: typeof fetch = async (input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (mode === 'API_TIMEOUT') {
+        const abortErr = new Error('The operation was aborted due to timeout');
+        abortErr.name = 'AbortError';
+        throw abortErr;
+      }
+
+      if (mode === 'RATE_LIMIT_429') {
+        return new Response(
+          JSON.stringify({ message: 'API rate limit exceeded' }),
+          {
+            status: 429,
+            headers: {
+              'content-type': 'application/json',
+              'x-ratelimit-remaining': '0',
+            },
+          }
+        );
+      }
+
+      if (url === 'https://api.github.com/repos/cloudbuilders/acme-oauth-gateway') {
+        return new Response(
+          JSON.stringify({
+            id: 1001,
+            full_name: 'cloudbuilders/acme-oauth-gateway',
+            private: false,
+            default_branch: 'main',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      if (url.includes('/commits/')) {
+        return new Response(
+          JSON.stringify({
+            sha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+            commit: {
+              committer: { name: 'Marcus Vance', date: '2026-04-02T10:15:00.000Z' },
+              message: 'feat(oauth): implement OAuth2 token exchange',
+            },
+            files:
+              mode === 'COMMIT_DIFFERENT_REPO_FILES'
+                ? [{ filename: 'unrelated/foreignFile.ts' }]
+                : [
+                    { filename: 'src/oauth/tokenExchange.ts' },
+                    { filename: 'src/oauth/sessionStore.ts' },
+                    { filename: 'src/__tests__/oauth.spec.ts' },
+                  ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      if (url.includes('/pulls/42')) {
+        if (mode === 'CLOSED_UNMERGED_PR') {
+          // Closed PR where merged=false must NOT be treated as MERGED!
+          return new Response(
+            JSON.stringify({
+              number: 42,
+              state: 'closed',
+              merged: false,
+              merged_at: null,
+              head: {
+                ref: 'release/milestone-1-oauth2',
+                sha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+              },
+              base: { ref: 'main' },
+              merge_commit_sha: null,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            number: 42,
+            state: 'closed',
+            merged: true,
+            merged_at: '2026-04-02T11:00:00.000Z',
+            head: {
+              ref: 'release/milestone-1-oauth2',
+              sha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+            },
+            base: { ref: 'main' },
+            merge_commit_sha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      if (url.includes('/actions/runs/9041')) {
+        if (mode === 'WORKFLOW_API_503') {
+          return new Response(JSON.stringify({ message: 'Service Unavailable' }), {
+            status: 503,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+
+        if (mode === 'STILL_RUNNING_WORKFLOW') {
+          return new Response(
+            JSON.stringify({
+              id: 9041,
+              name: 'MilestoneProof CI Pipeline',
+              status: 'in_progress',
+              conclusion: null,
+              head_sha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+              head_branch: 'release/milestone-1-oauth2',
+              event: 'pull_request',
+              created_at: '2026-04-02T10:16:00.000Z',
+              updated_at: '2026-04-02T10:19:00.000Z',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            id: 9041,
+            name: 'MilestoneProof CI Pipeline',
+            status: 'completed',
+            conclusion: 'success',
+            head_sha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+            head_branch: 'release/milestone-1-oauth2',
+            event: 'pull_request',
+            created_at: '2026-04-02T10:16:00.000Z',
+            updated_at: '2026-04-02T10:20:00.000Z',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+
+      return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
+    };
+
+    const { baseUrl, close } = await startTestServer({
+      githubOptions: {
+        githubToken: 'test-only-fake-github-api-token-edge-cases',
+        fetchImpl: mockGitHubFetch,
+      },
+    });
+
+    try {
+      const devSdk = new MilestoneProofClient({ baseUrl });
+      const reviewerSdk = new MilestoneProofClient({ baseUrl });
+      await devSdk.switchDemoPersona({ userId: 'dev_01' });
+      await reviewerSdk.switchDemoPersona({ userId: 'reviewer_01' });
+
+      await devSdk.submitMilestoneEvidence('ms_seed_01', {
+        demoFixtureKey: 'SUCCESSFUL_SUBMISSION',
+      } as unknown as Parameters<typeof devSdk.submitMilestoneEvidence>[1]);
+
+      // Scenario 6: GitHub API timeout -> UNAVAILABLE (never fabricated VERIFIED)
+      mode = 'API_TIMEOUT';
+      const { provenance: timeoutProv } =
+        await reviewerSdk.verifyMilestoneEvidenceProvenance('ms_seed_01');
+      assert.equal(timeoutProv.overallStatus, 'UNVERIFIED_UNAVAILABLE');
+      assert.equal(timeoutProv.verificationStatus, 'UNAVAILABLE');
+      assert.equal(timeoutProv.repository.status, 'UNAVAILABLE');
+
+      // Scenario 7: GitHub API rate limit (429) -> UNAVAILABLE
+      mode = 'RATE_LIMIT_429';
+      const { provenance: rateLimitProv } =
+        await reviewerSdk.verifyMilestoneEvidenceProvenance('ms_seed_01');
+      assert.equal(rateLimitProv.overallStatus, 'UNVERIFIED_UNAVAILABLE');
+      assert.equal(rateLimitProv.verificationStatus, 'UNAVAILABLE');
+      assert.equal(rateLimitProv.repository.status, 'UNAVAILABLE');
+
+      // Scenario 29: Unavailable GitHub verification cannot produce automatic PASS -> downgrades to NEEDS_HUMAN_REVIEW
+      const { evaluation: unavailEval } =
+        await reviewerSdk.evaluateMilestoneEvidence('ms_seed_01');
+      assert.equal(
+        unavailEval.arbitratorRecommendation.recommendedOutcome,
+        'NEEDS_HUMAN_REVIEW',
+        'Unavailable GitHub verification must prevent automatic PASS and require human review'
+      );
+      assert.equal(
+        unavailEval.arbitratorRecommendation.recommendation,
+        'RECOMMEND_HOLD'
+      );
+
+      // Scenario 5: Commit changed files mismatch
+      mode = 'COMMIT_DIFFERENT_REPO_FILES';
+      const { provenance: diffFilesProv } =
+        await reviewerSdk.verifyMilestoneEvidenceProvenance('ms_seed_01');
+      assert.equal(diffFilesProv.commit.status, 'MISMATCH');
+      assert.equal(diffFilesProv.commit.changedFilesMatchSubmitted, false);
+      assert.equal(diffFilesProv.overallStatus, 'MISMATCH_DETECTED');
+      assert.equal(diffFilesProv.verificationStatus, 'FAILED');
+
+      // Scenario 11: Closed but unmerged PR is detected as CLOSED (MISMATCH against claimed MERGED)
+      mode = 'CLOSED_UNMERGED_PR';
+      const { provenance: closedUnmergedProv } =
+        await reviewerSdk.verifyMilestoneEvidenceProvenance('ms_seed_01');
+      assert.equal(closedUnmergedProv.pullRequest.actualPrStatus, 'CLOSED');
+      assert.equal(closedUnmergedProv.pullRequest.merged, false);
+      assert.equal(closedUnmergedProv.pullRequest.status, 'MISMATCH');
+      assert.equal(closedUnmergedProv.overallStatus, 'MISMATCH_DETECTED');
+      assert.equal(closedUnmergedProv.verificationStatus, 'FAILED');
+
+      // Scenario 15: Still-running workflow (`in_progress`) -> PENDING and blocks premature approval
+      mode = 'STILL_RUNNING_WORKFLOW';
+      const { provenance: pendingWfProv } =
+        await reviewerSdk.verifyMilestoneEvidenceProvenance('ms_seed_01');
+      assert.equal(pendingWfProv.workflowRun.status, 'PENDING');
+      assert.equal(pendingWfProv.workflowRun.runStatus, 'in_progress');
+      assert.equal(pendingWfProv.overallStatus, 'PENDING');
+      assert.equal(pendingWfProv.verificationStatus, 'PENDING');
+      assert.equal(pendingWfProv.eligibleForBoundaryReview, false);
+
+      const { evaluation: pendingEval } =
+        await reviewerSdk.evaluateMilestoneEvidence('ms_seed_01');
+      assert.equal(
+        pendingEval.arbitratorRecommendation.recommendedOutcome,
+        'NEEDS_HUMAN_REVIEW'
+      );
+      assert.equal(pendingEval.policyCalculation.gateBlocked, true);
+      assert.equal(pendingEval.policyCalculation.permittedAmountCents, 0);
+
+      await assert.rejects(
+        async () => {
+          await reviewerSdk.submitHumanReview('ms_seed_01', {
+            decision: 'APPROVE',
+            approvedAmountCents: 250000,
+            justification: 'Attempting to approve while workflow run is still PENDING',
+          });
+        },
+        (err: unknown) => {
+          assert.ok(err instanceof MilestoneProofApiError);
+          assert.equal(err.statusCode, 409);
+          assert.equal(err.code, 'EVIDENCE_PROVENANCE_MISMATCH_BLOCKS_APPROVAL');
+          return true;
+        }
+      );
+
+      // Scenario 16: Workflow API unavailable (503) -> PARTIALLY_VERIFIED / UNAVAILABLE
+      mode = 'WORKFLOW_API_503';
+      const { provenance: wf503Prov } =
+        await reviewerSdk.verifyMilestoneEvidenceProvenance('ms_seed_01');
+      assert.equal(wf503Prov.repository.status, 'VERIFIED');
+      assert.equal(wf503Prov.commit.status, 'VERIFIED');
+      assert.equal(wf503Prov.pullRequest.status, 'VERIFIED');
+      assert.equal(wf503Prov.workflowRun.status, 'UNAVAILABLE');
+      assert.equal(wf503Prov.verificationStatus, 'UNAVAILABLE');
+
+      // Scenario 20: Historical verification attempts are preserved in provenanceHistory
+      const { provenanceHistory } =
+        await reviewerSdk.getMilestoneEvidenceProvenance('ms_seed_01');
+      assert.equal(provenanceHistory.length, 6);
+      assert.ok(
+        provenanceHistory.every((rec) => Array.isArray(rec.results) && rec.results.length === 5)
+      );
+
+      // Scenario 9: PR from wrong repository is rejected with MISMATCH
+      await devSdk.submitMilestoneEvidence('ms_seed_03', {
+        demoFixtureKey: 'SUSPICIOUS_CONTRADICTORY_SUBMISSION',
+      } as unknown as Parameters<typeof devSdk.submitMilestoneEvidence>[1]);
+      const { provenance: wrongRepoPrProv } =
+        await reviewerSdk.verifyMilestoneEvidenceProvenance('ms_seed_03');
+      assert.equal(wrongRepoPrProv.pullRequest.belongsToRepository, false);
+      assert.equal(wrongRepoPrProv.pullRequest.status, 'MISMATCH');
+      assert.equal(wrongRepoPrProv.overallStatus, 'MISMATCH_DETECTED');
+      assert.equal(wrongRepoPrProv.verificationStatus, 'FAILED');
+    } finally {
+      await close();
+    }
+  });
+
+  it('6. Canonical SHA-256 Evidence Hashing, Raw Body Webhook Tamper Protection & Out-of-Order Event Guard', async () => {
+    // Scenarios 17 & 18: Canonical SHA-256 deterministic equivalence and collision sensitivity
+    const basePayload = {
+      milestoneId: 'ms_seed_01',
+      attemptNumber: 1,
+      submittedBy: 'dev_01',
+      repoUrl: '  https://github.com/cloudbuilders/acme-oauth-gateway  ',
+      branch: ' main ',
+      commitSha: 'A8F4C219E03D7B6451298CE7F0039A1B2C4D5E6F',
+      prUrl: 'https://github.com/cloudbuilders/acme-oauth-gateway/pull/42',
+      prStatus: 'MERGED' as const,
+      ciReport: {
+        provider: 'GITHUB_ACTIONS' as const,
+        runId: '9041',
+        runUrl: 'https://github.com/cloudbuilders/acme-oauth-gateway/actions/runs/9041',
+        status: 'SUCCESS' as const,
+        totalTests: 48,
+        passedTests: 48,
+        failedTests: 0,
+        coveragePct: 91.5,
+        durationMs: 42100,
+        changedFiles: ['src/oauth/tokenExchange.ts', 'src/oauth/sessionStore.ts'],
+        logSummary: 'All 48 tests passed',
+      },
+      securityScan: {
+        scanner: 'Snyk',
+        scannerVersion: '1.1290.0',
+        status: 'COMPLETED' as const,
+        findings: [],
+        scannedAt: '2026-04-02T10:18:00.000Z',
+      },
+      developerNotes: '  Implemented OAuth2 token exchange  ',
+    };
+
+    // Reordered keys, lowercase SHA, already-trimmed strings, and explicit undefined fields
+    const equivalentReorderedPayload = {
+      developerNotes: 'Implemented OAuth2 token exchange',
+      securityScan: {
+        scannedAt: '2026-04-02T10:18:00.000Z',
+        findings: [],
+        status: 'COMPLETED' as const,
+        scannerVersion: '1.1290.0',
+        scanner: 'Snyk',
+      },
+      ciReport: {
+        logSummary: 'All 48 tests passed',
+        changedFiles: ['src/oauth/tokenExchange.ts', 'src/oauth/sessionStore.ts'],
+        durationMs: 42100,
+        coveragePct: 91.5,
+        failedTests: 0,
+        passedTests: 48,
+        totalTests: 48,
+        status: 'SUCCESS' as const,
+        runUrl: 'https://github.com/cloudbuilders/acme-oauth-gateway/actions/runs/9041',
+        runId: '9041',
+        provider: 'GITHUB_ACTIONS' as const,
+      },
+      prStatus: 'MERGED' as const,
+      prUrl: 'https://github.com/cloudbuilders/acme-oauth-gateway/pull/42',
+      commitSha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+      branch: 'main',
+      repoUrl: 'https://github.com/cloudbuilders/acme-oauth-gateway',
+      submittedBy: 'dev_01',
+      attemptNumber: 1,
+      milestoneId: 'ms_seed_01',
+    };
+
+    const hashA = computeEvidencePayloadSha256(basePayload);
+    const hashB = computeEvidencePayloadSha256(equivalentReorderedPayload);
+    assert.equal(
+      hashA,
+      hashB,
+      'Equivalent canonical evidence payloads with reordered keys and normalized strings/SHAs must produce the exact same SHA-256 digest'
+    );
+    assert.equal(EVIDENCE_HASH_ALGORITHM, 'SHA-256');
+    assert.equal(EVIDENCE_CANONICALIZATION_VERSION, 'mpai-evidence-canon-v1');
+    assert.equal(
+      JSON.stringify(canonicalizeJsonValue({ b: 1, a: 2, c: undefined })),
+      JSON.stringify({ a: 2, b: 1 })
+    );
+
+    const modifiedPayload = {
+      ...equivalentReorderedPayload,
+      commitSha: 'b8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+    };
+    const hashC = computeEvidencePayloadSha256(modifiedPayload);
+    assert.notEqual(
+      hashA,
+      hashC,
+      'Different evidence payloads must produce distinct SHA-256 digests'
+    );
+
+    // Scenarios 22, 24 & 27: Missing signature (401), modified raw body with old signature (401), and out-of-order stale event protection
+    const webhookSecret = 'test-only-github-webhook-hmac-key-rawbody-not-a-secret';
+    const { container, baseUrl, close } = await startTestServer({
+      githubOptions: {
+        githubWebhookSecret: webhookSecret,
+      },
+    });
+
+    try {
+      const devSdk = new MilestoneProofClient({ baseUrl });
+      await devSdk.switchDemoPersona({ userId: 'dev_01' });
+
+      const { submission } = await devSdk.submitMilestoneEvidence('ms_seed_01', {
+        demoFixtureKey: 'SUCCESSFUL_SUBMISSION',
+      } as unknown as Parameters<typeof devSdk.submitMilestoneEvidence>[1]);
+
+      assert.equal(submission.payloadHashAlgorithm, 'SHA-256');
+      assert.equal(submission.canonicalizationVersion, 'mpai-evidence-canon-v1');
+      assert.ok(submission.payloadHashedAt);
+
+      // Scenario 22: Missing X-Hub-Signature-256 header -> 401 MISSING_GITHUB_WEBHOOK_SIGNATURE
+      const missingSigRes = await fetch(`${baseUrl}/webhooks/github`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'X-GitHub-Delivery': 'deliv_missing_sig_01',
+          'X-GitHub-Event': 'workflow_run',
+        },
+        body: JSON.stringify({ action: 'completed' }),
+      });
+      assert.equal(missingSigRes.status, 401);
+      const missingSigBody = (await missingSigRes.json()) as { error: { code: string } };
+      assert.equal(missingSigBody.error.code, 'MISSING_GITHUB_WEBHOOK_SIGNATURE');
+
+      // Scenario 24: Modified raw body with old signature -> 401 INVALID_GITHUB_WEBHOOK_SIGNATURE
+      const originalRawJson = JSON.stringify({
+        action: 'completed',
+        workflow_run: {
+          id: 9041,
+          status: 'completed',
+          conclusion: 'success',
+          head_sha: submission.commitSha,
+          updated_at: '2026-04-02T12:00:00.000Z',
+        },
+      });
+      const oldSignature = signGitHubWebhook(webhookSecret, originalRawJson);
+      const tamperedRawJson = JSON.stringify({
+        action: 'completed',
+        workflow_run: {
+          id: 9041,
+          status: 'completed',
+          conclusion: 'failure',
+          head_sha: submission.commitSha,
+          updated_at: '2026-04-02T12:00:00.000Z',
+        },
+      });
+
+      const tamperedSigRes = await fetch(`${baseUrl}/webhooks/github`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'X-GitHub-Delivery': 'deliv_tampered_raw_01',
+          'X-GitHub-Event': 'workflow_run',
+          'X-Hub-Signature-256': oldSignature,
+        },
+        body: tamperedRawJson,
+      });
+      assert.equal(tamperedSigRes.status, 401);
+      const tamperedSigBody = (await tamperedSigRes.json()) as { error: { code: string } };
+      assert.equal(tamperedSigBody.error.code, 'INVALID_GITHUB_WEBHOOK_SIGNATURE');
+
+      // Scenario 27: Out-of-order webhook event protection — newer event (12:00Z, failure) arrives BEFORE older event (11:55Z, in_progress)
+      const newerEventBody = JSON.stringify({
+        action: 'completed',
+        repository: { full_name: 'cloudbuilders/acme-oauth-gateway' },
+        workflow_run: {
+          id: 9041,
+          status: 'completed',
+          conclusion: 'failure',
+          head_sha: submission.commitSha,
+          updated_at: '2026-04-02T12:00:00.000Z',
+        },
+      });
+      const newerRes = await fetch(`${baseUrl}/webhooks/github`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'X-GitHub-Delivery': 'deliv_newer_1200',
+          'X-GitHub-Event': 'workflow_run',
+          'X-Hub-Signature-256': signGitHubWebhook(webhookSecret, newerEventBody),
+        },
+        body: newerEventBody,
+      });
+      assert.equal(newerRes.status, 200);
+      assert.equal(
+        container.evidenceRepo.findById(submission.id)?.provenanceStatus,
+        'MISMATCH_DETECTED'
+      );
+
+      // Now deliver an older out-of-order event (11:55Z, status='completed', conclusion='success') for the same submission
+      const olderStaleEventBody = JSON.stringify({
+        action: 'completed',
+        repository: { full_name: 'cloudbuilders/acme-oauth-gateway' },
+        workflow_run: {
+          id: 9040,
+          status: 'completed',
+          conclusion: 'success',
+          head_sha: submission.commitSha,
+          updated_at: '2026-04-02T11:55:00.000Z',
+        },
+      });
+      const olderRes = await fetch(`${baseUrl}/webhooks/github`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'X-GitHub-Delivery': 'deliv_older_1155',
+          'X-GitHub-Event': 'workflow_run',
+          'X-Hub-Signature-256': signGitHubWebhook(webhookSecret, olderStaleEventBody),
+        },
+        body: olderStaleEventBody,
+      });
+      assert.equal(olderRes.status, 200);
+      const olderJson = (await olderRes.json()) as { status: string };
+      assert.equal(
+        olderJson.status,
+        'IGNORED_OUT_OF_ORDER_STALE_EVENT',
+        'Out-of-order older webhook event must be ignored and must not overwrite newer verified state'
+      );
+      assert.equal(
+        container.evidenceRepo.findById(submission.id)?.provenanceStatus,
+        'MISMATCH_DETECTED'
+      );
+
+      // Scenarios 31 & 32: GitHub webhook and provenance verification NEVER approve milestones or capture PayPal payments
+      const ms = container.milestoneRepo.findById('ms_seed_01');
+      assert.equal(ms?.status, 'SUBMITTED');
+      assert.equal(ms?.paymentStatus, 'NOT_READY');
+      assert.equal(container.paymentRepo.listByMilestoneId('ms_seed_01').length, 0);
     } finally {
       await close();
     }

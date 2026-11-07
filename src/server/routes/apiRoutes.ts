@@ -84,7 +84,8 @@ export function createApiRouter(params: {
     const yamlPath = path.resolve(process.cwd(), 'openapi.yaml');
     const yamlContent = fs.readFileSync(yamlPath, 'utf8');
     if (res.sendText) {
-      res.status(200).sendText(yamlContent, 'text/yaml; charset=utf-8');
+      res.status(200);
+      res.sendText(yamlContent, 'text/yaml; charset=utf-8');
     } else {
       res.status(200).json({ openapiYaml: yamlContent });
     }

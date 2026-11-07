@@ -400,6 +400,21 @@ export class AppDatabase {
           'ALTER TABLE evidence_submissions ADD COLUMN payload_sha256 TEXT NULL;'
         );
       }
+      if (!colNames.has('payload_hash_algorithm')) {
+        this.raw.exec(
+          "ALTER TABLE evidence_submissions ADD COLUMN payload_hash_algorithm TEXT NOT NULL DEFAULT 'SHA-256';"
+        );
+      }
+      if (!colNames.has('canonicalization_version')) {
+        this.raw.exec(
+          "ALTER TABLE evidence_submissions ADD COLUMN canonicalization_version TEXT NOT NULL DEFAULT 'mpai-evidence-canon-v1';"
+        );
+      }
+      if (!colNames.has('payload_hashed_at')) {
+        this.raw.exec(
+          'ALTER TABLE evidence_submissions ADD COLUMN payload_hashed_at TEXT NULL;'
+        );
+      }
       if (!colNames.has('provenance_status')) {
         this.raw.exec(
           "ALTER TABLE evidence_submissions ADD COLUMN provenance_status TEXT NOT NULL DEFAULT 'UNVERIFIED_UNAVAILABLE';"
@@ -421,8 +436,12 @@ export class AppDatabase {
               'MISMATCH_DETECTED',
               'PARTIALLY_VERIFIED',
               'UNVERIFIED_UNAVAILABLE',
-              'TAMPERED_PAYLOAD'
+              'TAMPERED_PAYLOAD',
+              'PENDING'
             )
+          ),
+          verification_status TEXT NOT NULL DEFAULT 'UNAVAILABLE' CHECK (
+            verification_status IN ('VERIFIED', 'FAILED', 'UNAVAILABLE', 'PENDING')
           ),
           eligible_for_boundary_review INTEGER NOT NULL CHECK (
             eligible_for_boundary_review IN (0, 1)
@@ -434,6 +453,7 @@ export class AppDatabase {
           commit_json TEXT NOT NULL,
           pull_request_json TEXT NOT NULL,
           workflow_run_json TEXT NOT NULL,
+          results_json TEXT NOT NULL DEFAULT '[]',
           verified_by TEXT NOT NULL,
           verified_at TEXT NOT NULL
         );
@@ -448,6 +468,7 @@ export class AppDatabase {
           action TEXT NULL,
           repository_full_name TEXT NULL,
           commit_sha TEXT NULL,
+          provider_timestamp TEXT NULL,
           signature_status TEXT NOT NULL CHECK (
             signature_status IN ('SUCCESS', 'FAILURE', 'UNVERIFIED')
           ),

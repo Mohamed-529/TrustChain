@@ -4,6 +4,7 @@ import type {
   EvidenceProvenanceStatus,
   EvidenceProvenanceVerificationRecord,
   EvidenceSubmission,
+  EvidenceVerificationResultItem,
   GitHubCommitVerification,
   GitHubPullRequestVerification,
   GitHubRepositoryVerification,
@@ -11,10 +12,13 @@ import type {
   GitHubWebhookSignatureStatus,
   GitHubWorkflowRunVerification,
   User,
+  VerificationResultStatus,
 } from '../../types/domain.ts';
 import type { AppDatabase } from '../repositories/Database.ts';
 import {
   computeEvidencePayloadSha256,
+  EVIDENCE_CANONICALIZATION_VERSION,
+  EVIDENCE_HASH_ALGORITHM,
   type ContractRepository,
   type EvidenceProvenanceRepository,
   type EvidenceRepository,
@@ -251,8 +255,12 @@ export class GitHubVerificationService {
       payloadHashMatches: matches,
       expectedPayloadSha256: expectedHash,
       actualPayloadSha256: actualHash,
+      hashAlgorithm: submission.payloadHashAlgorithm ?? EVIDENCE_HASH_ALGORITHM,
+      canonicalizationVersion:
+        submission.canonicalizationVersion ?? EVIDENCE_CANONICALIZATION_VERSION,
+      hashedAt: submission.payloadHashedAt ?? submission.submittedAt,
       details: matches
-        ? `Evidence payload SHA-256 digest (${actualHash.slice(0, 16)}…) matches the immutable submission digest.`
+        ? `Evidence payload SHA-256 digest (${actualHash.slice(0, 16)}…) matches the immutable submission digest (${EVIDENCE_CANONICALIZATION_VERSION}).`
         : `TAMPER DETECTED: Stored evidence payload SHA-256 (${actualHash.slice(0, 16)}…) does not match original submission digest (${expectedHash.slice(0, 16)}…).`,
     };
   }
@@ -726,6 +734,10 @@ export class GitHubVerificationService {
         runStatus: null,
         conclusion: null,
         headSha: null,
+        headBranch: null,
+        eventType: null,
+        createdAt: null,
+        updatedAt: null,
         matchesSubmittedCommit: false,
         statusMatchesSubmittedCi: false,
         htmlUrl: null,
@@ -739,6 +751,10 @@ export class GitHubVerificationService {
         runStatus: null,
         conclusion: null,
         headSha: null,
+        headBranch: null,
+        eventType: null,
+        createdAt: null,
+        updatedAt: null,
         matchesSubmittedCommit: false,
         statusMatchesSubmittedCi: false,
         htmlUrl: runUrl,
@@ -757,6 +773,10 @@ export class GitHubVerificationService {
         runStatus: null,
         conclusion: null,
         headSha: null,
+        headBranch: null,
+        eventType: null,
+        createdAt: null,
+        updatedAt: null,
         matchesSubmittedCommit: false,
         statusMatchesSubmittedCi: false,
         htmlUrl: runUrl,
@@ -772,6 +792,10 @@ export class GitHubVerificationService {
         runStatus: null,
         conclusion: null,
         headSha: null,
+        headBranch: null,
+        eventType: null,
+        createdAt: null,
+        updatedAt: null,
         matchesSubmittedCommit: false,
         statusMatchesSubmittedCi: false,
         htmlUrl: runUrl,
@@ -785,6 +809,10 @@ export class GitHubVerificationService {
         runStatus: null,
         conclusion: null,
         headSha: null,
+        headBranch: null,
+        eventType: null,
+        createdAt: null,
+        updatedAt: null,
         matchesSubmittedCommit: false,
         statusMatchesSubmittedCi: false,
         htmlUrl: runUrl,
@@ -802,6 +830,10 @@ export class GitHubVerificationService {
           runStatus: null,
           conclusion: null,
           headSha: null,
+          headBranch: null,
+          eventType: null,
+          createdAt: null,
+          updatedAt: null,
           matchesSubmittedCommit: false,
           statusMatchesSubmittedCi: false,
           htmlUrl: runUrl,
@@ -816,6 +848,10 @@ export class GitHubVerificationService {
           runStatus: null,
           conclusion: null,
           headSha: null,
+          headBranch: null,
+          eventType: null,
+          createdAt: null,
+          updatedAt: null,
           matchesSubmittedCommit: false,
           statusMatchesSubmittedCi: false,
           htmlUrl: runUrl,
@@ -825,46 +861,85 @@ export class GitHubVerificationService {
         blockingReasons.push(msg);
       } else {
         const wd = runRes.data;
-        const workflowName = typeof wd.name === 'string' ? wd.name : 'CI Workflow';
+        const workflowName =
+          typeof wd.name === 'string'
+            ? wd.name
+            : typeof wd.path === 'string'
+              ? wd.path
+              : 'CI Workflow';
         const runStatus = typeof wd.status === 'string' ? wd.status : null;
         const conclusion = typeof wd.conclusion === 'string' ? wd.conclusion : null;
         const headSha =
           typeof wd.head_sha === 'string' ? wd.head_sha.toLowerCase() : null;
+        const headBranch =
+          typeof wd.head_branch === 'string' ? wd.head_branch : null;
+        const eventType =
+          typeof wd.event === 'string' ? wd.event : null;
+        const createdAt =
+          typeof wd.created_at === 'string' ? wd.created_at : null;
+        const updatedAt =
+          typeof wd.updated_at === 'string' ? wd.updated_at : null;
 
         const matchesCommit = Boolean(
           headSha && headSha.startsWith(submission.commitSha.toLowerCase())
         );
 
+        const isStillRunning =
+          runStatus === 'in_progress' ||
+          runStatus === 'queued' ||
+          runStatus === 'waiting' ||
+          runStatus === 'requested' ||
+          runStatus === 'pending';
+
         const actualSucceeded =
           runStatus === 'completed' && conclusion === 'success';
         const claimedSucceeded = submission.ciReport.status === 'SUCCESS';
-        const statusMatchesCi = actualSucceeded === claimedSucceeded;
+        const statusMatchesCi = isStillRunning
+          ? false
+          : actualSucceeded === claimedSucceeded;
 
         if (!matchesCommit) {
           const msg = `Workflow run #${runId} head_sha ('${headSha ?? 'none'}') does not match submitted commit '${submission.commitSha}'.`;
           discrepancies.push(msg);
           blockingReasons.push(msg);
-        }
-        if (!statusMatchesCi) {
+        } else if (isStillRunning) {
+          const msg = `Workflow run #${runId} is still '${runStatus}' (conclusion pending). Settlement eligibility remains PENDING until completion.`;
+          blockingReasons.push(msg);
+        } else if (!statusMatchesCi) {
           const msg = `Workflow run #${runId} conclusion mismatch: developer claimed CI status '${submission.ciReport.status}', but GitHub Actions reported status='${runStatus}', conclusion='${conclusion}'.`;
           discrepancies.push(msg);
           blockingReasons.push(msg);
         }
 
-        const wfVerified = matchesCommit && statusMatchesCi;
+        const wfVerified = matchesCommit && !isStillRunning && statusMatchesCi;
+        const wfStatus = !matchesCommit
+          ? 'MISMATCH'
+          : isStillRunning
+            ? 'PENDING'
+            : wfVerified
+              ? 'VERIFIED'
+              : 'MISMATCH';
+
         workflowVerification = {
-          status: wfVerified ? 'VERIFIED' : 'MISMATCH',
+          status: wfStatus,
           runId,
           workflowName,
           runStatus,
           conclusion,
           headSha,
+          headBranch,
+          eventType,
+          createdAt,
+          updatedAt,
           matchesSubmittedCommit: matchesCommit,
           statusMatchesSubmittedCi: statusMatchesCi,
           htmlUrl: typeof wd.html_url === 'string' ? wd.html_url : runUrl,
-          details: wfVerified
-            ? `Verified GitHub Actions run #${runId} ('${workflowName}', status: ${runStatus}, conclusion: ${conclusion}, head_sha: ${headSha?.slice(0, 12)}).`
-            : `GitHub Actions run #${runId} failed provenance verification (status: ${runStatus}, conclusion: ${conclusion}, matchesCommit: ${matchesCommit}).`,
+          details:
+            wfStatus === 'VERIFIED'
+              ? `Verified GitHub Actions run #${runId} ('${workflowName}', status: ${runStatus}, conclusion: ${conclusion}, head_sha: ${headSha?.slice(0, 12)}).`
+              : wfStatus === 'PENDING'
+                ? `GitHub Actions run #${runId} ('${workflowName}') is still '${runStatus}' for commit '${headSha?.slice(0, 12)}'.`
+                : `GitHub Actions run #${runId} failed provenance verification (status: ${runStatus}, conclusion: ${conclusion}, matchesCommit: ${matchesCommit}).`,
         };
       }
     }
@@ -881,6 +956,8 @@ export class GitHubVerificationService {
       workflowVerification.status === 'MISMATCH' ||
       workflowVerification.status === 'NOT_FOUND';
 
+    const anyPending = workflowVerification.status === 'PENDING';
+
     const allVerified =
       repositoryVerification.status === 'VERIFIED' &&
       commitVerification.status === 'VERIFIED' &&
@@ -892,6 +969,8 @@ export class GitHubVerificationService {
       overallStatus = 'TAMPERED_PAYLOAD';
     } else if (anyMismatchOrNotFound) {
       overallStatus = 'MISMATCH_DETECTED';
+    } else if (anyPending) {
+      overallStatus = 'PENDING';
     } else if (allVerified) {
       overallStatus = 'VERIFIED';
     } else if (
@@ -904,18 +983,139 @@ export class GitHubVerificationService {
       overallStatus = 'UNVERIFIED_UNAVAILABLE';
     }
 
+    const verificationStatus: VerificationResultStatus =
+      overallStatus === 'VERIFIED'
+        ? 'VERIFIED'
+        : overallStatus === 'TAMPERED_PAYLOAD' || overallStatus === 'MISMATCH_DETECTED'
+          ? 'FAILED'
+          : overallStatus === 'PENDING'
+            ? 'PENDING'
+            : 'UNAVAILABLE';
+
     const eligibleForBoundaryReview =
       overallStatus !== 'TAMPERED_PAYLOAD' &&
-      overallStatus !== 'MISMATCH_DETECTED';
+      overallStatus !== 'MISMATCH_DETECTED' &&
+      overallStatus !== 'PENDING';
 
     const nowIso = new Date().toISOString();
+    const attemptId = `prov_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`;
+    const toResultStatus = (
+      s: string
+    ): VerificationResultStatus => {
+      if (s === 'VERIFIED' || s === 'NOT_APPLICABLE') return 'VERIFIED';
+      if (s === 'PENDING') return 'PENDING';
+      if (s === 'UNAVAILABLE') return 'UNAVAILABLE';
+      return 'FAILED';
+    };
+
+    const results: EvidenceVerificationResultItem[] = [
+      {
+        attemptId,
+        evidenceId: submission.id,
+        verificationType: 'PAYLOAD_INTEGRITY',
+        provider: 'INTERNAL_CANONICAL_HASH',
+        status: integrity.payloadHashMatches ? 'VERIFIED' : 'FAILED',
+        reason: integrity.details,
+        errorCode: integrity.payloadHashMatches ? null : 'TAMPERED_PAYLOAD',
+        resourceId: submission.id,
+        expectedCommitSha: submission.commitSha,
+        actualCommitSha: submission.commitSha,
+        providerTimestamp: integrity.hashedAt ?? submission.submittedAt,
+        verifiedAt: nowIso,
+        evidenceContentHash: integrity.actualPayloadSha256,
+      },
+      {
+        attemptId,
+        evidenceId: submission.id,
+        verificationType: 'REPOSITORY',
+        provider: 'GITHUB',
+        status: toResultStatus(repositoryVerification.status),
+        reason: repositoryVerification.details,
+        errorCode:
+          repositoryVerification.status === 'VERIFIED'
+            ? null
+            : `GITHUB_REPO_${repositoryVerification.status}`,
+        resourceId:
+          repositoryVerification.canonicalFullName ??
+          (expectedOwner && expectedRepo ? `${expectedOwner}/${expectedRepo}` : submission.repoUrl),
+        expectedCommitSha: submission.commitSha,
+        actualCommitSha: commitVerification.canonicalSha,
+        providerTimestamp: null,
+        verifiedAt: nowIso,
+        evidenceContentHash: integrity.actualPayloadSha256,
+      },
+      {
+        attemptId,
+        evidenceId: submission.id,
+        verificationType: 'COMMIT',
+        provider: 'GITHUB',
+        status: toResultStatus(commitVerification.status),
+        reason: commitVerification.details,
+        errorCode:
+          commitVerification.status === 'VERIFIED'
+            ? null
+            : `GITHUB_COMMIT_${commitVerification.status}`,
+        resourceId: commitVerification.canonicalSha ?? submission.commitSha,
+        expectedCommitSha: submission.commitSha,
+        actualCommitSha: commitVerification.canonicalSha,
+        providerTimestamp: commitVerification.committerDate,
+        verifiedAt: nowIso,
+        evidenceContentHash: integrity.actualPayloadSha256,
+      },
+      {
+        attemptId,
+        evidenceId: submission.id,
+        verificationType: 'PULL_REQUEST',
+        provider: 'GITHUB',
+        status: toResultStatus(prVerification.status),
+        reason: prVerification.details,
+        errorCode:
+          prVerification.status === 'VERIFIED'
+            ? null
+            : `GITHUB_PR_${prVerification.status}`,
+        resourceId:
+          prVerification.prNumber !== null
+            ? `PR#${prVerification.prNumber}`
+            : submission.prUrl,
+        expectedCommitSha: submission.commitSha,
+        actualCommitSha: prVerification.headSha ?? prVerification.mergeCommitSha,
+        providerTimestamp: null,
+        verifiedAt: nowIso,
+        evidenceContentHash: integrity.actualPayloadSha256,
+      },
+      {
+        attemptId,
+        evidenceId: submission.id,
+        verificationType: 'WORKFLOW_RUN',
+        provider: 'GITHUB',
+        status: toResultStatus(workflowVerification.status),
+        reason: workflowVerification.details,
+        errorCode:
+          workflowVerification.status === 'VERIFIED' ||
+          workflowVerification.status === 'NOT_APPLICABLE'
+            ? null
+            : `GITHUB_WORKFLOW_${workflowVerification.status}`,
+        resourceId:
+          workflowVerification.runId !== null
+            ? `run#${workflowVerification.runId}`
+            : runUrl || null,
+        expectedCommitSha: submission.commitSha,
+        actualCommitSha: workflowVerification.headSha,
+        providerTimestamp:
+          workflowVerification.updatedAt ?? workflowVerification.createdAt ?? null,
+        verifiedAt: nowIso,
+        evidenceContentHash: integrity.actualPayloadSha256,
+      },
+    ];
+
     const record: EvidenceProvenanceVerificationRecord = {
-      id: `prov_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
+      id: attemptId,
       submissionId: submission.id,
       milestoneId: milestone.id,
       contractId: contract.id,
       verificationMode: isConfigured ? 'GITHUB_REST_API' : 'UNCONFIGURED_UNAVAILABLE',
       overallStatus,
+      verificationStatus,
       eligibleForBoundaryReview,
       blockingReasons,
       discrepancies,
@@ -924,6 +1124,7 @@ export class GitHubVerificationService {
       commit: commitVerification,
       pullRequest: prVerification,
       workflowRun: workflowVerification,
+      results,
       verifiedBy: actor.id,
       verifiedAt: nowIso,
     };
@@ -1002,6 +1203,7 @@ export class GitHubVerificationService {
       return {
         ...existing,
         overallStatus: 'TAMPERED_PAYLOAD',
+        verificationStatus: 'FAILED',
         eligibleForBoundaryReview: false,
         integrity: liveIntegrity,
         blockingReasons: [liveIntegrity.details, ...existing.blockingReasons],
@@ -1088,10 +1290,18 @@ export class GitHubVerificationService {
     const repositoryFullName =
       typeof repoObj?.full_name === 'string' ? repoObj.full_name : null;
 
-    // Extract commit SHA from push, pull_request, or workflow_run webhook payload
+    // Extract commit SHA and providerTimestamp from push, pull_request, or workflow_run webhook payload
     let commitSha: string | null = null;
+    let providerTimestamp: string | null = null;
     if (typeof bodyObj.after === 'string' && bodyObj.after.trim()) {
       commitSha = bodyObj.after.trim().toLowerCase();
+      const headCommitObj =
+        bodyObj.head_commit && typeof bodyObj.head_commit === 'object'
+          ? (bodyObj.head_commit as Record<string, unknown>)
+          : null;
+      if (typeof headCommitObj?.timestamp === 'string') {
+        providerTimestamp = headCommitObj.timestamp;
+      }
     } else if (
       bodyObj.pull_request &&
       typeof bodyObj.pull_request === 'object'
@@ -1102,6 +1312,11 @@ export class GitHubVerificationService {
       if (typeof head?.sha === 'string') {
         commitSha = head.sha.toLowerCase();
       }
+      if (typeof pr.updated_at === 'string') {
+        providerTimestamp = pr.updated_at;
+      } else if (typeof pr.created_at === 'string') {
+        providerTimestamp = pr.created_at;
+      }
     } else if (
       bodyObj.workflow_run &&
       typeof bodyObj.workflow_run === 'object'
@@ -1109,6 +1324,11 @@ export class GitHubVerificationService {
       const wf = bodyObj.workflow_run as Record<string, unknown>;
       if (typeof wf.head_sha === 'string') {
         commitSha = wf.head_sha.toLowerCase();
+      }
+      if (typeof wf.updated_at === 'string') {
+        providerTimestamp = wf.updated_at;
+      } else if (typeof wf.created_at === 'string') {
+        providerTimestamp = wf.created_at;
       }
     }
 
@@ -1135,6 +1355,7 @@ export class GitHubVerificationService {
             action,
             repositoryFullName,
             commitSha,
+            providerTimestamp,
             signatureStatus,
             processingStatus: 'REJECTED',
             processingResult: reasonCode,
@@ -1147,6 +1368,7 @@ export class GitHubVerificationService {
         } else if (existing.processingStatus !== 'PROCESSED') {
           this.githubWebhookRepo.update({
             ...existing,
+            providerTimestamp: providerTimestamp ?? existing.providerTimestamp ?? null,
             signatureStatus,
             processingStatus: 'REJECTED',
             processingResult: reasonCode,
@@ -1306,6 +1528,7 @@ export class GitHubVerificationService {
             action,
             repositoryFullName,
             commitSha,
+            providerTimestamp,
             signatureStatus: 'SUCCESS',
             processingStatus: 'PROCESSING',
             processingResult: null,
@@ -1322,6 +1545,7 @@ export class GitHubVerificationService {
             action,
             repositoryFullName,
             commitSha,
+            providerTimestamp,
             signatureStatus: 'SUCCESS',
             processingStatus: 'PROCESSING',
             payloadSha256,
@@ -1346,20 +1570,78 @@ export class GitHubVerificationService {
           let processingResult = 'WEBHOOK_VERIFIED_LOGGED';
 
           if (matchedSubmission) {
-            // Check whether webhook reports a failed workflow run or unmerged closed PR contradicting the submission
-            if (eventType === 'workflow_run' && bodyObj.workflow_run && typeof bodyObj.workflow_run === 'object') {
+            // Out-of-order protection: ensure older provider events do not overwrite newer verified state
+            let isStaleOutOfOrderEvent = false;
+            if (providerTimestamp) {
+              const incomingEpochMs = Date.parse(providerTimestamp);
+              if (Number.isFinite(incomingEpochMs)) {
+                const priorProcessedEvents = this.githubWebhookRepo
+                  .listRecent(100)
+                  .filter(
+                    (ev) =>
+                      ev.deliveryId !== deliveryId &&
+                      ev.matchedSubmissionId === matchedSubmission?.id &&
+                      ev.processingStatus === 'PROCESSED' &&
+                      ev.providerTimestamp
+                  );
+                for (const priorEv of priorProcessedEvents) {
+                  const priorEpochMs = Date.parse(String(priorEv.providerTimestamp));
+                  if (Number.isFinite(priorEpochMs) && priorEpochMs > incomingEpochMs) {
+                    isStaleOutOfOrderEvent = true;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (isStaleOutOfOrderEvent) {
+              processingResult = 'IGNORED_OUT_OF_ORDER_STALE_EVENT';
+            } else if (
+              eventType === 'workflow_run' &&
+              bodyObj.workflow_run &&
+              typeof bodyObj.workflow_run === 'object'
+            ) {
               const wf = bodyObj.workflow_run as Record<string, unknown>;
+              const wfStatus = typeof wf.status === 'string' ? wf.status : null;
               const conclusion = typeof wf.conclusion === 'string' ? wf.conclusion : null;
-              if (conclusion === 'failure' && matchedSubmission.ciReport.status === 'SUCCESS') {
+              if (
+                wfStatus === 'in_progress' ||
+                wfStatus === 'queued' ||
+                wfStatus === 'waiting' ||
+                wfStatus === 'pending'
+              ) {
+                if (
+                  matchedSubmission.provenanceStatus !== 'MISMATCH_DETECTED' &&
+                  matchedSubmission.provenanceStatus !== 'TAMPERED_PAYLOAD'
+                ) {
+                  this.evidenceRepo.updateProvenanceStatus(
+                    matchedSubmission.id,
+                    'PENDING'
+                  );
+                }
+                processingResult = 'RECONCILED_WORKFLOW_PENDING';
+              } else if (conclusion === 'failure' && matchedSubmission.ciReport.status === 'SUCCESS') {
                 this.evidenceRepo.updateProvenanceStatus(
                   matchedSubmission.id,
                   'MISMATCH_DETECTED'
                 );
                 processingResult = 'RECONCILED_PROVENANCE_MISMATCH';
+              } else if (wfStatus === 'completed' && conclusion === 'success') {
+                if (matchedSubmission.provenanceStatus === 'PENDING') {
+                  this.evidenceRepo.updateProvenanceStatus(
+                    matchedSubmission.id,
+                    'VERIFIED'
+                  );
+                }
+                processingResult = 'RECONCILED_WORKFLOW_RUN';
               } else {
                 processingResult = 'RECONCILED_WORKFLOW_RUN';
               }
-            } else if (eventType === 'pull_request' && bodyObj.pull_request && typeof bodyObj.pull_request === 'object') {
+            } else if (
+              eventType === 'pull_request' &&
+              bodyObj.pull_request &&
+              typeof bodyObj.pull_request === 'object'
+            ) {
               const pr = bodyObj.pull_request as Record<string, unknown>;
               const merged = Boolean(pr.merged === true || pr.merged_at);
               const state = pr.state === 'open' ? 'OPEN' : merged ? 'MERGED' : 'CLOSED';
@@ -1381,6 +1663,7 @@ export class GitHubVerificationService {
           if (currentRec) {
             this.githubWebhookRepo.update({
               ...currentRec,
+              providerTimestamp,
               signatureStatus: 'SUCCESS',
               processingStatus: 'PROCESSED',
               processingResult,

@@ -8,6 +8,8 @@ import type { AppDatabase } from '../repositories/Database.ts';
 import {
   buildCanonicalEvidenceReferences,
   computeEvidencePayloadSha256,
+  EVIDENCE_CANONICALIZATION_VERSION,
+  EVIDENCE_HASH_ALGORITHM,
   type ContractRepository,
   type EvidenceRepository,
   type MilestoneRepository,
@@ -239,6 +241,9 @@ export class EvidenceService {
         developerNotes,
         submittedAt: now,
         payloadSha256,
+        payloadHashAlgorithm: EVIDENCE_HASH_ALGORITHM,
+        canonicalizationVersion: EVIDENCE_CANONICALIZATION_VERSION,
+        payloadHashedAt: now,
         provenanceStatus: 'UNVERIFIED_UNAVAILABLE',
         canonicalReferences: buildCanonicalEvidenceReferences({
           id: submissionId,

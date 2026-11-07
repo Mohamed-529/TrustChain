@@ -246,6 +246,9 @@ export interface EvidenceSubmission {
   developerNotes: string;
   submittedAt: string;
   payloadSha256?: string;
+  payloadHashAlgorithm?: 'SHA-256';
+  canonicalizationVersion?: string;
+  payloadHashedAt?: string;
   provenanceStatus?: EvidenceProvenanceStatus;
   canonicalReferences?: EvidenceReference[];
 }
@@ -630,14 +633,44 @@ export type EvidenceProvenanceStatus =
   | 'MISMATCH_DETECTED'
   | 'PARTIALLY_VERIFIED'
   | 'UNVERIFIED_UNAVAILABLE'
-  | 'TAMPERED_PAYLOAD';
+  | 'TAMPERED_PAYLOAD'
+  | 'PENDING';
+
+export type VerificationResultStatus =
+  | 'VERIFIED'
+  | 'FAILED'
+  | 'UNAVAILABLE'
+  | 'PENDING';
 
 export type GitHubArtifactVerificationState =
   | 'VERIFIED'
+  | 'FAILED'
   | 'MISMATCH'
   | 'NOT_FOUND'
   | 'UNAVAILABLE'
+  | 'PENDING'
   | 'NOT_APPLICABLE';
+
+export interface EvidenceVerificationResultItem {
+  attemptId: string;
+  evidenceId: string;
+  verificationType:
+    | 'REPOSITORY'
+    | 'COMMIT'
+    | 'PULL_REQUEST'
+    | 'WORKFLOW_RUN'
+    | 'PAYLOAD_INTEGRITY';
+  provider: 'GITHUB_REST_API' | 'LOCAL_CRYPTO_SHA256' | 'INTERNAL_CANONICAL_HASH' | 'GITHUB';
+  status: VerificationResultStatus;
+  reason: string;
+  errorCode: string | null;
+  resourceId: string | null;
+  expectedCommitSha: string | null;
+  actualCommitSha: string | null;
+  providerTimestamp: string | null;
+  verifiedAt: string;
+  evidenceContentHash: string;
+}
 
 export interface GitHubRepositoryVerification {
   status: GitHubArtifactVerificationState;
@@ -686,11 +719,15 @@ export interface GitHubWorkflowRunVerification {
   status: GitHubArtifactVerificationState;
   runId: number | null;
   workflowName: string | null;
+  headBranch?: string | null;
+  eventType?: string | null;
   runStatus: string | null;
   conclusion: string | null;
   headSha: string | null;
   matchesSubmittedCommit: boolean;
   statusMatchesSubmittedCi: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   htmlUrl: string | null;
   details: string;
 }
@@ -699,6 +736,9 @@ export interface EvidenceIntegrityVerification {
   payloadHashMatches: boolean;
   expectedPayloadSha256: string;
   actualPayloadSha256: string;
+  hashAlgorithm?: 'SHA-256';
+  canonicalizationVersion?: string;
+  hashedAt?: string;
   details: string;
 }
 
@@ -709,6 +749,7 @@ export interface EvidenceProvenanceVerificationRecord {
   contractId: string;
   verificationMode: 'GITHUB_REST_API' | 'UNCONFIGURED_UNAVAILABLE';
   overallStatus: EvidenceProvenanceStatus;
+  verificationStatus?: VerificationResultStatus;
   eligibleForBoundaryReview: boolean;
   blockingReasons: string[];
   discrepancies: string[];
@@ -717,6 +758,7 @@ export interface EvidenceProvenanceVerificationRecord {
   commit: GitHubCommitVerification;
   pullRequest: GitHubPullRequestVerification;
   workflowRun: GitHubWorkflowRunVerification;
+  results?: EvidenceVerificationResultItem[];
   verifiedBy: string;
   verifiedAt: string;
 }
@@ -735,6 +777,7 @@ export interface GitHubWebhookEventRecord {
   action: string | null;
   repositoryFullName: string | null;
   commitSha: string | null;
+  providerTimestamp?: string | null;
   signatureStatus: GitHubWebhookSignatureStatus;
   processingStatus: GitHubWebhookProcessingStatus;
   processingResult: string | null;

@@ -108,7 +108,8 @@ export class HumanReviewService {
         'UNVERIFIED_UNAVAILABLE');
     const provenanceBlocked =
       effectiveProvenanceStatus === 'MISMATCH_DETECTED' ||
-      effectiveProvenanceStatus === 'TAMPERED_PAYLOAD';
+      effectiveProvenanceStatus === 'TAMPERED_PAYLOAD' ||
+      effectiveProvenanceStatus === 'PENDING';
 
     const hasValidEvaluationForLatestSubmission = Boolean(
       latestSubmission &&
@@ -382,18 +383,21 @@ export class HumanReviewService {
         if (normalizedDecision === 'APPROVE') {
           if (
             effectiveProvenanceStatus === 'MISMATCH_DETECTED' ||
-            effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
+            effectiveProvenanceStatus === 'TAMPERED_PAYLOAD' ||
+            effectiveProvenanceStatus === 'PENDING'
           ) {
             const provenanceSummary =
               latestProvenance?.blockingReasons.join(' | ') ||
               latestProvenance?.discrepancies.join(' | ') ||
-              'MISMATCH_DETECTED';
+              effectiveProvenanceStatus;
             throw new AppError(
               409,
               'EVIDENCE_PROVENANCE_MISMATCH_BLOCKS_APPROVAL',
               effectiveProvenanceStatus === 'TAMPERED_PAYLOAD'
                 ? `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed SHA-256 payload integrity verification (post-submission tampering detected).`
-                : `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed independent GitHub provenance verification (${provenanceSummary}).`
+                : effectiveProvenanceStatus === 'PENDING'
+                  ? `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' has a PENDING GitHub Actions workflow run (${provenanceSummary}).`
+                  : `Cannot APPROVE milestone '${milestoneId}': Evidence submission '${latestSubmission.id}' failed independent GitHub provenance verification (${provenanceSummary}).`
             );
           }
 

@@ -347,9 +347,10 @@ describe('Phase 6 — PayPal Security Remediation & Payment Integrity', () => {
 
       // Verify the payload sent to PayPal's /v1/notifications/verify-webhook-signature endpoint
       assert.ok(lastVerifyRequestBody);
-      assert.equal(lastVerifyRequestBody.webhook_id, 'WH-CONFIGURED-999');
-      assert.equal(lastVerifyRequestBody.transmission_id, VALID_WEBHOOK_HEADERS['PAYPAL-TRANSMISSION-ID']);
-      assert.equal(lastVerifyRequestBody.auth_algo, 'SHA256withRSA');
+      const reqBody = lastVerifyRequestBody as unknown as Record<string, unknown>;
+      assert.equal(reqBody.webhook_id, 'WH-CONFIGURED-999');
+      assert.equal(reqBody.transmission_id, VALID_WEBHOOK_HEADERS['PAYPAL-TRANSMISSION-ID']);
+      assert.equal(reqBody.auth_algo, 'SHA256withRSA');
 
       // Verify authorization was NOT voided by the unverified webhook
       const txAfterInvalid = (await sdk.listPayPalTransactions('ms_seed_01')).transactions[0];

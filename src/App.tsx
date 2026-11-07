@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type {
   ContractScheduleResponse,
+  EvidenceProvenanceVerificationRecord,
   FinancialLedgerRow,
   MilestoneReviewDetails,
   PayPalTransactionRecord,
@@ -28,6 +29,10 @@ export default function App() {
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('ms_seed_01');
   const [scheduleData, setScheduleData] = useState<ContractScheduleResponse | null>(null);
   const [reviewDetails, setReviewDetails] = useState<MilestoneReviewDetails | null>(null);
+  const [provenanceData, setProvenanceData] = useState<{
+    latestProvenance: EvidenceProvenanceVerificationRecord | null;
+    provenanceHistory: EvidenceProvenanceVerificationRecord[];
+  } | null>(null);
   const [paypalTransactions, setPaypalTransactions] = useState<PayPalTransactionRecord[]>([]);
   const [ledgerRows, setLedgerRows] = useState<FinancialLedgerRow[]>([]);
   const [approvedAmountCentsInput, setApprovedAmountCentsInput] = useState<number>(0);
@@ -72,11 +77,14 @@ export default function App() {
       if (!activeToken) return;
       setLoading(true);
       try {
-        const [schedRes, revRes, ppRes, ledgerRes] = await Promise.all([
+        const [schedRes, revRes, provRes, ppRes, ledgerRes] = await Promise.all([
           fetch(`/api/v1/contracts/${contractId}/schedule`, {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
           fetch(`/api/v1/milestones/${milestoneId}/review`, {
+            headers: { Authorization: `Bearer ${activeToken}` },
+          }),
+          fetch(`/api/v1/milestones/${milestoneId}/evidence/provenance`, {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
           fetch(`/api/v1/milestones/${milestoneId}/paypal/transactions`, {
@@ -95,6 +103,13 @@ export default function App() {
           const revData = (await revRes.json()) as MilestoneReviewDetails;
           setReviewDetails(revData);
           setApprovedAmountCentsInput(revData.policyCalculation?.permittedAmountCents ?? 0);
+        }
+        if (provRes.ok) {
+          const provJson = (await provRes.json()) as {
+            latestProvenance: EvidenceProvenanceVerificationRecord | null;
+            provenanceHistory: EvidenceProvenanceVerificationRecord[];
+          };
+          setProvenanceData(provJson);
         }
         if (ppRes.ok) {
           const ppData = (await ppRes.json()) as { transactions: PayPalTransactionRecord[] };
@@ -283,6 +298,43 @@ export default function App() {
       setStatusBanner({
         type: 'error',
         message: err instanceof Error ? err.message : 'Evaluation error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyGitHubProvenance = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence/verify`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? 'GitHub provenance verification failed');
+      }
+      const prov = data.provenance as EvidenceProvenanceVerificationRecord;
+      setStatusBanner({
+        type:
+          prov.verificationStatus === 'VERIFIED'
+            ? 'success'
+            : prov.verificationStatus === 'FAILED'
+              ? 'error'
+              : 'info',
+        message: `Independent GitHub Provenance Verification: status=${prov.verificationStatus ?? prov.overallStatus} (mode=${prov.verificationMode}, SHA-256 integrity=${prov.integrity.payloadHashMatches ? 'MATCH' : 'TAMPERED'}).`,
+      });
+      await refreshAllData(token, selectedMilestoneId, selectedContractId);
+    } catch (err) {
+      setStatusBanner({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'GitHub provenance verification error',
       });
     } finally {
       setLoading(false);
@@ -775,6 +827,13 @@ export default function App() {
                   </button>
                   <button
                     disabled={loading || !latestSub}
+                    onClick={() => void handleVerifyGitHubProvenance()}
+                    className="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-xs rounded font-medium text-white"
+                  >
+                    Verify GitHub Provenance
+                  </button>
+                  <button
+                    disabled={loading || !latestSub}
                     onClick={() => void handleRunEvaluation()}
                     className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs rounded font-medium"
                   >
@@ -996,6 +1055,172 @@ export default function App() {
               </div>
             </section>
           </div>
+        )}
+
+        {/* Phase 7: Evidence Provenance & Independent GitHub Verification Panel */}
+        {reviewDetails && (
+          <section className="bg-slate-900 border border-sky-900/80 rounded-lg p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-950 text-sky-300 border border-sky-700">
+                    PHASE 7 • GITHUB API & SHA-256 PROVENANCE
+                  </span>
+                  <h2 className="text-base font-bold text-white">
+                    Independent Evidence Provenance & Canonical Integrity Verification
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Verifies Repository, Commit SHA, Pull Request merge state, and GitHub Actions workflow run against GitHub REST API + deterministic SHA-256 payload digest (mpai-evidence-canon-v1).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const prov = provenanceData?.latestProvenance ?? reviewDetails.latestProvenance;
+                  const statusLabel =
+                    prov?.verificationStatus ??
+                    prov?.overallStatus ??
+                    latestSub?.provenanceStatus ??
+                    'UNAVAILABLE';
+                  const badgeStyle =
+                    statusLabel === 'VERIFIED'
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                      : statusLabel === 'FAILED' ||
+                          statusLabel === 'MISMATCH_DETECTED' ||
+                          statusLabel === 'TAMPERED_PAYLOAD'
+                        ? 'bg-rose-950 text-rose-300 border-rose-700'
+                        : statusLabel === 'PENDING'
+                          ? 'bg-amber-950 text-amber-300 border-amber-700'
+                          : 'bg-slate-800 text-slate-300 border-slate-700';
+                  return (
+                    <span className={`px-2.5 py-1 rounded text-xs font-mono border ${badgeStyle}`}>
+                      Status: {statusLabel}
+                    </span>
+                  );
+                })()}
+                <button
+                  disabled={loading || !latestSub}
+                  onClick={() => void handleVerifyGitHubProvenance()}
+                  className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-xs font-semibold text-white"
+                >
+                  Re-Verify via GitHub API
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const prov = provenanceData?.latestProvenance ?? reviewDetails.latestProvenance;
+              if (!latestSub) {
+                return (
+                  <p className="text-xs text-slate-500 italic">
+                    Submit delivery evidence on this milestone to inspect canonical SHA-256 integrity and GitHub API provenance.
+                  </p>
+                );
+              }
+              return (
+                <div className="space-y-3 text-xs">
+                  {/* Canonical SHA-256 Integrity Bar */}
+                  <div className="p-3 rounded bg-slate-950 border border-slate-800 font-mono flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="text-slate-300">
+                        Canonical SHA-256 Digest ({latestSub.canonicalizationVersion ?? 'mpai-evidence-canon-v1'}):{' '}
+                        <span className="text-sky-300">{latestSub.payloadSha256 ?? '—'}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Hashed At: {latestSub.payloadHashedAt ?? latestSub.submittedAt} • Verification Attempts:{' '}
+                        {provenanceData?.provenanceHistory.length ?? (prov ? 1 : 0)}
+                        {prov ? ` • Last Verified: ${prov.verifiedAt} (${prov.verificationMode})` : ''}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] border ${
+                        prov
+                          ? prov.integrity.payloadHashMatches
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                            : 'bg-rose-950 text-rose-300 border-rose-700'
+                          : 'bg-slate-900 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      {prov
+                        ? prov.integrity.payloadHashMatches
+                          ? 'SHA-256 INTEGRITY VERIFIED'
+                          : 'TAMPER DETECTED'
+                        : 'HASH RECORDED'}
+                    </span>
+                  </div>
+
+                  {/* 4 Artifact Provenance Cards */}
+                  {prov && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 font-mono">
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-sans font-semibold text-white">Repository</span>
+                          <span className="text-[11px] text-sky-300">{prov.repository.status}</span>
+                        </div>
+                        <div className="truncate text-slate-300">
+                          {prov.repository.canonicalFullName ??
+                            `${prov.repository.owner}/${prov.repository.repo}`}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-sans">
+                          {prov.repository.details}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-sans font-semibold text-white">Commit</span>
+                          <span className="text-[11px] text-sky-300">{prov.commit.status}</span>
+                        </div>
+                        <div className="truncate text-slate-300">
+                          SHA: {(prov.commit.canonicalSha ?? prov.commit.submittedSha).slice(0, 12)}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-sans">
+                          {prov.commit.details}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-sans font-semibold text-white">Pull Request</span>
+                          <span className="text-[11px] text-sky-300">{prov.pullRequest.status}</span>
+                        </div>
+                        <div className="truncate text-slate-300">
+                          PR #{prov.pullRequest.prNumber ?? '—'} ({prov.pullRequest.actualPrStatus ?? '—'})
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-sans">
+                          {prov.pullRequest.details}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-sans font-semibold text-white">GitHub Actions</span>
+                          <span className="text-[11px] text-sky-300">{prov.workflowRun.status}</span>
+                        </div>
+                        <div className="truncate text-slate-300">
+                          Run #{prov.workflowRun.runId ?? '—'} ({prov.workflowRun.conclusion ?? prov.workflowRun.runStatus ?? '—'})
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-sans">
+                          {prov.workflowRun.details}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {prov && prov.blockingReasons.length > 0 && (
+                    <div className="p-3 rounded bg-rose-950/50 border border-rose-800 text-rose-200 space-y-1">
+                      <div className="font-semibold">Provenance Blocking Reasons:</div>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {prov.blockingReasons.map((reason, idx) => (
+                          <li key={idx}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </section>
         )}
 
         {/* Confirmation Modal Before Approval */}

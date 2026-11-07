@@ -14,6 +14,7 @@ import type {
   EvidenceProvenanceVerificationRecord,
   EvidenceReference,
   EvidenceSubmission,
+  EvidenceVerificationResultItem,
   GitHubCommitVerification,
   GitHubPullRequestVerification,
   GitHubRepositoryVerification,
@@ -41,6 +42,7 @@ import type {
   User,
   UserRole,
   UserWithPasswordRow,
+  VerificationResultStatus,
 } from '../../types/domain.ts';
 
 export class UserRepository {
@@ -409,6 +411,116 @@ export function buildCanonicalEvidenceReferences(submission: {
   ];
 }
 
+export const EVIDENCE_HASH_ALGORITHM = 'SHA-256' as const;
+export const EVIDENCE_CANONICALIZATION_VERSION = 'mpai-evidence-canon-v1' as const;
+
+/**
+ * Recursively canonicalizes an arbitrary JSON value according to `mpai-evidence-canon-v1`:
+ * - Object keys are sorted lexicographically (`Object.keys(obj).sort()`).
+ * - Object keys whose values are `undefined` are omitted.
+ * - `null` values are preserved as `null`.
+ * - Arrays preserve element order while recursively canonicalizing each element (`undefined` array elements become `null`).
+ * - Numbers are normalized via `Number(val)` (preventing `-0`).
+ */
+export function canonicalizeJsonValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'boolean' || typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return Object.is(value, -0) ? 0 : Number(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => (item === undefined ? null : canonicalizeJsonValue(item)));
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const sortedKeys = Object.keys(obj).sort();
+    const out: Record<string, unknown> = {};
+    for (const key of sortedKeys) {
+      const propVal = obj[key];
+      if (propVal !== undefined) {
+        out[key] = canonicalizeJsonValue(propVal);
+      }
+    }
+    return out;
+  }
+  return String(value);
+}
+
+/**
+ * Serializes an evidence submission payload into a deterministic canonical JSON string
+ * (`mpai-evidence-canon-v1`). Equivalent payloads with differently ordered object keys,
+ * whitespace around URLs/branches/SHAs, uppercase vs lowercase hex SHAs, or omitted vs `undefined`
+ * optional fields produce identical canonical JSON strings.
+ */
+export function canonicalizeEvidencePayload(submission: {
+  milestoneId: string;
+  attemptNumber: number;
+  submittedBy: string;
+  repoUrl: string;
+  branch: string;
+  commitSha: string;
+  prUrl: string;
+  prStatus: 'MERGED' | 'OPEN' | 'CLOSED';
+  ciReport: CiExecutionReport;
+  securityScan: SecurityScanReport;
+  developerNotes?: string | null;
+}): string {
+  const normalizedPayload = {
+    attemptNumber: Number(submission.attemptNumber),
+    branch: String(submission.branch ?? '').trim(),
+    ciReport: {
+      changedFiles: Array.isArray(submission.ciReport?.changedFiles)
+        ? submission.ciReport.changedFiles.map((f) => String(f).trim())
+        : [],
+      coveragePct: Number(submission.ciReport?.coveragePct ?? 0),
+      failedTests: Number(submission.ciReport?.failedTests ?? 0),
+      logSummary: String(submission.ciReport?.logSummary ?? ''),
+      passedTests: Number(submission.ciReport?.passedTests ?? 0),
+      provider: String(submission.ciReport?.provider ?? '').trim(),
+      runUrl:
+        submission.ciReport?.runUrl !== undefined &&
+        submission.ciReport?.runUrl !== null &&
+        String(submission.ciReport.runUrl).trim() !== ''
+          ? String(submission.ciReport.runUrl).trim()
+          : null,
+      status: submission.ciReport?.status ?? 'FAILURE',
+      totalTests: Number(submission.ciReport?.totalTests ?? 0),
+    },
+    commitSha: String(submission.commitSha ?? '')
+      .trim()
+      .toLowerCase(),
+    developerNotes:
+      submission.developerNotes !== undefined && submission.developerNotes !== null
+        ? String(submission.developerNotes).trim()
+        : '',
+    milestoneId: String(submission.milestoneId ?? '').trim(),
+    prStatus: submission.prStatus,
+    prUrl: String(submission.prUrl ?? '').trim(),
+    repoUrl: String(submission.repoUrl ?? '').trim().replace(/\/+$/, ''),
+    securityScan: {
+      findings: Array.isArray(submission.securityScan?.findings)
+        ? submission.securityScan.findings.map((f) => ({
+            cvssScore: Number(f.cvssScore ?? 0),
+            description: String(f.description ?? ''),
+            id: String(f.id ?? ''),
+            packageName: String(f.packageName ?? ''),
+            severity: f.severity,
+          }))
+        : [],
+      scanner: String(submission.securityScan?.scanner ?? '').trim(),
+      scannerVersion: String(submission.securityScan?.scannerVersion ?? '').trim(),
+      status: submission.securityScan?.status ?? 'UNAVAILABLE',
+    },
+    submittedBy: String(submission.submittedBy ?? '').trim(),
+  };
+
+  return JSON.stringify(canonicalizeJsonValue(normalizedPayload));
+}
+
 export function computeEvidencePayloadSha256(submission: {
   milestoneId: string;
   attemptNumber: number;
@@ -420,47 +532,10 @@ export function computeEvidencePayloadSha256(submission: {
   prStatus: 'MERGED' | 'OPEN' | 'CLOSED';
   ciReport: CiExecutionReport;
   securityScan: SecurityScanReport;
-  developerNotes: string;
+  developerNotes?: string | null;
 }): string {
-  const canonicalObj = {
-    milestoneId: submission.milestoneId,
-    attemptNumber: submission.attemptNumber,
-    submittedBy: submission.submittedBy,
-    repoUrl: submission.repoUrl.trim(),
-    branch: submission.branch.trim(),
-    commitSha: submission.commitSha.trim().toLowerCase(),
-    prUrl: submission.prUrl.trim(),
-    prStatus: submission.prStatus,
-    ciReport: {
-      provider: submission.ciReport.provider,
-      runUrl: submission.ciReport.runUrl ?? null,
-      status: submission.ciReport.status,
-      totalTests: Number(submission.ciReport.totalTests),
-      passedTests: Number(submission.ciReport.passedTests),
-      failedTests: Number(submission.ciReport.failedTests),
-      coveragePct: Number(submission.ciReport.coveragePct),
-      changedFiles: submission.ciReport.changedFiles ?? [],
-      logSummary: submission.ciReport.logSummary,
-    },
-    securityScan: {
-      scanner: submission.securityScan.scanner,
-      scannerVersion: submission.securityScan.scannerVersion,
-      status: submission.securityScan.status,
-      findings: submission.securityScan.findings.map((f) => ({
-        id: f.id,
-        packageName: f.packageName,
-        severity: f.severity,
-        cvssScore: Number(f.cvssScore),
-        description: f.description,
-      })),
-    },
-    developerNotes: submission.developerNotes ?? '',
-  };
-
-  return crypto
-    .createHash('sha256')
-    .update(JSON.stringify(canonicalObj))
-    .digest('hex');
+  const canonicalJson = canonicalizeEvidencePayload(submission);
+  return crypto.createHash('sha256').update(canonicalJson, 'utf8').digest('hex');
 }
 
 export class EvidenceRepository {
@@ -518,6 +593,13 @@ export class EvidenceRepository {
       developerNotes,
       submittedAt: String(row.submitted_at),
       payloadSha256: storedHash,
+      payloadHashAlgorithm: EVIDENCE_HASH_ALGORITHM,
+      canonicalizationVersion: row.canonicalization_version
+        ? String(row.canonicalization_version)
+        : EVIDENCE_CANONICALIZATION_VERSION,
+      payloadHashedAt: row.payload_hashed_at
+        ? String(row.payload_hashed_at)
+        : String(row.submitted_at),
       provenanceStatus,
       canonicalReferences: buildCanonicalEvidenceReferences({
         id,
@@ -592,6 +674,10 @@ export class EvidenceRepository {
         securityScan: submission.securityScan,
         developerNotes: submission.developerNotes,
       });
+    const payloadHashAlgorithm = submission.payloadHashAlgorithm ?? EVIDENCE_HASH_ALGORITHM;
+    const canonicalizationVersion =
+      submission.canonicalizationVersion ?? EVIDENCE_CANONICALIZATION_VERSION;
+    const payloadHashedAt = submission.payloadHashedAt ?? submission.submittedAt;
     const provenanceStatus = submission.provenanceStatus ?? 'UNVERIFIED_UNAVAILABLE';
 
     this.rawDb
@@ -599,8 +685,9 @@ export class EvidenceRepository {
         `INSERT INTO evidence_submissions (
           id, milestone_id, attempt_number, submitted_by, repo_url, branch,
           commit_sha, pr_url, pr_status, ci_report_json, security_scan_json,
-          developer_notes, submitted_at, payload_sha256, provenance_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          developer_notes, submitted_at, payload_sha256, payload_hash_algorithm,
+          canonicalization_version, payload_hashed_at, provenance_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         submission.id,
@@ -617,6 +704,9 @@ export class EvidenceRepository {
         submission.developerNotes,
         submission.submittedAt,
         payloadSha256,
+        payloadHashAlgorithm,
+        canonicalizationVersion,
+        payloadHashedAt,
         provenanceStatus
       );
   }
@@ -1147,6 +1237,17 @@ export class EvidenceProvenanceRepository {
   }
 
   private mapRow(row: Record<string, unknown>): EvidenceProvenanceVerificationRecord {
+    const overallStatus = String(row.overall_status) as EvidenceProvenanceStatus;
+    const verificationStatus: VerificationResultStatus = row.verification_status
+      ? (String(row.verification_status) as VerificationResultStatus)
+      : overallStatus === 'VERIFIED'
+        ? 'VERIFIED'
+        : overallStatus === 'PENDING'
+          ? 'PENDING'
+          : overallStatus === 'UNVERIFIED_UNAVAILABLE'
+            ? 'UNAVAILABLE'
+            : 'FAILED';
+
     return {
       id: String(row.id),
       submissionId: String(row.submission_id),
@@ -1155,7 +1256,8 @@ export class EvidenceProvenanceRepository {
       verificationMode: String(row.verification_mode) as
         | 'GITHUB_REST_API'
         | 'UNCONFIGURED_UNAVAILABLE',
-      overallStatus: String(row.overall_status) as EvidenceProvenanceStatus,
+      overallStatus,
+      verificationStatus,
       eligibleForBoundaryReview: Number(row.eligible_for_boundary_review) === 1,
       blockingReasons: JSON.parse(String(row.blocking_reasons_json ?? '[]')) as string[],
       discrepancies: JSON.parse(String(row.discrepancies_json ?? '[]')) as string[],
@@ -1164,6 +1266,9 @@ export class EvidenceProvenanceRepository {
       commit: JSON.parse(String(row.commit_json)) as GitHubCommitVerification,
       pullRequest: JSON.parse(String(row.pull_request_json)) as GitHubPullRequestVerification,
       workflowRun: JSON.parse(String(row.workflow_run_json)) as GitHubWorkflowRunVerification,
+      results: row.results_json
+        ? (JSON.parse(String(row.results_json)) as EvidenceVerificationResultItem[])
+        : [],
       verifiedBy: String(row.verified_by),
       verifiedAt: String(row.verified_at),
     };
@@ -1201,14 +1306,25 @@ export class EvidenceProvenanceRepository {
   }
 
   public insert(record: EvidenceProvenanceVerificationRecord): void {
+    const verificationStatus: VerificationResultStatus =
+      record.verificationStatus ??
+      (record.overallStatus === 'VERIFIED'
+        ? 'VERIFIED'
+        : record.overallStatus === 'PENDING'
+          ? 'PENDING'
+          : record.overallStatus === 'UNVERIFIED_UNAVAILABLE'
+            ? 'UNAVAILABLE'
+            : 'FAILED');
+
     this.rawDb
       .prepare(
         `INSERT INTO evidence_provenance_verifications (
           id, submission_id, milestone_id, contract_id, verification_mode,
-          overall_status, eligible_for_boundary_review, blocking_reasons_json,
-          discrepancies_json, integrity_json, repository_json, commit_json,
-          pull_request_json, workflow_run_json, verified_by, verified_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          overall_status, verification_status, eligible_for_boundary_review,
+          blocking_reasons_json, discrepancies_json, integrity_json,
+          repository_json, commit_json, pull_request_json, workflow_run_json,
+          results_json, verified_by, verified_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         record.id,
@@ -1217,6 +1333,7 @@ export class EvidenceProvenanceRepository {
         record.contractId,
         record.verificationMode,
         record.overallStatus,
+        verificationStatus,
         record.eligibleForBoundaryReview ? 1 : 0,
         JSON.stringify(record.blockingReasons),
         JSON.stringify(record.discrepancies),
@@ -1225,6 +1342,7 @@ export class EvidenceProvenanceRepository {
         JSON.stringify(record.commit),
         JSON.stringify(record.pullRequest),
         JSON.stringify(record.workflowRun),
+        JSON.stringify(record.results ?? []),
         record.verifiedBy,
         record.verifiedAt
       );
@@ -1245,6 +1363,7 @@ export class GitHubWebhookEventRepository {
       action: row.action ? String(row.action) : null,
       repositoryFullName: row.repository_full_name ? String(row.repository_full_name) : null,
       commitSha: row.commit_sha ? String(row.commit_sha) : null,
+      providerTimestamp: row.provider_timestamp ? String(row.provider_timestamp) : null,
       signatureStatus: String(row.signature_status) as GitHubWebhookSignatureStatus,
       processingStatus: String(row.processing_status) as GitHubWebhookProcessingStatus,
       processingResult: row.processing_result ? String(row.processing_result) : null,
@@ -1263,6 +1382,26 @@ export class GitHubWebhookEventRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  public findLatestProcessedBySubmissionId(
+    submissionId: string
+  ): GitHubWebhookEventRecord | null {
+    const row = this.rawDb
+      .prepare(
+        `SELECT * FROM github_webhook_events
+         WHERE matched_submission_id = ? AND processing_status = 'PROCESSED'
+         ORDER BY COALESCE(provider_timestamp, received_at) DESC LIMIT 1`
+      )
+      .get(submissionId) as Record<string, unknown> | undefined;
+    return row ? this.mapRow(row) : null;
+  }
+
+  public listRecent(limit = 100): GitHubWebhookEventRecord[] {
+    const rows = this.rawDb
+      .prepare('SELECT * FROM github_webhook_events ORDER BY received_at DESC LIMIT ?')
+      .all(limit) as Array<Record<string, unknown>>;
+    return rows.map((r) => this.mapRow(r));
+  }
+
   public listAll(): GitHubWebhookEventRecord[] {
     const rows = this.rawDb
       .prepare('SELECT * FROM github_webhook_events ORDER BY received_at DESC')
@@ -1275,9 +1414,9 @@ export class GitHubWebhookEventRepository {
       .prepare(
         `INSERT INTO github_webhook_events (
           delivery_id, event_type, action, repository_full_name, commit_sha,
-          signature_status, processing_status, processing_result,
+          provider_timestamp, signature_status, processing_status, processing_result,
           matched_submission_id, payload_sha256, error_message, received_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         record.deliveryId,
@@ -1285,6 +1424,7 @@ export class GitHubWebhookEventRepository {
         record.action,
         record.repositoryFullName,
         record.commitSha,
+        record.providerTimestamp ?? null,
         record.signatureStatus,
         record.processingStatus,
         record.processingResult,
@@ -1304,6 +1444,7 @@ export class GitHubWebhookEventRepository {
           action = ?,
           repository_full_name = ?,
           commit_sha = ?,
+          provider_timestamp = ?,
           signature_status = ?,
           processing_status = ?,
           processing_result = ?,
@@ -1318,6 +1459,7 @@ export class GitHubWebhookEventRepository {
         record.action,
         record.repositoryFullName,
         record.commitSha,
+        record.providerTimestamp ?? null,
         record.signatureStatus,
         record.processingStatus,
         record.processingResult,

@@ -1310,6 +1310,12 @@ export class EvaluationService {
             'UNVERIFIED_UNAVAILABLE');
       const provenanceMismatchBlocked =
         provenanceStatus === 'MISMATCH_DETECTED' || provenanceStatus === 'TAMPERED_PAYLOAD';
+      const provenancePendingBlocked = provenanceStatus === 'PENDING';
+      const provenanceExplicitlyUnavailable = Boolean(
+        provenanceRecord !== null &&
+          (provenanceStatus === 'UNVERIFIED_UNAVAILABLE' ||
+            provenanceStatus === 'PARTIALLY_VERIFIED')
+      );
 
       const canonicalRefs =
         latestSubmission.canonicalReferences ??
@@ -1372,6 +1378,22 @@ export class EvaluationService {
         riskAnalysis.overallRiskSeverity = 'CRITICAL';
         riskAnalysis.ciBuildPassed = false;
         riskAnalysis.summary = `${riskAnalysis.summary} [PROVENANCE BLOCK: ${provenanceFailureMsg}]`;
+      } else if (provenancePendingBlocked) {
+        const pendingDetails =
+          provenanceRecord?.blockingReasons.join(' | ') ||
+          'GitHub Actions workflow run is still in progress (PENDING).';
+        const pendingMsg = `GITHUB_PROVENANCE_PENDING: ${pendingDetails}`;
+        evidenceAnalysis.missingEvidence.push(pendingMsg);
+        evidenceAnalysis.factualObservations.push(`[PROVENANCE_GATE] ${pendingMsg}`);
+        riskAnalysis.suspiciousSignals.push(pendingMsg);
+        riskAnalysis.ciBuildPassed = false;
+        riskAnalysis.summary = `${riskAnalysis.summary} [PROVENANCE PENDING: ${pendingMsg}]`;
+      } else if (provenanceExplicitlyUnavailable) {
+        const unavailMsg =
+          'GITHUB_PROVENANCE_UNAVAILABLE: Independent GitHub API verification was unavailable during evaluation; automatic PASS is suppressed until human review.';
+        evidenceAnalysis.factualObservations.push(`[PROVENANCE_GATE] ${unavailMsg}`);
+        riskAnalysis.suspiciousSignals.push(unavailMsg);
+        riskAnalysis.summary = `${riskAnalysis.summary} [${unavailMsg}]`;
       }
 
       // Stage C: Review Synthesizer (Advisory Only)
@@ -1392,6 +1414,17 @@ export class EvaluationService {
         arbitratorRecommendation.recommendedOutcome = 'FAIL';
         arbitratorRecommendation.recommendation = 'RECOMMEND_REJECTION';
         arbitratorRecommendation.rationale = `[PROVENANCE GATE BLOCKED] ${arbitratorRecommendation.rationale}`;
+      } else if (provenancePendingBlocked) {
+        arbitratorRecommendation.recommendedOutcome = 'NEEDS_HUMAN_REVIEW';
+        arbitratorRecommendation.recommendation = 'RECOMMEND_HOLD';
+        arbitratorRecommendation.rationale = `[PROVENANCE PENDING] ${arbitratorRecommendation.rationale}`;
+      } else if (
+        provenanceExplicitlyUnavailable &&
+        arbitratorRecommendation.recommendedOutcome === 'PASS'
+      ) {
+        arbitratorRecommendation.recommendedOutcome = 'NEEDS_HUMAN_REVIEW';
+        arbitratorRecommendation.recommendation = 'RECOMMEND_HOLD';
+        arbitratorRecommendation.rationale = `[GITHUB VERIFICATION UNAVAILABLE — HUMAN REVIEW REQUIRED] ${arbitratorRecommendation.rationale}`;
       }
 
       // Stage D: Deterministic Settlement Policy Engine (Authoritative Math)
@@ -1408,15 +1441,17 @@ export class EvaluationService {
         scannerStatus: riskAnalysis.scannerStatus,
       });
 
-      if (provenanceMismatchBlocked) {
+      if (provenanceMismatchBlocked || provenancePendingBlocked) {
         const provenanceDetails =
           provenanceRecord?.blockingReasons.join(' | ') ||
           provenanceRecord?.discrepancies.join(' | ') ||
-          'MISMATCH_DETECTED';
+          (provenancePendingBlocked ? 'WORKFLOW_PENDING' : 'MISMATCH_DETECTED');
         const provenanceGateReason =
           provenanceStatus === 'TAMPERED_PAYLOAD'
             ? 'EVIDENCE_PROVENANCE_GATE: Evidence payload SHA-256 tamper check failed (post-submission modification detected).'
-            : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${provenanceDetails}).`;
+            : provenancePendingBlocked
+              ? `EVIDENCE_PROVENANCE_GATE: GitHub Actions workflow run is still PENDING (${provenanceDetails}).`
+              : `EVIDENCE_PROVENANCE_GATE: Independent GitHub provenance verification failed (${provenanceDetails}).`;
         if (!policyCalculation.gatesTripped.includes(provenanceGateReason)) {
           policyCalculation.gatesTripped.unshift(provenanceGateReason);
         }
