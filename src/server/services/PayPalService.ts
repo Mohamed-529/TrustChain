@@ -1027,7 +1027,11 @@ export class PayPalService {
     reconciledTransactionId: string | null;
   }> {
     const getHeader = (name: string): string => {
-      const val = headers[name.toLowerCase()] ?? headers[name];
+      const lower = name.toLowerCase();
+      const val =
+        headers[lower] ??
+        headers[name] ??
+        headers[name.toUpperCase()];
       return Array.isArray(val) ? String(val[0] ?? '') : String(val ?? '');
     };
 
