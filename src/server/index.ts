@@ -486,6 +486,79 @@ export function createServerApp(options?: {
   };
 }
 
+export function createProductionStaticFallback(distPath: string) {
+  const resolvedDistPath = path.resolve(distPath);
+  return (req: http.IncomingMessage, res: http.ServerResponse): void => {
+    const parsedUrl = new URL(req.url ?? '/', 'http://localhost');
+    let decodedPath: string;
+    try {
+      decodedPath = decodeURIComponent(parsedUrl.pathname);
+    } catch {
+      decodedPath = parsedUrl.pathname;
+    }
+    const normalizedPath = path.normalize(decodedPath);
+    const safeRelativePath = normalizedPath.replace(/^([./\\])+/, '');
+    const targetFilePath = path.resolve(resolvedDistPath, safeRelativePath);
+
+    // Prevent directory traversal outside distPath
+    const isContained =
+      targetFilePath === resolvedDistPath ||
+      targetFilePath.startsWith(resolvedDistPath + path.sep);
+    if (!isContained) {
+      res.writeHead(403, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Access denied.' } }));
+      return;
+    }
+
+    if (fs.existsSync(targetFilePath) && fs.statSync(targetFilePath).isFile()) {
+      const ext = path.extname(targetFilePath).toLowerCase();
+      const contentTypes: Record<string, string> = {
+        '.html': 'text/html; charset=utf-8',
+        '.js': 'application/javascript; charset=utf-8',
+        '.css': 'text/css; charset=utf-8',
+        '.json': 'application/json; charset=utf-8',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+        '.woff2': 'font/woff2',
+        '.woff': 'font/woff',
+      };
+      const contentType = contentTypes[ext] ?? 'application/octet-stream';
+      res.writeHead(200, { 'content-type': contentType });
+      fs.createReadStream(targetFilePath).pipe(res);
+      return;
+    }
+
+    // Missing assets under /assets/ or any path requesting a file with an extension must return 404
+    const hasExtension = Boolean(path.extname(safeRelativePath));
+    const isAssetPath =
+      parsedUrl.pathname.startsWith('/assets/') || parsedUrl.pathname === '/assets';
+    if (isAssetPath || hasExtension) {
+      res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(
+        JSON.stringify({
+          error: {
+            code: 'STATIC_ASSET_NOT_FOUND',
+            message: `Static asset not found: ${req.url}`,
+          },
+        })
+      );
+      return;
+    }
+
+    // Unknown client-side application SPA route fallback
+    const indexHtmlPath = path.join(resolvedDistPath, 'index.html');
+    if (fs.existsSync(indexHtmlPath)) {
+      const html = fs.readFileSync(indexHtmlPath, 'utf8');
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(html);
+      return;
+    }
+
+    res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: { code: 'NOT_FOUND', message: `Not found: ${req.url}` } }));
+  };
+}
+
 async function startDevOrProdServer(): Promise<void> {
   const port = Number(process.env.PORT ?? 3000);
   const isProd = process.env.NODE_ENV === 'production';
@@ -535,39 +608,7 @@ async function startDevOrProdServer(): Promise<void> {
     }
   } else {
     const distPath = path.join(rootDir, 'dist');
-    app.useFallback((req, res) => {
-      const parsedUrl = new URL(req.url ?? '/', 'http://localhost');
-      const safePath = path.normalize(parsedUrl.pathname).replace(/^(\.\.[/\\])+/, '');
-      const filePath = path.join(distPath, safePath);
-
-      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        const ext = path.extname(filePath).toLowerCase();
-        const contentTypes: Record<string, string> = {
-          '.html': 'text/html; charset=utf-8',
-          '.js': 'application/javascript; charset=utf-8',
-          '.css': 'text/css; charset=utf-8',
-          '.json': 'application/json; charset=utf-8',
-          '.svg': 'image/svg+xml',
-          '.png': 'image/png',
-          '.woff2': 'font/woff2',
-          '.woff': 'font/woff',
-        };
-        const contentType = contentTypes[ext] ?? 'application/octet-stream';
-        res.writeHead(200, { 'content-type': contentType });
-        fs.createReadStream(filePath).pipe(res);
-        return;
-      }
-
-      const indexHtmlPath = path.join(distPath, 'index.html');
-      if (fs.existsSync(indexHtmlPath)) {
-        const html = fs.readFileSync(indexHtmlPath, 'utf8');
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(html);
-        return;
-      }
-      res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: { code: 'NOT_FOUND', message: `Not found: ${req.url}` } }));
-    });
+    app.useFallback(createProductionStaticFallback(distPath));
   }
 
   const server = http.createServer(app);

@@ -45,15 +45,18 @@ Phase 8 — Bryntum Gantt Full Integration, UI Resilience & Comprehensive Projec
   - **Real Backend-to-Bryntum Data Binding:** Connected `ScheduleControlTowerService` live contract data to `<BryntumGanttViewer />`, fully replacing the temporary HTML schedule table in `src/App.tsx`.
   - **Resilient UI States:** Added interactive loading skeletons, error retry state with action handler (`onRetry`), empty state handling for contracts without milestones, and read-only fiduciary locks.
   - **Custom Column Renderers:** Built custom renderers for Schedule Health badges (`On Track`, `At Risk`, `Critical`), USD Agreed Budget formatting (`$X.XX`), and Baseline Variance Days (`+X d`).
-  - **Rectification:** Fixed production static MIME streaming in `src/server/index.ts` so JS and CSS assets are served with proper content types (`application/javascript`, `text/css`) instead of fallback HTML.
-  - **Comprehensive Audit:** Conducted full project audit and documented results in `PHASE8_FULL_INTEGRATION_AND_PROJECT_AUDIT.md` (Completed & Verified — 5/5 Phase 8.2/8.3 tests passing; **42/42 total tests passing**).
+  - **Full Project Audit:** Documented exhaustive verification in `PHASE8_FULL_INTEGRATION_AND_PROJECT_AUDIT.md`.
+- Phase 8.4 — Final Rectification & Static Asset 404 Guard:
+  - **Static Asset 404 Guard:** Implemented `createProductionStaticFallback(distPath)` in `src/server/index.ts`, returning HTTP 404 (`STATIC_ASSET_NOT_FOUND`) for missing assets under `/assets/` or files with extensions while preserving SPA client routing for route paths.
+  - **Regression Coverage:** Added Subtest 6 to `phase8_integration.test.ts` verifying all 7 static asset, SPA fallback, API, and traversal containment scenarios over live HTTP.
+  - **Test Reconciliation:** **43 / 43 tests passing** across all 9 test suites with 0 failures or skipped tests.
 
 ---
 
 ## Test Results & Validation Status
 
 - **Automated Test Suite (`npm test` — `phase1.test.ts` through `phase8_integration.test.ts`):**
-  - **Status:** **PASSED (`42 / 42` tests across `9 / 9` suites passed, `0` failed)**
+  - **Status:** **PASSED (`43 / 43` tests across `9 / 9` suites passed, `0` failed)**
   - **Phase 1 Suite (`7 / 7` passed)**
   - **Phase 2 Suite (`3 / 3` passed)**
   - **Phase 3 Suite (`4 / 4` passed)**
@@ -62,15 +65,16 @@ Phase 8 — Bryntum Gantt Full Integration, UI Resilience & Comprehensive Projec
   - **Phase 6 Suite (`4 / 4` passed)**
   - **Phase 7 Suite (`6 / 6` passed)**
   - **Phase 8.1 Foundation Suite (`3 / 3` passed)**
-  - **Phase 8.2 & 8.3 Integration Suite (`5 / 5` passed):**
+  - **Phase 8.2, 8.3 & 8.4 Integration Suite (`6 / 6` passed):**
     1. `Backend-to-Bryntum Data Mapping: produces valid TaskModel, DependencyModel, Baselines & Critical Path` — **PASSED**
     2. `Finish-to-Start Dependencies & Critical Path: propagates blockers and links` — **PASSED**
     3. `Financial Invariant: Date Cascading strictly preserves agreedAmountCents` — **PASSED**
     4. `Empty Schedule & Boundary Handling: handles zero milestones gracefully without crash` — **PASSED**
     5. `Bryntum Component Source Verification: verifies readOnly, custom columns, and theme styling` — **PASSED**
+    6. `Production Static Asset Serving & 404 Guard: verifies MIME types, missing assets, SPA fallback, traversal prevention` — **PASSED**
 - **TypeScript Validation Status (`npm run lint` — `tsc --noEmit`):**
   - **Status:** **PASSED (`0` errors, clean compilation across all server, SDK, types, and UI files)**.
 - **Production Client Build (`npm run build` — `vite build`):**
-  - **Status:** **PASSED (Production bundle generated cleanly with 0 errors in ~4.47s)**.
+  - **Status:** **PASSED (Production bundle generated cleanly with 0 errors)**.
 - **Full Project Regression Audit & Rectification:**
-  - **Status:** **COMPLETED (`PHASE8_FULL_INTEGRATION_AND_PROJECT_AUDIT.md` verified; static asset MIME streaming rectified and tested)**.
+  - **Status:** **COMPLETED (`PHASE8_FULL_INTEGRATION_AND_PROJECT_AUDIT.md` verified; static asset 404 guard and directory traversal protection validated)**.

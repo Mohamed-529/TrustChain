@@ -191,3 +191,45 @@ MilestoneProof AI is demonstrably functional, architecturally sound, and mathema
    - When a valid `GEMINI_API_KEY` is provided, live multi-agent LLM analysis executes across `EvidenceAnalyst`, `RiskAnalyst`, and `ReviewSynthesizer`. If the key is omitted or the service is unreachable, deterministic mock analysis kicks in safely without throwing unhandled exceptions.
 4. **Independent GitHub Verification:**
    - In live operation with `GITHUB_PERSONAL_ACCESS_TOKEN`, real GitHub repositories, commits, PRs, and Actions runs are independently audited. When running offline or in demo mode, mock verification accurately reflects passing, mismatch, and tamper states.
+
+---
+
+## PART 8 — PHASE 8.4 FINAL RECTIFICATION & STATIC ASSET 404 GUARD
+
+### 8.1 Defect Analysis & Root Cause
+- **Defect:** Requests for missing static assets (e.g. `/assets/does-not-exist.js` or `/missing.css`) returned HTTP 200 with `dist/index.html` (`text/html; charset=utf-8`).
+- **Root Cause:** The SPA fallback router in `src/server/index.ts` checked if the target file existed on disk. When it did not, execution unconditionally cascaded to the `dist/index.html` reader, treating missing asset files identically to unknown client-side SPA routes (e.g. `/contracts/123/schedule`). This caused browser MIME-type parse errors when browsers attempted to load missing scripts or stylesheets.
+
+### 8.2 Architectural Rectification
+Implemented `createProductionStaticFallback(distPath)` in [`src/server/index.ts`](file:///c:/Users/ADMIN/Downloads/milestoneproof-ai/src/server/index.ts):
+1. **Path Decoding & Normalization:** Decodes URI components (`decodeURIComponent`) and normalizes paths (`path.normalize`).
+2. **Directory Traversal Prevention:** Enforces strict containment (`targetFilePath === resolvedDistPath || targetFilePath.startsWith(resolvedDistPath + path.sep)`), returning HTTP 403 `FORBIDDEN` on escape attempts.
+3. **Existing File Streaming:** Existing files are streamed with exact MIME types (`application/javascript`, `text/css`, etc.) and HTTP 200.
+4. **Missing Asset 404 Guard:** If a file does not exist and the request either starts with `/assets/` or contains a file extension (`path.extname`), the server immediately returns HTTP 404 with `{ error: { code: 'STATIC_ASSET_NOT_FOUND' } }`, preventing silent HTML fallback.
+5. **SPA Navigation Fallback:** Paths without file extensions (e.g. `/contracts/123/schedule`) continue to return `dist/index.html` with HTTP 200 for client-side routing.
+
+### 8.3 Automated Regression Tests
+Added Subtest 6 in [`src/server/__tests__/phase8_integration.test.ts`](file:///c:/Users/ADMIN/Downloads/milestoneproof-ai/src/server/__tests__/phase8_integration.test.ts) covering all 7 critical scenarios over real HTTP requests:
+1. `Existing JS asset`: HTTP 200 with `application/javascript; charset=utf-8` — **PASS**
+2. `Existing CSS asset`: HTTP 200 with `text/css; charset=utf-8` — **PASS**
+3. `Missing JS asset (/assets/does-not-exist.js)`: HTTP 404 `STATIC_ASSET_NOT_FOUND` — **PASS**
+4. `Missing CSS asset (/assets/missing-theme.css)`: HTTP 404 `STATIC_ASSET_NOT_FOUND` — **PASS**
+5. `Unknown client SPA route (/contracts/cnt_test_404/schedule)`: HTTP 200 `text/html; charset=utf-8` — **PASS**
+6. `API health endpoint (/api/v1/health)`: HTTP 200 `application/json; charset=utf-8` — **PASS**
+7. `Path traversal attempt (/assets/../../package.json)`: HTTP 403/404, never leaks root files or serves HTML — **PASS**
+
+### 8.4 Bryntum Browser Verification Status
+- **Status:** **NOT VERIFIED IN BROWSER.**
+- **Reason:** In accordance with workspace instructions, no heavy browser automation framework (Playwright, Puppeteer) was installed. While TypeScript validation (`tsc --noEmit`) and Vite bundling (`vite build`) succeed with 0 errors, real browser DOM/SVG canvas rendering, interactive scrolling, and browser console activity remain unverified by automated browser drivers.
+
+### 8.5 Licensing Documentation & Transparency
+- **Installed Package:** `@bryntum/gantt-trial@7.3.8` (via npm package aliasing `@bryntum/gantt`).
+- **Bryntum EULA Terms:** Standard evaluation terms permit non-commercial testing and internal capability evaluation. Hackathons are not explicitly named in the EULA.
+- **Evaluation Watermark:** Preserved and active; no license bypassing or watermark stripping was attempted.
+- **Production Requirement:** Commercial deployment or public commercial distribution requires a purchased Bryntum license or explicit written permission.
+
+### 8.6 Final Test Suite Reconciliation
+- **Total Tests Passing:** **43 / 43 passed** across all 9 test suites (`phase1.test.ts` through `phase8_integration.test.ts`).
+- **Lint Check (`npm run lint`):** 0 errors.
+- **Production Build (`npm run build`):** Clean Vite production distribution.
+- **Overall Readiness:** **READY WITH KNOWN LIMITATIONS.**

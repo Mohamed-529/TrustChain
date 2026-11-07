@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createServerApp } from '../index.ts';
+import { createServerApp, createProductionStaticFallback } from '../index.ts';
 
 test('Phase 8.2 & 8.3 — Real Backend-to-Bryntum Integration, UI States & Invariants', async (t) => {
   const tempDbPath = path.resolve(process.cwd(), `test_p8_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.sqlite`);
@@ -246,5 +247,77 @@ test('Phase 8.2 & 8.3 — Real Backend-to-Bryntum Integration, UI States & Invar
     assert.ok(compSource.includes('baselinesFeature={{ disabled: false }}'));
     assert.ok(compSource.includes('dependenciesFeature={{ disabled: false }}'));
     assert.ok(compSource.includes('criticalPathsFeature={{ disabled: false }}'));
+  });
+
+  await t.test('6. Production Static Asset Serving & 404 Guard: verifies MIME types, missing assets, SPA fallback, traversal prevention', async () => {
+    const { app: testApp } = createServerApp({ dbPath: ':memory:' });
+    const distPath = path.resolve(process.cwd(), 'dist');
+    assert.ok(fs.existsSync(distPath), 'dist directory must exist');
+
+    testApp.useFallback(createProductionStaticFallback(distPath));
+
+    const server = http.createServer(testApp);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as any).port;
+    const base = `http://127.0.0.1:${port}`;
+
+    try {
+      const distAssets = fs.readdirSync(path.join(distPath, 'assets'));
+      const jsFile = distAssets.find((f) => f.endsWith('.js'))!;
+      const cssFile = distAssets.find((f) => f.endsWith('.css'))!;
+      assert.ok(jsFile, 'JS asset must exist in dist/assets');
+      assert.ok(cssFile, 'CSS asset must exist in dist/assets');
+
+      // 1. Existing JS asset
+      const resJs = await fetch(`${base}/assets/${jsFile}`);
+      assert.equal(resJs.status, 200);
+      assert.ok(resJs.headers.get('content-type')?.includes('application/javascript'));
+      await resJs.text();
+
+      // 2. Existing CSS asset
+      const resCss = await fetch(`${base}/assets/${cssFile}`);
+      assert.equal(resCss.status, 200);
+      assert.ok(resCss.headers.get('content-type')?.includes('text/css'));
+      await resCss.text();
+
+      // 3. Missing JS asset: 404 not index.html
+      const resMissingJs = await fetch(`${base}/assets/does-not-exist.js`);
+      assert.equal(resMissingJs.status, 404);
+      assert.ok(resMissingJs.headers.get('content-type')?.includes('application/json'));
+      const missingJsJson = (await resMissingJs.json()) as any;
+      assert.equal(missingJsJson.error.code, 'STATIC_ASSET_NOT_FOUND');
+
+      // 4. Missing CSS asset: 404 not index.html
+      const resMissingCss = await fetch(`${base}/assets/missing-theme.css`);
+      assert.equal(resMissingCss.status, 404);
+      assert.ok(resMissingCss.headers.get('content-type')?.includes('application/json'));
+      const missingCssJson = (await resMissingCss.json()) as any;
+      assert.equal(missingCssJson.error.code, 'STATIC_ASSET_NOT_FOUND');
+
+      // 5. Unknown SPA route: returns index.html
+      const resSpaRoute = await fetch(`${base}/contracts/cnt_test_404/schedule`);
+      assert.equal(resSpaRoute.status, 200);
+      assert.ok(resSpaRoute.headers.get('content-type')?.includes('text/html'));
+      const spaHtml = await resSpaRoute.text();
+      assert.ok(spaHtml.includes('<!doctype html>') || spaHtml.includes('<html'));
+
+      // 6. API health endpoint: unaffected
+      const resHealth = await fetch(`${base}/api/v1/health`);
+      assert.equal(resHealth.status, 200);
+      assert.ok(resHealth.headers.get('content-type')?.includes('application/json'));
+      const healthJson = (await resHealth.json()) as any;
+      assert.equal(healthJson.status, 'ok');
+
+      // 7. Path traversal attempt: rejected
+      const resTraversal = await fetch(`${base}/assets/../../package.json`);
+      assert.notEqual(resTraversal.status, 200, 'Must not return 200 on directory traversal');
+      assert.ok(resTraversal.status === 403 || resTraversal.status === 404);
+      assert.ok(resTraversal.headers.get('content-type')?.includes('application/json'));
+      await resTraversal.text();
+    } finally {
+      (server as any).closeAllConnections?.();
+      (server as any).closeIdleConnections?.();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
