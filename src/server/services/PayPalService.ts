@@ -15,6 +15,14 @@ import { AppError } from '../middleware/errorHandler.ts';
 export const PAYPAL_NON_ESCROW_DISCLOSURE =
   'PayPal Orders API v2 (intent: AUTHORIZE) places a temporary payment authorization hold (3-day honor period, up to 29-day validity window) and is NOT a regulated custodial escrow service.';
 
+export interface PayPalServiceOptions {
+  fetchImpl?: typeof fetch;
+  clientId?: string;
+  clientSecret?: string;
+  webhookId?: string;
+  apiBaseUrl?: string;
+}
+
 /**
  * Primary Sponsor Integration B — APIMatic & PayPal Orders API v2 Settlement Engine.
  *
@@ -43,6 +51,7 @@ export class PayPalService {
   private readonly paymentRepo: PaymentTransactionRepository;
   private readonly settlementPolicyService: SettlementPolicyService;
   private readonly auditService: AuditService;
+  private readonly options?: PayPalServiceOptions;
 
   constructor(
     db: AppDatabase,
@@ -52,7 +61,8 @@ export class PayPalService {
     approvalRepo: HumanApprovalRepository,
     paymentRepo: PaymentTransactionRepository,
     settlementPolicyService: SettlementPolicyService,
-    auditService: AuditService
+    auditService: AuditService,
+    options?: PayPalServiceOptions
   ) {
     this.db = db;
     this.contractRepo = contractRepo;
@@ -62,13 +72,36 @@ export class PayPalService {
     this.paymentRepo = paymentRepo;
     this.settlementPolicyService = settlementPolicyService;
     this.auditService = auditService;
+    this.options = options;
+  }
+
+  private getFetch(): typeof fetch {
+    return this.options?.fetchImpl ?? fetch;
+  }
+
+  private getClientId(): string | undefined {
+    return this.options?.clientId ?? process.env.PAYPAL_CLIENT_ID;
+  }
+
+  private getClientSecret(): string | undefined {
+    return this.options?.clientSecret ?? process.env.PAYPAL_CLIENT_SECRET;
+  }
+
+  private getApiBaseUrl(): string {
+    return (
+      this.options?.apiBaseUrl ??
+      process.env.PAYPAL_API_BASE_URL ??
+      'https://api-m.sandbox.paypal.com'
+    ).replace(/\/$/, '');
   }
 
   public isLivePayPalConfigured(): boolean {
+    const clientId = this.getClientId();
+    const clientSecret = this.getClientSecret();
     return Boolean(
-      process.env.PAYPAL_CLIENT_ID &&
-        process.env.PAYPAL_CLIENT_SECRET &&
-        process.env.PAYPAL_CLIENT_ID !== 'YOUR_PAYPAL_SANDBOX_CLIENT_ID'
+      clientId &&
+        clientSecret &&
+        clientId !== 'YOUR_PAYPAL_SANDBOX_CLIENT_ID'
     );
   }
 
@@ -92,19 +125,28 @@ export class PayPalService {
   }
 
   private async getLivePayPalAccessToken(): Promise<string> {
-    const clientId = process.env.PAYPAL_CLIENT_ID!;
-    const secret = process.env.PAYPAL_CLIENT_SECRET!;
-    const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
+    const clientId = this.getClientId()!;
+    const secret = this.getClientSecret()!;
+    const baseUrl = this.getApiBaseUrl();
     const basicAuth = Buffer.from(`${clientId}:${secret}`).toString('base64');
 
-    const res = await fetch(`${baseUrl}/v1/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=client_credentials',
-    });
+    let res: Response;
+    try {
+      res = await this.getFetch()(`${baseUrl}/v1/oauth2/token`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'grant_type=client_credentials',
+      });
+    } catch {
+      throw new AppError(
+        503,
+        'PAYPAL_SERVICE_UNAVAILABLE',
+        'PayPal Sandbox OAuth2 endpoint is unreachable.'
+      );
+    }
 
     if (!res.ok) {
       throw new AppError(
@@ -114,8 +156,105 @@ export class PayPalService {
       );
     }
 
-    const data = (await res.json()) as { access_token: string };
+    let data: { access_token?: string };
+    try {
+      data = (await res.json()) as { access_token?: string };
+    } catch {
+      throw new AppError(
+        422,
+        'MALFORMED_PAYPAL_OAUTH_RESPONSE',
+        'PayPal Sandbox OAuth2 response was not valid JSON.'
+      );
+    }
+    if (!data?.access_token || typeof data.access_token !== 'string') {
+      throw new AppError(
+        422,
+        'MALFORMED_PAYPAL_OAUTH_RESPONSE',
+        'PayPal Sandbox OAuth2 response is missing access_token.'
+      );
+    }
     return data.access_token;
+  }
+
+  /**
+   * Parses and validates the authoritative authorization ID (`purchase_units[0].payments.authorizations[0].id`)
+   * and optional expiration time from a live PayPal Orders API v2 `/authorize` response.
+   * Never falls back to a synthetic authorization ID.
+   */
+  public extractLiveAuthorizationFromOrderResponse(rawAuthResponse: unknown): {
+    paypalOrderId?: string;
+    paypalAuthorizationId: string;
+    expirationTimeIso?: string;
+  } {
+    if (!rawAuthResponse || typeof rawAuthResponse !== 'object' || Array.isArray(rawAuthResponse)) {
+      throw new AppError(
+        422,
+        'MALFORMED_PAYPAL_AUTHORIZATION_RESPONSE',
+        'PayPal Order authorize response is not a valid JSON object.'
+      );
+    }
+
+    const respObj = rawAuthResponse as Record<string, unknown>;
+    const purchaseUnits = respObj.purchase_units;
+    if (!Array.isArray(purchaseUnits) || purchaseUnits.length === 0) {
+      throw new AppError(
+        422,
+        'MALFORMED_PAYPAL_AUTHORIZATION_RESPONSE',
+        'PayPal Order authorize response is missing purchase_units[].'
+      );
+    }
+
+    const firstUnit = purchaseUnits[0] as Record<string, unknown> | undefined;
+    const payments =
+      firstUnit && typeof firstUnit.payments === 'object' && firstUnit.payments !== null
+        ? (firstUnit.payments as Record<string, unknown>)
+        : null;
+    const authorizations = payments && Array.isArray(payments.authorizations)
+      ? payments.authorizations
+      : null;
+
+    if (!authorizations || authorizations.length === 0) {
+      throw new AppError(
+        422,
+        'MISSING_PAYPAL_AUTHORIZATION_ID',
+        'PayPal Order authorize response does not contain purchase_units[0].payments.authorizations[0].'
+      );
+    }
+
+    const firstAuth = authorizations[0] as Record<string, unknown> | undefined;
+    const authId = typeof firstAuth?.id === 'string' ? firstAuth.id.trim() : '';
+    if (!authId) {
+      throw new AppError(
+        422,
+        'MISSING_PAYPAL_AUTHORIZATION_ID',
+        'PayPal Order authorize response returned an empty or missing authorization id.'
+      );
+    }
+
+    const authStatus = typeof firstAuth?.status === 'string' ? firstAuth.status.toUpperCase() : '';
+    if (authStatus === 'DENIED' || authStatus === 'VOIDED' || authStatus === 'EXPIRED') {
+      throw new AppError(
+        422,
+        'PAYPAL_AUTHORIZATION_NOT_ACTIVE',
+        `PayPal Authorization '${authId}' was returned in non-active status '${authStatus}'.`
+      );
+    }
+
+    const expirationTimeIso =
+      typeof firstAuth?.expiration_time === 'string' && firstAuth.expiration_time.trim().length > 0
+        ? firstAuth.expiration_time.trim()
+        : undefined;
+
+    const paypalOrderId =
+      typeof respObj.id === 'string' && respObj.id.trim().length > 0
+        ? respObj.id.trim()
+        : undefined;
+
+    return {
+      paypalOrderId,
+      paypalAuthorizationId: authId,
+      expirationTimeIso,
+    };
   }
 
   /**
@@ -197,8 +336,8 @@ export class PayPalService {
 
     if (isLive) {
       const token = await this.getLivePayPalAccessToken();
-      const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
-      const orderRes = await fetch(`${baseUrl}/v2/checkout/orders`, {
+      const baseUrl = this.getApiBaseUrl();
+      const orderRes = await this.getFetch()(`${baseUrl}/v2/checkout/orders`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -229,8 +368,25 @@ export class PayPalService {
           `PayPal Orders API v2 returned HTTP ${orderRes.status}: ${errText}`
         );
       }
-      const orderJson = (await orderRes.json()) as Record<string, unknown>;
-      paypalOrderId = String(orderJson.id);
+      let orderJson: Record<string, unknown>;
+      try {
+        orderJson = (await orderRes.json()) as Record<string, unknown>;
+      } catch {
+        throw new AppError(
+          422,
+          'MALFORMED_PAYPAL_ORDER_RESPONSE',
+          'PayPal Orders API v2 createOrder response was not valid JSON.'
+        );
+      }
+      const liveOrderId = typeof orderJson?.id === 'string' ? orderJson.id.trim() : '';
+      if (!liveOrderId) {
+        throw new AppError(
+          422,
+          'MISSING_PAYPAL_ORDER_ID',
+          'PayPal Orders API v2 response is missing a valid order id.'
+        );
+      }
+      paypalOrderId = liveOrderId;
       rawPaypalResponse = orderJson;
     }
 
@@ -349,47 +505,28 @@ export class PayPalService {
     const now = new Date();
     const nowIso = now.toISOString();
     // PayPal authorization validity window is 29 days
-    const expiresAtIso = new Date(now.getTime() + 29 * 24 * 60 * 60 * 1000).toISOString();
+    let expiresAtIso = new Date(now.getTime() + 29 * 24 * 60 * 60 * 1000).toISOString();
     const isLive = this.isLivePayPalConfigured();
 
-    let paypalAuthorizationId = `AUTH-MPAI-${crypto.createHash('sha256').update(`${targetOrderId}:${idempotencyKey}`).digest('hex').slice(0, 12).toUpperCase()}`;
-    let rawAuthResponse: Record<string, unknown> = {
-      id: targetOrderId,
-      status: 'COMPLETED',
-      purchase_units: [
-        {
-          reference_id: milestone.id,
-          payments: {
-            authorizations: [
-              {
-                id: paypalAuthorizationId,
-                status: 'CREATED',
-                amount: {
-                  currency_code: 'USD',
-                  value: this.centsToUsdString(milestone.agreedAmountCents),
-                },
-                expiration_time: expiresAtIso,
-                create_time: nowIso,
-              },
-            ],
-          },
-        },
-      ],
-      nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
-    };
+    let persistedOrderId = targetOrderId;
+    let paypalAuthorizationId: string;
+    let rawAuthResponse: Record<string, unknown>;
 
     if (isLive) {
       const token = await this.getLivePayPalAccessToken();
-      const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
-      const authRes = await fetch(`${baseUrl}/v2/checkout/orders/${targetOrderId}/authorize`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'PayPal-Request-Id': idempotencyKey,
-        },
-        body: JSON.stringify({}),
-      });
+      const baseUrl = this.getApiBaseUrl();
+      const authRes = await this.getFetch()(
+        `${baseUrl}/v2/checkout/orders/${encodeURIComponent(targetOrderId)}/authorize`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'PayPal-Request-Id': idempotencyKey,
+          },
+          body: JSON.stringify({}),
+        }
+      );
 
       if (!authRes.ok) {
         const errText = await authRes.text();
@@ -399,7 +536,58 @@ export class PayPalService {
           `PayPal Order authorize returned HTTP ${authRes.status}: ${errText}`
         );
       }
-      rawAuthResponse = (await authRes.json()) as Record<string, unknown>;
+
+      let parsedJson: unknown;
+      try {
+        parsedJson = await authRes.json();
+      } catch {
+        throw new AppError(
+          422,
+          'MALFORMED_PAYPAL_AUTHORIZATION_RESPONSE',
+          'PayPal Order authorize response was not valid JSON.'
+        );
+      }
+
+      const extracted = this.extractLiveAuthorizationFromOrderResponse(parsedJson);
+      paypalAuthorizationId = extracted.paypalAuthorizationId;
+      if (extracted.paypalOrderId) {
+        persistedOrderId = extracted.paypalOrderId;
+      }
+      if (extracted.expirationTimeIso) {
+        expiresAtIso = extracted.expirationTimeIso;
+      }
+      rawAuthResponse = parsedJson as Record<string, unknown>;
+    } else {
+      paypalAuthorizationId = `AUTH-MPAI-${crypto
+        .createHash('sha256')
+        .update(`${targetOrderId}:${idempotencyKey}`)
+        .digest('hex')
+        .slice(0, 12)
+        .toUpperCase()}`;
+      rawAuthResponse = {
+        id: targetOrderId,
+        status: 'COMPLETED',
+        purchase_units: [
+          {
+            reference_id: milestone.id,
+            payments: {
+              authorizations: [
+                {
+                  id: paypalAuthorizationId,
+                  status: 'CREATED',
+                  amount: {
+                    currency_code: 'USD',
+                    value: this.centsToUsdString(milestone.agreedAmountCents),
+                  },
+                  expiration_time: expiresAtIso,
+                  create_time: nowIso,
+                },
+              ],
+            },
+          },
+        ],
+        nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+      };
     }
 
     return this.db.withTransaction(() => {
@@ -407,7 +595,7 @@ export class PayPalService {
         id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
         milestoneId: milestone.id,
         approvalId: null,
-        paypalOrderId: targetOrderId,
+        paypalOrderId: persistedOrderId,
         paypalAuthorizationId,
         paypalCaptureId: null,
         idempotencyKey,
@@ -436,7 +624,7 @@ export class PayPalService {
         previousState: milestone.paymentStatus,
         newState: 'AUTHORIZED',
         payload: {
-          paypalOrderId: targetOrderId,
+          paypalOrderId: persistedOrderId,
           paypalAuthorizationId,
           authorizedAmountCents: milestone.agreedAmountCents,
           authExpiresAt: expiresAtIso,
@@ -601,31 +789,18 @@ export class PayPalService {
 
     const isLive = this.isLivePayPalConfigured();
     const captureUsd = this.centsToUsdString(captureCents);
-    let paypalCaptureId = `CAP-MPAI-${crypto.createHash('sha256').update(`${latestTx.paypalAuthorizationId}:${idempotencyKey}`).digest('hex').slice(0, 12).toUpperCase()}`;
+    let paypalCaptureId: string;
 
     const isPartialCapture = captureCents < latestTx.authorizedAmountCents;
     const txStatus = isPartialCapture ? 'PARTIALLY_CAPTURED_VOIDED' : 'CAPTURED';
 
-    let rawCaptureResponse: Record<string, unknown> = {
-      id: paypalCaptureId,
-      status: 'COMPLETED',
-      final_capture: true,
-      amount: {
-        currency_code: 'USD',
-        value: captureUsd,
-      },
-      invoice_id: `${contract.id}_${milestone.id}`,
-      custom_id: latestApproval.id,
-      create_time: nowIso,
-      update_time: nowIso,
-      nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
-    };
+    let rawCaptureResponse: Record<string, unknown>;
 
     if (isLive) {
       const token = await this.getLivePayPalAccessToken();
-      const baseUrl = process.env.PAYPAL_API_BASE_URL ?? 'https://api-m.sandbox.paypal.com';
-      const capRes = await fetch(
-        `${baseUrl}/v2/payments/authorizations/${latestTx.paypalAuthorizationId}/capture`,
+      const baseUrl = this.getApiBaseUrl();
+      const capRes = await this.getFetch()(
+        `${baseUrl}/v2/payments/authorizations/${encodeURIComponent(latestTx.paypalAuthorizationId)}/capture`,
         {
           method: 'POST',
           headers: {
@@ -654,8 +829,56 @@ export class PayPalService {
         );
       }
 
-      rawCaptureResponse = (await capRes.json()) as Record<string, unknown>;
-      paypalCaptureId = String(rawCaptureResponse.id ?? paypalCaptureId);
+      let parsedCap: Record<string, unknown>;
+      try {
+        parsedCap = (await capRes.json()) as Record<string, unknown>;
+      } catch {
+        throw new AppError(
+          422,
+          'MALFORMED_PAYPAL_CAPTURE_RESPONSE',
+          'PayPal Authorizations Capture API v2 response was not valid JSON.'
+        );
+      }
+      const liveCaptureId = typeof parsedCap?.id === 'string' ? parsedCap.id.trim() : '';
+      if (!liveCaptureId) {
+        throw new AppError(
+          422,
+          'MISSING_PAYPAL_CAPTURE_ID',
+          'PayPal Authorizations Capture API v2 response is missing capture id.'
+        );
+      }
+      const capStatus = typeof parsedCap?.status === 'string' ? parsedCap.status.toUpperCase() : '';
+      if (capStatus === 'DECLINED' || capStatus === 'FAILED') {
+        throw new AppError(
+          422,
+          'PAYPAL_CAPTURE_DECLINED',
+          `PayPal Capture '${liveCaptureId}' failed with status '${capStatus}'.`
+        );
+      }
+
+      rawCaptureResponse = parsedCap;
+      paypalCaptureId = liveCaptureId;
+    } else {
+      paypalCaptureId = `CAP-MPAI-${crypto
+        .createHash('sha256')
+        .update(`${latestTx.paypalAuthorizationId}:${idempotencyKey}`)
+        .digest('hex')
+        .slice(0, 12)
+        .toUpperCase()}`;
+      rawCaptureResponse = {
+        id: paypalCaptureId,
+        status: 'COMPLETED',
+        final_capture: true,
+        amount: {
+          currency_code: 'USD',
+          value: captureUsd,
+        },
+        invoice_id: `${contract.id}_${milestone.id}`,
+        custom_id: latestApproval.id,
+        create_time: nowIso,
+        update_time: nowIso,
+        nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+      };
     }
 
     return this.db.withTransaction(() => {

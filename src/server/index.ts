@@ -25,7 +25,7 @@ import {
 import { SettlementPolicyService } from './services/SettlementPolicyService.ts';
 import { HumanReviewService } from './services/HumanReviewService.ts';
 import { ScheduleControlTowerService } from './services/ScheduleControlTowerService.ts';
-import { PayPalService } from './services/PayPalService.ts';
+import { PayPalService, type PayPalServiceOptions } from './services/PayPalService.ts';
 import { AuthController } from './controllers/AuthController.ts';
 import { ContractController } from './controllers/ContractController.ts';
 import { EvidenceController } from './controllers/EvidenceController.ts';
@@ -301,6 +301,7 @@ export function createServerApp(options?: {
   dbPath?: string;
   authOptions?: AuthServiceOptions;
   evaluatorProvider?: MultiAgentEvaluatorProvider;
+  paypalOptions?: PayPalServiceOptions;
 }): ServerContainer {
   const db = new AppDatabase(options?.dbPath);
   const userRepo = new UserRepository(db.raw);
@@ -384,7 +385,8 @@ export function createServerApp(options?: {
     approvalRepo,
     paymentRepo,
     settlementPolicyService,
-    auditService
+    auditService,
+    options?.paypalOptions
   );
 
   const authController = new AuthController(authService);
