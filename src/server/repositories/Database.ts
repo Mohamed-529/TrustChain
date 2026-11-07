@@ -377,6 +377,98 @@ export class AppDatabase {
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(3, '003_phase6_paypal_webhook_idempotency', new Date().toISOString());
     });
+
+    this.runPhase7ProvenanceMigrations();
+  }
+
+  private runPhase7ProvenanceMigrations(): void {
+    const existingV4 = this.raw
+      .prepare('SELECT version FROM schema_migrations WHERE version = 4')
+      .get() as { version: number } | undefined;
+    if (existingV4) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      const evCols = this.raw
+        .prepare('PRAGMA table_info(evidence_submissions)')
+        .all() as Array<{ name: string }>;
+      const colNames = new Set(evCols.map((c) => c.name));
+
+      if (!colNames.has('payload_sha256')) {
+        this.raw.exec(
+          'ALTER TABLE evidence_submissions ADD COLUMN payload_sha256 TEXT NULL;'
+        );
+      }
+      if (!colNames.has('provenance_status')) {
+        this.raw.exec(
+          "ALTER TABLE evidence_submissions ADD COLUMN provenance_status TEXT NOT NULL DEFAULT 'UNVERIFIED_UNAVAILABLE';"
+        );
+      }
+
+      this.raw.exec(`
+        CREATE TABLE IF NOT EXISTS evidence_provenance_verifications (
+          id TEXT PRIMARY KEY,
+          submission_id TEXT NOT NULL REFERENCES evidence_submissions(id) ON DELETE RESTRICT,
+          milestone_id TEXT NOT NULL REFERENCES milestones(id) ON DELETE RESTRICT,
+          contract_id TEXT NOT NULL REFERENCES contracts(id) ON DELETE RESTRICT,
+          verification_mode TEXT NOT NULL CHECK (
+            verification_mode IN ('GITHUB_REST_API', 'UNCONFIGURED_UNAVAILABLE')
+          ),
+          overall_status TEXT NOT NULL CHECK (
+            overall_status IN (
+              'VERIFIED',
+              'MISMATCH_DETECTED',
+              'PARTIALLY_VERIFIED',
+              'UNVERIFIED_UNAVAILABLE',
+              'TAMPERED_PAYLOAD'
+            )
+          ),
+          eligible_for_boundary_review INTEGER NOT NULL CHECK (
+            eligible_for_boundary_review IN (0, 1)
+          ),
+          blocking_reasons_json TEXT NOT NULL DEFAULT '[]',
+          discrepancies_json TEXT NOT NULL DEFAULT '[]',
+          integrity_json TEXT NOT NULL,
+          repository_json TEXT NOT NULL,
+          commit_json TEXT NOT NULL,
+          pull_request_json TEXT NOT NULL,
+          workflow_run_json TEXT NOT NULL,
+          verified_by TEXT NOT NULL,
+          verified_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_provenance_submission_id
+          ON evidence_provenance_verifications(submission_id);
+        CREATE INDEX IF NOT EXISTS idx_provenance_milestone_id
+          ON evidence_provenance_verifications(milestone_id);
+
+        CREATE TABLE IF NOT EXISTS github_webhook_events (
+          delivery_id TEXT PRIMARY KEY,
+          event_type TEXT NOT NULL,
+          action TEXT NULL,
+          repository_full_name TEXT NULL,
+          commit_sha TEXT NULL,
+          signature_status TEXT NOT NULL CHECK (
+            signature_status IN ('SUCCESS', 'FAILURE', 'UNVERIFIED')
+          ),
+          processing_status TEXT NOT NULL CHECK (
+            processing_status IN ('PROCESSING', 'PROCESSED', 'FAILED', 'REJECTED')
+          ),
+          processing_result TEXT NULL,
+          matched_submission_id TEXT NULL,
+          payload_sha256 TEXT NOT NULL,
+          error_message TEXT NULL,
+          received_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_github_webhook_events_status
+          ON github_webhook_events(processing_status);
+      `);
+
+      this.raw
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+        .run(4, '004_phase7_evidence_provenance_and_github_verification', new Date().toISOString());
+    });
   }
 
   private seedIfEmpty(): void {

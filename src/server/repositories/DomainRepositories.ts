@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
   AcceptanceCriterion,
@@ -8,8 +9,18 @@ import type {
   ContractStatus,
   EvaluationRun,
   EvidenceAnalysis,
+  EvidenceIntegrityVerification,
+  EvidenceProvenanceStatus,
+  EvidenceProvenanceVerificationRecord,
   EvidenceReference,
   EvidenceSubmission,
+  GitHubCommitVerification,
+  GitHubPullRequestVerification,
+  GitHubRepositoryVerification,
+  GitHubWebhookEventRecord,
+  GitHubWebhookProcessingStatus,
+  GitHubWebhookSignatureStatus,
+  GitHubWorkflowRunVerification,
   HumanApprovalRecord,
   HumanReviewDecision,
   Milestone,
@@ -398,6 +409,60 @@ export function buildCanonicalEvidenceReferences(submission: {
   ];
 }
 
+export function computeEvidencePayloadSha256(submission: {
+  milestoneId: string;
+  attemptNumber: number;
+  submittedBy: string;
+  repoUrl: string;
+  branch: string;
+  commitSha: string;
+  prUrl: string;
+  prStatus: 'MERGED' | 'OPEN' | 'CLOSED';
+  ciReport: CiExecutionReport;
+  securityScan: SecurityScanReport;
+  developerNotes: string;
+}): string {
+  const canonicalObj = {
+    milestoneId: submission.milestoneId,
+    attemptNumber: submission.attemptNumber,
+    submittedBy: submission.submittedBy,
+    repoUrl: submission.repoUrl.trim(),
+    branch: submission.branch.trim(),
+    commitSha: submission.commitSha.trim().toLowerCase(),
+    prUrl: submission.prUrl.trim(),
+    prStatus: submission.prStatus,
+    ciReport: {
+      provider: submission.ciReport.provider,
+      runUrl: submission.ciReport.runUrl ?? null,
+      status: submission.ciReport.status,
+      totalTests: Number(submission.ciReport.totalTests),
+      passedTests: Number(submission.ciReport.passedTests),
+      failedTests: Number(submission.ciReport.failedTests),
+      coveragePct: Number(submission.ciReport.coveragePct),
+      changedFiles: submission.ciReport.changedFiles ?? [],
+      logSummary: submission.ciReport.logSummary,
+    },
+    securityScan: {
+      scanner: submission.securityScan.scanner,
+      scannerVersion: submission.securityScan.scannerVersion,
+      status: submission.securityScan.status,
+      findings: submission.securityScan.findings.map((f) => ({
+        id: f.id,
+        packageName: f.packageName,
+        severity: f.severity,
+        cvssScore: Number(f.cvssScore),
+        description: f.description,
+      })),
+    },
+    developerNotes: submission.developerNotes ?? '',
+  };
+
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(canonicalObj))
+    .digest('hex');
+}
+
 export class EvidenceRepository {
   private readonly rawDb: DatabaseSync;
 
@@ -407,6 +472,9 @@ export class EvidenceRepository {
 
   private mapRow(row: Record<string, unknown>): EvidenceSubmission {
     const id = String(row.id);
+    const milestoneId = String(row.milestone_id);
+    const attemptNumber = Number(row.attempt_number);
+    const submittedBy = String(row.submitted_by);
     const repoUrl = String(row.repo_url);
     const branch = String(row.branch);
     const commitSha = String(row.commit_sha);
@@ -414,12 +482,32 @@ export class EvidenceRepository {
     const prStatus = String(row.pr_status) as 'MERGED' | 'OPEN' | 'CLOSED';
     const ciReport = JSON.parse(String(row.ci_report_json)) as CiExecutionReport;
     const securityScan = JSON.parse(String(row.security_scan_json)) as SecurityScanReport;
+    const developerNotes = String(row.developer_notes ?? '');
+    const storedHash =
+      row.payload_sha256 && String(row.payload_sha256).trim().length > 0
+        ? String(row.payload_sha256)
+        : computeEvidencePayloadSha256({
+            milestoneId,
+            attemptNumber,
+            submittedBy,
+            repoUrl,
+            branch,
+            commitSha,
+            prUrl,
+            prStatus,
+            ciReport,
+            securityScan,
+            developerNotes,
+          });
+    const provenanceStatus = (row.provenance_status
+      ? String(row.provenance_status)
+      : 'UNVERIFIED_UNAVAILABLE') as EvidenceProvenanceStatus;
 
     return {
       id,
-      milestoneId: String(row.milestone_id),
-      attemptNumber: Number(row.attempt_number),
-      submittedBy: String(row.submitted_by),
+      milestoneId,
+      attemptNumber,
+      submittedBy,
       repoUrl,
       branch,
       commitSha,
@@ -427,8 +515,10 @@ export class EvidenceRepository {
       prStatus,
       ciReport,
       securityScan,
-      developerNotes: String(row.developer_notes ?? ''),
+      developerNotes,
       submittedAt: String(row.submitted_at),
+      payloadSha256: storedHash,
+      provenanceStatus,
       canonicalReferences: buildCanonicalEvidenceReferences({
         id,
         repoUrl,
@@ -467,6 +557,16 @@ export class EvidenceRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  public findByCommitSha(commitSha: string): EvidenceSubmission | null {
+    const normalized = commitSha.trim().toLowerCase();
+    const row = this.rawDb
+      .prepare(
+        'SELECT * FROM evidence_submissions WHERE lower(commit_sha) = ? ORDER BY submitted_at DESC LIMIT 1'
+      )
+      .get(normalized);
+    return row ? this.mapRow(row) : null;
+  }
+
   public getNextAttemptNumber(milestoneId: string): number {
     const row = this.rawDb
       .prepare(
@@ -477,13 +577,30 @@ export class EvidenceRepository {
   }
 
   public insert(submission: EvidenceSubmission): void {
+    const payloadSha256 =
+      submission.payloadSha256 ??
+      computeEvidencePayloadSha256({
+        milestoneId: submission.milestoneId,
+        attemptNumber: submission.attemptNumber,
+        submittedBy: submission.submittedBy,
+        repoUrl: submission.repoUrl,
+        branch: submission.branch,
+        commitSha: submission.commitSha,
+        prUrl: submission.prUrl,
+        prStatus: submission.prStatus,
+        ciReport: submission.ciReport,
+        securityScan: submission.securityScan,
+        developerNotes: submission.developerNotes,
+      });
+    const provenanceStatus = submission.provenanceStatus ?? 'UNVERIFIED_UNAVAILABLE';
+
     this.rawDb
       .prepare(
         `INSERT INTO evidence_submissions (
           id, milestone_id, attempt_number, submitted_by, repo_url, branch,
           commit_sha, pr_url, pr_status, ci_report_json, security_scan_json,
-          developer_notes, submitted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          developer_notes, submitted_at, payload_sha256, provenance_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         submission.id,
@@ -498,8 +615,19 @@ export class EvidenceRepository {
         JSON.stringify(submission.ciReport),
         JSON.stringify(submission.securityScan),
         submission.developerNotes,
-        submission.submittedAt
+        submission.submittedAt,
+        payloadSha256,
+        provenanceStatus
       );
+  }
+
+  public updateProvenanceStatus(
+    submissionId: string,
+    provenanceStatus: EvidenceProvenanceStatus
+  ): void {
+    this.rawDb
+      .prepare('UPDATE evidence_submissions SET provenance_status = ? WHERE id = ?')
+      .run(provenanceStatus, submissionId);
   }
 }
 
@@ -1010,4 +1138,196 @@ export class WebhookEventRepository {
       );
   }
 }
+
+export class EvidenceProvenanceRepository {
+  private readonly rawDb: DatabaseSync;
+
+  constructor(rawDb: DatabaseSync) {
+    this.rawDb = rawDb;
+  }
+
+  private mapRow(row: Record<string, unknown>): EvidenceProvenanceVerificationRecord {
+    return {
+      id: String(row.id),
+      submissionId: String(row.submission_id),
+      milestoneId: String(row.milestone_id),
+      contractId: String(row.contract_id),
+      verificationMode: String(row.verification_mode) as
+        | 'GITHUB_REST_API'
+        | 'UNCONFIGURED_UNAVAILABLE',
+      overallStatus: String(row.overall_status) as EvidenceProvenanceStatus,
+      eligibleForBoundaryReview: Number(row.eligible_for_boundary_review) === 1,
+      blockingReasons: JSON.parse(String(row.blocking_reasons_json ?? '[]')) as string[],
+      discrepancies: JSON.parse(String(row.discrepancies_json ?? '[]')) as string[],
+      integrity: JSON.parse(String(row.integrity_json)) as EvidenceIntegrityVerification,
+      repository: JSON.parse(String(row.repository_json)) as GitHubRepositoryVerification,
+      commit: JSON.parse(String(row.commit_json)) as GitHubCommitVerification,
+      pullRequest: JSON.parse(String(row.pull_request_json)) as GitHubPullRequestVerification,
+      workflowRun: JSON.parse(String(row.workflow_run_json)) as GitHubWorkflowRunVerification,
+      verifiedBy: String(row.verified_by),
+      verifiedAt: String(row.verified_at),
+    };
+  }
+
+  public findLatestBySubmissionId(
+    submissionId: string
+  ): EvidenceProvenanceVerificationRecord | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT * FROM evidence_provenance_verifications WHERE submission_id = ? ORDER BY verified_at DESC LIMIT 1'
+      )
+      .get(submissionId) as Record<string, unknown> | undefined;
+    return row ? this.mapRow(row) : null;
+  }
+
+  public findLatestByMilestoneId(
+    milestoneId: string
+  ): EvidenceProvenanceVerificationRecord | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT * FROM evidence_provenance_verifications WHERE milestone_id = ? ORDER BY verified_at DESC LIMIT 1'
+      )
+      .get(milestoneId) as Record<string, unknown> | undefined;
+    return row ? this.mapRow(row) : null;
+  }
+
+  public listByMilestoneId(milestoneId: string): EvidenceProvenanceVerificationRecord[] {
+    const rows = this.rawDb
+      .prepare(
+        'SELECT * FROM evidence_provenance_verifications WHERE milestone_id = ? ORDER BY verified_at DESC'
+      )
+      .all(milestoneId) as Array<Record<string, unknown>>;
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  public insert(record: EvidenceProvenanceVerificationRecord): void {
+    this.rawDb
+      .prepare(
+        `INSERT INTO evidence_provenance_verifications (
+          id, submission_id, milestone_id, contract_id, verification_mode,
+          overall_status, eligible_for_boundary_review, blocking_reasons_json,
+          discrepancies_json, integrity_json, repository_json, commit_json,
+          pull_request_json, workflow_run_json, verified_by, verified_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        record.id,
+        record.submissionId,
+        record.milestoneId,
+        record.contractId,
+        record.verificationMode,
+        record.overallStatus,
+        record.eligibleForBoundaryReview ? 1 : 0,
+        JSON.stringify(record.blockingReasons),
+        JSON.stringify(record.discrepancies),
+        JSON.stringify(record.integrity),
+        JSON.stringify(record.repository),
+        JSON.stringify(record.commit),
+        JSON.stringify(record.pullRequest),
+        JSON.stringify(record.workflowRun),
+        record.verifiedBy,
+        record.verifiedAt
+      );
+  }
+}
+
+export class GitHubWebhookEventRepository {
+  private readonly rawDb: DatabaseSync;
+
+  constructor(rawDb: DatabaseSync) {
+    this.rawDb = rawDb;
+  }
+
+  private mapRow(row: Record<string, unknown>): GitHubWebhookEventRecord {
+    return {
+      deliveryId: String(row.delivery_id),
+      eventType: String(row.event_type),
+      action: row.action ? String(row.action) : null,
+      repositoryFullName: row.repository_full_name ? String(row.repository_full_name) : null,
+      commitSha: row.commit_sha ? String(row.commit_sha) : null,
+      signatureStatus: String(row.signature_status) as GitHubWebhookSignatureStatus,
+      processingStatus: String(row.processing_status) as GitHubWebhookProcessingStatus,
+      processingResult: row.processing_result ? String(row.processing_result) : null,
+      matchedSubmissionId: row.matched_submission_id ? String(row.matched_submission_id) : null,
+      payloadSha256: String(row.payload_sha256),
+      errorMessage: row.error_message ? String(row.error_message) : null,
+      receivedAt: String(row.received_at),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  public findByDeliveryId(deliveryId: string): GitHubWebhookEventRecord | null {
+    const row = this.rawDb
+      .prepare('SELECT * FROM github_webhook_events WHERE delivery_id = ?')
+      .get(deliveryId) as Record<string, unknown> | undefined;
+    return row ? this.mapRow(row) : null;
+  }
+
+  public listAll(): GitHubWebhookEventRecord[] {
+    const rows = this.rawDb
+      .prepare('SELECT * FROM github_webhook_events ORDER BY received_at DESC')
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  public create(record: GitHubWebhookEventRecord): void {
+    this.rawDb
+      .prepare(
+        `INSERT INTO github_webhook_events (
+          delivery_id, event_type, action, repository_full_name, commit_sha,
+          signature_status, processing_status, processing_result,
+          matched_submission_id, payload_sha256, error_message, received_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        record.deliveryId,
+        record.eventType,
+        record.action,
+        record.repositoryFullName,
+        record.commitSha,
+        record.signatureStatus,
+        record.processingStatus,
+        record.processingResult,
+        record.matchedSubmissionId,
+        record.payloadSha256,
+        record.errorMessage,
+        record.receivedAt,
+        record.updatedAt
+      );
+  }
+
+  public update(record: GitHubWebhookEventRecord): void {
+    this.rawDb
+      .prepare(
+        `UPDATE github_webhook_events SET
+          event_type = ?,
+          action = ?,
+          repository_full_name = ?,
+          commit_sha = ?,
+          signature_status = ?,
+          processing_status = ?,
+          processing_result = ?,
+          matched_submission_id = ?,
+          payload_sha256 = ?,
+          error_message = ?,
+          updated_at = ?
+        WHERE delivery_id = ?`
+      )
+      .run(
+        record.eventType,
+        record.action,
+        record.repositoryFullName,
+        record.commitSha,
+        record.signatureStatus,
+        record.processingStatus,
+        record.processingResult,
+        record.matchedSubmissionId,
+        record.payloadSha256,
+        record.errorMessage,
+        record.updatedAt,
+        record.deliveryId
+      );
+  }
+}
+
 

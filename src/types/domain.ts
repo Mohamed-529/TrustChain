@@ -245,6 +245,8 @@ export interface EvidenceSubmission {
   securityScan: SecurityScanReport;
   developerNotes: string;
   submittedAt: string;
+  payloadSha256?: string;
+  provenanceStatus?: EvidenceProvenanceStatus;
   canonicalReferences?: EvidenceReference[];
 }
 
@@ -614,6 +616,133 @@ export interface PayPalWebhookEventRecord {
   receivedAt: string;
   updatedAt: string;
 }
+
+/**
+ * ============================================================================
+ * PHASE 7 — Evidence Provenance & Independent GitHub Verification
+ * ============================================================================
+ */
+
+export type EvidenceProvenanceStatus =
+  | 'VERIFIED'
+  | 'MISMATCH_DETECTED'
+  | 'PARTIALLY_VERIFIED'
+  | 'UNVERIFIED_UNAVAILABLE'
+  | 'TAMPERED_PAYLOAD';
+
+export type GitHubArtifactVerificationState =
+  | 'VERIFIED'
+  | 'MISMATCH'
+  | 'NOT_FOUND'
+  | 'UNAVAILABLE'
+  | 'NOT_APPLICABLE';
+
+export interface GitHubRepositoryVerification {
+  status: GitHubArtifactVerificationState;
+  owner: string;
+  repo: string;
+  canonicalFullName: string | null;
+  repositoryId: number | null;
+  visibility: string | null;
+  defaultBranch: string | null;
+  htmlUrl: string | null;
+  details: string;
+}
+
+export interface GitHubCommitVerification {
+  status: GitHubArtifactVerificationState;
+  submittedSha: string;
+  canonicalSha: string | null;
+  belongsToRepository: boolean;
+  authorLogin: string | null;
+  committerDate: string | null;
+  messageHeadline: string | null;
+  changedFiles: string[];
+  changedFilesMatchSubmitted: boolean;
+  htmlUrl: string | null;
+  details: string;
+}
+
+export interface GitHubPullRequestVerification {
+  status: GitHubArtifactVerificationState;
+  prNumber: number | null;
+  belongsToRepository: boolean;
+  state: 'open' | 'closed' | null;
+  merged: boolean | null;
+  actualPrStatus: 'MERGED' | 'OPEN' | 'CLOSED' | null;
+  statusMatchesSubmitted: boolean;
+  headSha: string | null;
+  mergeCommitSha: string | null;
+  referencesSubmittedCommit: boolean;
+  baseRef: string | null;
+  headRef: string | null;
+  htmlUrl: string | null;
+  details: string;
+}
+
+export interface GitHubWorkflowRunVerification {
+  status: GitHubArtifactVerificationState;
+  runId: number | null;
+  workflowName: string | null;
+  runStatus: string | null;
+  conclusion: string | null;
+  headSha: string | null;
+  matchesSubmittedCommit: boolean;
+  statusMatchesSubmittedCi: boolean;
+  htmlUrl: string | null;
+  details: string;
+}
+
+export interface EvidenceIntegrityVerification {
+  payloadHashMatches: boolean;
+  expectedPayloadSha256: string;
+  actualPayloadSha256: string;
+  details: string;
+}
+
+export interface EvidenceProvenanceVerificationRecord {
+  id: string;
+  submissionId: string;
+  milestoneId: string;
+  contractId: string;
+  verificationMode: 'GITHUB_REST_API' | 'UNCONFIGURED_UNAVAILABLE';
+  overallStatus: EvidenceProvenanceStatus;
+  eligibleForBoundaryReview: boolean;
+  blockingReasons: string[];
+  discrepancies: string[];
+  integrity: EvidenceIntegrityVerification;
+  repository: GitHubRepositoryVerification;
+  commit: GitHubCommitVerification;
+  pullRequest: GitHubPullRequestVerification;
+  workflowRun: GitHubWorkflowRunVerification;
+  verifiedBy: string;
+  verifiedAt: string;
+}
+
+export type GitHubWebhookSignatureStatus = 'SUCCESS' | 'FAILURE' | 'UNVERIFIED';
+
+export type GitHubWebhookProcessingStatus =
+  | 'PROCESSING'
+  | 'PROCESSED'
+  | 'FAILED'
+  | 'REJECTED';
+
+export interface GitHubWebhookEventRecord {
+  deliveryId: string;
+  eventType: string;
+  action: string | null;
+  repositoryFullName: string | null;
+  commitSha: string | null;
+  signatureStatus: GitHubWebhookSignatureStatus;
+  processingStatus: GitHubWebhookProcessingStatus;
+  processingResult: string | null;
+  matchedSubmissionId: string | null;
+  payloadSha256: string;
+  errorMessage: string | null;
+  receivedAt: string;
+  updatedAt: string;
+}
+
 
 
 

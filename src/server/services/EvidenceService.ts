@@ -7,6 +7,7 @@ import type {
 import type { AppDatabase } from '../repositories/Database.ts';
 import {
   buildCanonicalEvidenceReferences,
+  computeEvidencePayloadSha256,
   type ContractRepository,
   type EvidenceRepository,
   type MilestoneRepository,
@@ -208,6 +209,21 @@ export class EvidenceService {
         })),
       };
 
+      const developerNotes = (input.developerNotes ?? '').trim();
+      const payloadSha256 = computeEvidencePayloadSha256({
+        milestoneId: milestone.id,
+        attemptNumber,
+        submittedBy: actor.id,
+        repoUrl: input.repoUrl.trim(),
+        branch: input.branch.trim(),
+        commitSha: input.commitSha.trim().toLowerCase(),
+        prUrl: input.prUrl.trim(),
+        prStatus: input.prStatus,
+        ciReport,
+        securityScan,
+        developerNotes,
+      });
+
       const submission: EvidenceSubmission = {
         id: submissionId,
         milestoneId: milestone.id,
@@ -220,8 +236,10 @@ export class EvidenceService {
         prStatus: input.prStatus,
         ciReport,
         securityScan,
-        developerNotes: (input.developerNotes ?? '').trim(),
+        developerNotes,
         submittedAt: now,
+        payloadSha256,
+        provenanceStatus: 'UNVERIFIED_UNAVAILABLE',
         canonicalReferences: buildCanonicalEvidenceReferences({
           id: submissionId,
           repoUrl: input.repoUrl.trim(),
@@ -257,6 +275,8 @@ export class EvidenceService {
           changedFileCount: changedFiles.length,
           ciStatus: submission.ciReport.status,
           securityScannerStatus: submission.securityScan.status,
+          payloadSha256,
+          provenanceStatus: submission.provenanceStatus,
           canonicalEvidenceIds: (submission.canonicalReferences ?? []).map((r) => r.evidenceId),
         },
         timestamp: now,
