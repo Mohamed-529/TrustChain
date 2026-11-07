@@ -31,24 +31,8 @@ describe('Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Control Tower 
       const session = await sdk.switchDemoPersona({ userId: 'reviewer_01' });
       assert.equal(session.user.role, 'REVIEWER');
 
-      // Load the 3-milestone Control Tower demo scenario
-      const demoRes = await fetch(`${baseUrl}/contracts/contract_seed_01/schedule/demo-scenario`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.token}` },
-      });
-      assert.equal(demoRes.status, 200);
-      const demoBody = (await demoRes.json()) as {
-        schedule: Awaited<ReturnType<typeof sdk.getContractSchedule>>;
-        createdProposals: Array<{
-          id: string;
-          milestoneId: string;
-          status: string;
-          delayDays: number;
-          supportingEvidenceIds: string[];
-          downstreamCascades: Array<{ milestoneId: string }>;
-          preservesContractualAmountCents: number;
-        }>;
-      };
+      // Load the 3-milestone Control Tower demo scenario via SDK
+      const demoBody = await sdk.loadContractScheduleDemoScenario('contract_seed_01');
 
       const { schedule, createdProposals } = demoBody;
       assert.equal(schedule.tasks.length, 3);

@@ -296,6 +296,16 @@ export class MilestoneProofClient {
     });
   }
 
+  public async loadContractScheduleDemoScenario(contractId: string): Promise<{
+    schedule: ContractScheduleResponse;
+    createdProposals: ScheduleRecoveryProposal[];
+  }> {
+    return this.request({
+      method: 'POST',
+      path: `/contracts/${encodeURIComponent(contractId)}/schedule/demo-scenario`,
+    });
+  }
+
   // ==========================================================================
   // 5. EvidenceController
   // ==========================================================================

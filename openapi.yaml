@@ -369,6 +369,29 @@ paths:
         '409':
           $ref: '#/components/responses/ConflictError'
 
+  /contracts/{id}/schedule/demo-scenario:
+    post:
+      operationId: loadContractScheduleDemoScenario
+      tags: [Contracts]
+      summary: Load deterministic 3-milestone Bryntum Control Tower demo scenario
+      description: |
+        Populates the 3-milestone software delivery demo scenario (Milestone 1 Completed 100%, Milestone 2 Failed CI & Overdue, Milestone 3 Blocked by Dependency) and generates an AI Schedule Recovery Proposal.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: 3-milestone Control Tower demo scenario loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeScheduleRiskResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /milestones/{id}/evidence:
     post:
       operationId: submitMilestoneEvidence
