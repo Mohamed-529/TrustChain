@@ -2,11 +2,64 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
 import path from 'node:path';
+import tls from 'node:tls';
 import { describe, it } from 'node:test';
 import { createServerApp, type HttpApp } from '../index.ts';
 import { EvidencePassportService, isPrivateOrBlockedIp } from '../services/EvidencePassportService.ts';
 import type { EvidencePassport } from '../../types/domain.ts';
+
+const TEST_TLS_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC6uSxENWd7Sc3Z
+DVRG5Lo+55He1KWD+113HcEijiPe65ktvNzcMH6T7+S6m7E6XbhspA3o6A7pTl69
+AOK7LNF1cshSqkXDZkgq8xjGjoqY78Ahq3xwdiZQ6ywqmbDN/7Dpy7igJ3SV9crq
+WWpLe4UQRycAwxCz/gQTkK1pOKiADD2aR6oFwJa8p867hvg5a16DFHuoMypbhTlo
+4RzyqUaGzkmY2iTLOhEXhW2BlUw1ZDSWD43Y6+5W09EbGi8X5zuind1M+sdNUvIL
+/qlJnWa4Y7B9RayHeUeoap2nf1/qIUMdhmsqO2D1eDgtHzXit6dJwATdGuhl8ycg
+udb4RMERAgMBAAECggEAKEbWGhZs7mainO2nnq0q0XPQ/sBevYPkitOju+juKuEm
+Bvwkpehd/VozO99mkMDzjZermnAn+0JY5CsDPT2zJsLuHAq3hqkS6xTJ5NaNZeTd
+TEX5zyZlKHI58ix5u02qoxu7BOzN1KUSso88AvEvaC3450ysVy71QSUlirtaeVgL
+eRU30Ikggd/ItXRBOlLXs0jCZPNMYpMpTPAFBAA6r8uGEB54VYMebJQ2G3Kt399O
+saDUL624NDpcWfRfjTp4QMk0pFfEKt4miAHhL3m/HEY7dx+ZExOzzL9hZPKdkd6v
+bdXnEAD10j0G53aiKG/WZC9QRSPsqh0Cw7NeWRxGUwKBgQD4++pIA+kBiHySXfmW
+Fw38YAdQNDkUCkAyenKA8TfnrmznmC5davkHTJEvax0FmLlVEok8DXv2mWG0rjTv
+J/iEXVFFGY16iQiMHZXXlkMr7rmBuIHEP2/q2mz0IMW73UDIDgBd/GubZxH0Zw4q
+7jIAKSrkxsk6sUiqHtHxjo0fpwKBgQC//CFoPb+NG+W46nXR7f3pVmjjrHJhU+5L
+qbFn5WxurmZLAFzQkRPB6ftNPgPYpKsdytQ8zAcSlnlDQTZQtFgMUNE+0DDCw3hO
+g2dyywys9y9aYMiTb9XhZEaDQ8aEH8c42mvuTfbIMAIeWe+oCFxZVsneeoNyLiXl
+NCNiQgBwhwKBgDxgOguEhzgL9Mk5aJBwvr94Oc3FHCIz6iVTc/i4han0rgvq5zNY
+AVM3ye0JuFvnEOoEOKsLSggeYYcCx2tG8giG6HItJBWWrS/s7Kz+jwNUPD+skisY
+hvcYSFtapxhLKq5YVtZzo1Rnxf7SDqlyYUWQtgoL+jf1TX2TQ62jt6z5AoGBAIsG
+555YUPW7xRCy4R1kDiLCi3SMNcxbfk5WlX0ae/pu2u7nVU9IMBmV+oEGLrzdCnmp
+nyZjzZ9dTnUwrUemQbixccXd9+GiseWRbQGJHyXGXwlA2x9Bto3hEtsN4p1dceSu
+78gDt3liorYeBNoXK+EaY1d0Ouodlx2zMwh9qVnTAoGAdLiNbhsbT52vSU+uuygf
+4ODT7PMFGFozxNj6SjG1yKVFvIeNOraMAzn2jq6Im8X/Zqm7YPMRZYnkFo1neF53
+0mnn9Wer9c92URnYQfXvkzDEaWBCVoogACIYjKqCHGkviCoRAnGyqzxV+zVTXMSX
+maO06RZfNKCkOZ72CGUh4sA=
+-----END PRIVATE KEY-----`;
+
+const TEST_TLS_CERT = `-----BEGIN CERTIFICATE-----
+MIIDPTCCAiWgAwIBAgIUSoYCgx84bDx0/nyHPLl1BZEEHckwDQYJKoZIhvcNAQEL
+BQAwHjEcMBoGA1UEAwwTY29ycmVjdC5leGFtcGxlLmNvbTAeFw0yNjExMDgwOTE4
+MjRaFw0zNjExMDUwOTE4MjRaMB4xHDAaBgNVBAMME2NvcnJlY3QuZXhhbXBsZS5j
+b20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC6uSxENWd7Sc3ZDVRG
+5Lo+55He1KWD+113HcEijiPe65ktvNzcMH6T7+S6m7E6XbhspA3o6A7pTl69AOK7
+LNF1cshSqkXDZkgq8xjGjoqY78Ahq3xwdiZQ6ywqmbDN/7Dpy7igJ3SV9crqWWpL
+e4UQRycAwxCz/gQTkK1pOKiADD2aR6oFwJa8p867hvg5a16DFHuoMypbhTlo4Rzy
+qUaGzkmY2iTLOhEXhW2BlUw1ZDSWD43Y6+5W09EbGi8X5zuind1M+sdNUvIL/qlJ
+nWa4Y7B9RayHeUeoap2nf1/qIUMdhmsqO2D1eDgtHzXit6dJwATdGuhl8ycgudb4
+RMERAgMBAAGjczBxMB0GA1UdDgQWBBT2DcU9jmol2sW48DYbEZXmNd3OaTAfBgNV
+HSMEGDAWgBT2DcU9jmol2sW48DYbEZXmNd3OaTAPBgNVHRMBAf8EBTADAQH/MB4G
+A1UdEQQXMBWCE2NvcnJlY3QuZXhhbXBsZS5jb20wDQYJKoZIhvcNAQELBQADggEB
+AJpGPk6ZjxkPNeWoMlO+hW9Rs/eFDMjnxgtBYhndP/WQckYgqlyLiu5sHiWiT38f
+3Rv0Wh0ZBpJKwLxfvGShiiQrdHKPHUtCLKvtuuwpQeuisC4Sd3rnuEGjSRWrDBxp
+rTnAfiOQ9JRy8+mRlNsdvdITSegg7CoMgbIo9U/9LY/DOjvyt55iTG0QHNN81+hr
+HMzwtVX6AovPRckHswTJCAwerB8cufoAm43iOXgAvrvuUR/1YcsdKk3UZ7zj35Ag
+JnvnBz0tZ1DSieefmNtYXfwCTw5YBhcciaTbBZCbtlmseDbRCxoMjxQ+sb67vrt1
+f0l6jDM+kKGaeZpvK9LF2mA=
+-----END CERTIFICATE-----`;
 
 interface ApiResponse<T = any> {
   status: number;
@@ -1493,6 +1546,872 @@ describe('Prompt 2/8 — Evidence Passport: Verifiable Engineering Evidence Reco
 
       assert.equal(gopherRes.overallStatus, 'BLOCKED_SECURITY');
       assert.equal(gopherRes.smokeChecks.some((c) => c.status === 'BLOCKED_SSRF'), true);
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // =========================================================================
+  // SECTION A: SOCKET AND TLS VERIFICATION (Checks 1-5)
+  // =========================================================================
+
+  // Check A.1 / Test 36: Test actual socket connection pinning, not just the DNS helper
+  it('36. (A.1) verifies actual TCP socket connection pinning to resolved IP rather than system DNS', async () => {
+    let serverHit = false;
+    let receivedHostHeader = '';
+    const testServer = http.createServer((req, res) => {
+      serverHit = true;
+      receivedHostHeader = req.headers.host || '';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'healthy', pinned: true }));
+    });
+    await new Promise<void>((resolve) => testServer.listen(0, '127.0.0.1', resolve));
+    const port = (testServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const pinningService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      const result = await pinningService.executeRuntimeValidation(
+        `http://non-existent-domain-xyz-12345.localtest:${port}`,
+        '/health',
+        true
+      );
+
+      assert.equal(result.overallStatus, 'PASSED');
+      assert.equal(serverHit, true, 'Server on 127.0.0.1 must receive request via socket pinning');
+      assert.equal(
+        receivedHostHeader,
+        `non-existent-domain-xyz-12345.localtest:${port}`,
+        'Host header must reflect target hostname'
+      );
+    } finally {
+      testServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check A.2 / Test 37: Verify TLS hostname mismatch is rejected
+  it('37. (A.2) verifies TLS hostname mismatch is strictly rejected by certificate verification', async () => {
+    const httpsServer = https.createServer(
+      {
+        key: TEST_TLS_KEY,
+        cert: TEST_TLS_CERT, // Certificate is issued for correct.example.com
+      },
+      (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+      }
+    );
+    await new Promise<void>((resolve) => httpsServer.listen(0, '127.0.0.1', resolve));
+    const httpsPort = (httpsServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const tlsService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      // Attempt HTTPS validation against hostname that does not match certificate
+      const result = await tlsService.executeRuntimeValidation(
+        `https://mismatched-hostname.example.com:${httpsPort}`,
+        '/health',
+        true
+      );
+
+      assert.equal(result.overallStatus, 'FAILED');
+      assert.equal(result.smokeChecks[0].status, 'FAILED');
+      assert.ok(
+        result.smokeChecks[0].details.includes('CERT') ||
+          result.smokeChecks[0].details.includes('altname') ||
+          result.smokeChecks[0].details.includes('mismatch') ||
+          result.smokeChecks[0].details.includes('self-signed') ||
+          result.smokeChecks[0].details.includes('ERR_TLS')
+      );
+    } finally {
+      httpsServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check A.3 / Test 38: Verify TLS SNI uses the original hostname
+  it('38. (A.3) verifies TLS SNI sends the original hostname in Client Hello', async () => {
+    let capturedSni: string | null = null;
+    const httpsServer = https.createServer(
+      {
+        SNICallback: (servername, cb) => {
+          capturedSni = servername;
+          const ctx = tls.createSecureContext({
+            key: TEST_TLS_KEY,
+            cert: TEST_TLS_CERT,
+          });
+          cb(null, ctx);
+        },
+        key: TEST_TLS_KEY,
+        cert: TEST_TLS_CERT,
+      },
+      (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+      }
+    );
+    await new Promise<void>((resolve) => httpsServer.listen(0, '127.0.0.1', resolve));
+    const httpsPort = (httpsServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const tlsService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      await tlsService.executeRuntimeValidation(
+        `https://sni-verification.example.com:${httpsPort}`,
+        '/health',
+        true
+      );
+
+      assert.equal(
+        capturedSni,
+        'sni-verification.example.com',
+        'TLS Client Hello must send requested hostname in SNI'
+      );
+    } finally {
+      httpsServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check A.4 / Test 39: Verify agents cannot reuse connections across different hostnames
+  it('39. (A.4) verifies agents cannot reuse connections across different hostnames (keepAlive: false)', async () => {
+    let connectionCount = 0;
+    const testServer = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok' }));
+    });
+    testServer.on('connection', () => {
+      connectionCount++;
+    });
+    await new Promise<void>((resolve) => testServer.listen(0, '127.0.0.1', resolve));
+    const port = (testServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const poolingService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      // Request 1 to host-alpha
+      await poolingService.executeRuntimeValidation(`http://host-alpha.example.com:${port}`, '/h1', true);
+      // Request 2 to host-beta
+      await poolingService.executeRuntimeValidation(`http://host-beta.example.com:${port}`, '/h2', true);
+
+      // Because keepAlive is false and agent is created per request, 2 distinct TCP connections were created
+      assert.equal(connectionCount, 2, 'Must create separate connections and never pool across hostnames');
+    } finally {
+      testServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check A.5 / Test 40: Verify all mixed DNS answers containing blocked addresses are rejected
+  it('40. (A.5) verifies all mixed DNS answers containing blocked addresses are strictly rejected', async () => {
+    const container = getIsolatedApp();
+    try {
+      const testCases = [
+        { name: 'Public IPv4 + Private 10.0.0.0/8', ips: ['93.184.216.34', '10.0.0.1'] },
+        { name: 'Public IPv4 + IPv6 Loopback ::1', ips: ['93.184.216.34', '::1'] },
+        { name: 'Public IPv4 + AWS Metadata 169.254.169.254', ips: ['93.184.216.34', '169.254.169.254'] },
+        { name: 'Public IPv4 + Hex Mapped IPv6 ::ffff:7f00:1', ips: ['93.184.216.34', '::ffff:7f00:1'] },
+        { name: 'Public IPv6 + RFC 4193 Unique Local fd00::1', ips: ['2606:2800:220:1:248:1893:25c8:1946', 'fd00::1'] },
+      ];
+
+      for (const tc of testCases) {
+        const service = new EvidencePassportService(
+          container.db,
+          container.contractRepo,
+          container.milestoneRepo,
+          container.evidenceRepo,
+          container.provenanceRepo,
+          container.evaluationRepo,
+          container.approvalRepo,
+          container.passportRepo,
+          container.auditService,
+          undefined,
+          {
+            dnsLookupImpl: async () => tc.ips.map((ip) => ({ address: ip, family: ip.includes(':') ? 6 : 4 })),
+          }
+        );
+
+        const res = await service.executeRuntimeValidation('https://mixed-dns.example.com', '/health', true);
+        assert.equal(res.overallStatus, 'BLOCKED_SECURITY', `Failed on ${tc.name}`);
+        assert.equal(res.securityChecks.ipBlocked, true);
+        assert.equal(res.smokeChecks[0].status, 'BLOCKED_SSRF');
+      }
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // =========================================================================
+  // SECTION B: REDIRECTS AND SCHEME RESTRICTIONS (Checks 6-10)
+  // =========================================================================
+
+  // Check B.6 / Test 41: Test relative redirects
+  it('41. (B.6) resolves and safely follows relative redirects against the base URL', async () => {
+    let step = 0;
+    const testServer = http.createServer((req, res) => {
+      if (req.url === '/v1/initial') {
+        step = 1;
+        res.writeHead(302, { Location: '/v2/healthz' });
+        res.end();
+      } else if (req.url === '/v2/healthz') {
+        step = 2;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', version: 2 }));
+      } else {
+        res.writeHead(404).end();
+      }
+    });
+    await new Promise<void>((resolve) => testServer.listen(0, '127.0.0.1', resolve));
+    const port = (testServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      const res = await service.executeRuntimeValidation(
+        `http://relative-redirect.example.com:${port}`,
+        '/v1/initial',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'PASSED');
+      assert.equal(step, 2, 'Must follow relative redirect to /v2/healthz and pass');
+    } finally {
+      testServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check B.7 / Test 42: Test redirects to private IP literals
+  it('42. (B.7) strictly blocks redirects pointing to private IP literals', async () => {
+    const privateTargets = [
+      'http://10.0.0.1/admin',
+      'http://192.168.1.1/setup',
+      'http://172.16.0.5/api',
+      'http://169.254.169.254/latest/meta-data',
+      'http://[::ffff:a00:1]/secret',
+    ];
+
+    for (const target of privateTargets) {
+      const testServer = http.createServer((_req, res) => {
+        res.writeHead(302, { Location: target });
+        res.end();
+      });
+      await new Promise<void>((resolve) => testServer.listen(0, '127.0.0.1', resolve));
+      const port = (testServer.address() as any).port;
+
+      try {
+        const container = getIsolatedApp();
+        const service = new EvidencePassportService(
+          container.db,
+          container.contractRepo,
+          container.milestoneRepo,
+          container.evidenceRepo,
+          container.provenanceRepo,
+          container.evaluationRepo,
+          container.approvalRepo,
+          container.passportRepo,
+          container.auditService,
+          undefined,
+          {
+            allowLoopbackForTesting: true,
+            dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+          }
+        );
+
+        const res = await service.executeRuntimeValidation(
+          `http://redirector.example.com:${port}`,
+          '/hop',
+          true
+        );
+
+        assert.equal(res.overallStatus, 'BLOCKED_SECURITY', `Failed to block redirect to ${target}`);
+        assert.equal(res.securityChecks.ipBlocked, true);
+        assert.ok(res.smokeChecks.some((c) => c.status === 'BLOCKED_SSRF'));
+      } finally {
+        testServer.close();
+        cleanupFiles();
+      }
+    }
+  });
+
+  // Check B.8 / Test 43: Test redirect loops and maximum redirect count
+  it('43. (B.8) catches redirect loops and enforces maximum redirect depth', async () => {
+    // 1. Loop test: A -> B -> A
+    const loopServer = http.createServer((req, res) => {
+      if (req.url === '/a') {
+        res.writeHead(302, { Location: '/b' }).end();
+      } else if (req.url === '/b') {
+        res.writeHead(302, { Location: '/a' }).end();
+      }
+    });
+    await new Promise<void>((resolve) => loopServer.listen(0, '127.0.0.1', resolve));
+    const loopPort = (loopServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      const loopRes = await service.executeRuntimeValidation(
+        `http://loop.example.com:${loopPort}`,
+        '/a',
+        true
+      );
+
+      assert.equal(loopRes.overallStatus, 'BLOCKED_SECURITY');
+      assert.ok(loopRes.smokeChecks.some((c) => c.details.includes('redirect loop')));
+
+      // 2. Depth test: 4 redirects (exceeds max 3)
+      const depthServer = http.createServer((req, res) => {
+        const step = parseInt(req.url?.slice(1) || '1', 10);
+        res.writeHead(302, { Location: `/${step + 1}` }).end();
+      });
+      await new Promise<void>((resolve) => depthServer.listen(0, '127.0.0.1', resolve));
+      const depthPort = (depthServer.address() as any).port;
+
+      try {
+        const depthRes = await service.executeRuntimeValidation(
+          `http://depth.example.com:${depthPort}`,
+          '/1',
+          true
+        );
+        assert.equal(depthRes.overallStatus, 'BLOCKED_SECURITY');
+        assert.ok(depthRes.smokeChecks.some((c) => c.details.includes('maximum redirect limit')));
+      } finally {
+        depthServer.close();
+      }
+    } finally {
+      loopServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check B.9 / Test 44: Test malformed Location headers
+  it('44. (B.9) safely handles malformed Location headers without crashing', async () => {
+    const malformedServer = http.createServer((_req, res) => {
+      res.writeHead(302, { Location: 'http://[invalid-ipv6-literal/test' }).end();
+    });
+    await new Promise<void>((resolve) => malformedServer.listen(0, '127.0.0.1', resolve));
+    const port = (malformedServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      const res = await service.executeRuntimeValidation(
+        `http://malformed.example.com:${port}`,
+        '/check',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'BLOCKED_SECURITY');
+      assert.ok(res.smokeChecks.some((c) => c.details.includes('malformed redirect URL')));
+    } finally {
+      malformedServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check B.10 / Test 45: Verify each redirect destination is independently resolved and pinned
+  it('45. (B.10) verifies each redirect hop destination is independently resolved and pinned', async () => {
+    const resolvedHosts: string[] = [];
+    const mockDns = async (hostname: string) => {
+      resolvedHosts.push(hostname);
+      return [{ address: '127.0.0.1', family: 4 }];
+    };
+
+    const redirectChainServer = http.createServer((req, res) => {
+      if (req.headers.host?.includes('hop-one')) {
+        res.writeHead(302, { Location: `http://hop-two.example.com:${(redirectChainServer.address() as any).port}/end` }).end();
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ status: 'done' }));
+      }
+    });
+    await new Promise<void>((resolve) => redirectChainServer.listen(0, '127.0.0.1', resolve));
+    const port = (redirectChainServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: mockDns,
+        }
+      );
+
+      const res = await service.executeRuntimeValidation(
+        `http://hop-one.example.com:${port}`,
+        '/start',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'PASSED');
+      assert.ok(resolvedHosts.includes('hop-one.example.com'), 'Must resolve hop-one');
+      assert.ok(resolvedHosts.includes('hop-two.example.com'), 'Must resolve hop-two independently');
+    } finally {
+      redirectChainServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // =========================================================================
+  // SECTION C: RESOURCE MANAGEMENT & NETWORK FAILURES (Checks 11-14)
+  // =========================================================================
+
+  // Check C.11 / Test 46: Test request timeout
+  it('46. (C.11) aborts cleanly and reports TIMEOUT when destination server hangs', async () => {
+    const hangingServer = http.createServer((_req, _res) => {
+      // Deliberately do not reply
+    });
+    await new Promise<void>((resolve) => hangingServer.listen(0, '127.0.0.1', resolve));
+    const port = (hangingServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          runtimeValidationTimeoutMs: 150,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      const res = await service.executeRuntimeValidation(
+        `http://slow-server.example.com:${port}`,
+        '/health',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'FAILED');
+      assert.equal(res.smokeChecks[0].status, 'TIMEOUT');
+    } finally {
+      hangingServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check C.12 / Test 47: Test aborted connections
+  it('47. (C.12) catches premature connection termination/aborts cleanly without unhandled crash', async () => {
+    const abortingServer = http.createServer((_req, res) => {
+      res.socket?.destroy(); // Abruptly destroy TCP socket mid-handshake
+    });
+    await new Promise<void>((resolve) => abortingServer.listen(0, '127.0.0.1', resolve));
+    const port = (abortingServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      const res = await service.executeRuntimeValidation(
+        `http://aborting-server.example.com:${port}`,
+        '/health',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'FAILED');
+      assert.equal(res.smokeChecks[0].status, 'FAILED');
+      assert.ok(res.smokeChecks[0].details.includes('Connection error'));
+    } finally {
+      abortingServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check C.13 / Test 48: Test socket cleanup after success and failure
+  it('48. (C.13) guarantees socket and agent cleanup after both successful and failed requests', async () => {
+    let openSockets = 0;
+    const testServer = http.createServer((req, res) => {
+      if (req.url === '/success') {
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true }));
+      } else {
+        res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: true }));
+      }
+    });
+    testServer.on('connection', (sock) => {
+      openSockets++;
+      sock.on('close', () => {
+        openSockets--;
+      });
+    });
+    await new Promise<void>((resolve) => testServer.listen(0, '127.0.0.1', resolve));
+    const port = (testServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      // Success
+      await service.executeRuntimeValidation(`http://cleanup-test.example.com:${port}`, '/success', true);
+      await new Promise((r) => setTimeout(r, 60));
+      assert.equal(openSockets, 0, 'Socket must be closed after success');
+
+      // Failure
+      await service.executeRuntimeValidation(`http://cleanup-test.example.com:${port}`, '/fail', true);
+      await new Promise((r) => setTimeout(r, 60));
+      assert.equal(openSockets, 0, 'Socket must be closed after failure');
+    } finally {
+      testServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // Check C.14 / Test 49: Test response-size limits
+  it('49. (C.14) enforces response size limits and destroys oversized incoming streams', async () => {
+    const oversizedServer = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      // Send 50 KB in 1 KB chunks
+      const chunk = Buffer.alloc(1024, 'A');
+      for (let i = 0; i < 50; i++) {
+        res.write(chunk);
+      }
+      res.end();
+    });
+    await new Promise<void>((resolve) => oversizedServer.listen(0, '127.0.0.1', resolve));
+    const port = (oversizedServer.address() as any).port;
+
+    try {
+      const container = getIsolatedApp();
+      const service = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          allowLoopbackForTesting: true,
+          maxResponseSizeBytes: 2048, // 2 KB limit
+          dnsLookupImpl: async () => [{ address: '127.0.0.1', family: 4 }],
+        }
+      );
+
+      const res = await service.executeRuntimeValidation(
+        `http://oversized.example.com:${port}`,
+        '/stream',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'FAILED');
+      assert.ok(res.smokeChecks[0].details.includes('Response size limit exceeded'));
+    } finally {
+      oversizedServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // =========================================================================
+  // SECTION D: PASSPORT INTEGRITY AND TRANSACTIONS (Checks 15-18)
+  // =========================================================================
+
+  // Check D.15 / Test 50: Test failed audit transaction rollback
+  it('50. (D.15) rolls back passport creation transaction when audit logging throws an exception', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, devToken } = await setupActiveContract(container);
+
+      // Submit evidence
+      await sendRequest(container.app, {
+        method: 'POST',
+        path: `/api/v1/milestones/${milestoneId}/evidence`,
+        headers: { Authorization: `Bearer ${devToken}` },
+        body: { demoFixtureKey: 'SUCCESSFUL_SUBMISSION' },
+      });
+
+      // Monkey-patch auditService.appendWithinTx to simulate failure
+      const originalAppend = container.auditService.appendWithinTx;
+      container.auditService.appendWithinTx = () => {
+        throw new Error('SIMULATED_AUDIT_LEDGER_IO_PANIC');
+      };
+
+      try {
+        await container.evidencePassportService.generatePassport(contractId, milestoneId);
+        assert.fail('generatePassport must throw when audit logging fails');
+      } catch (err: any) {
+        assert.equal(err.message, 'SIMULATED_AUDIT_LEDGER_IO_PANIC');
+      } finally {
+        container.auditService.appendWithinTx = originalAppend;
+      }
+
+      // Verify transaction rollback: zero rows persisted in evidence_passports table
+      const passportCount = container.db.raw
+        .prepare('SELECT count(*) as count FROM evidence_passports WHERE milestone_id = ?')
+        .get(milestoneId) as any;
+      assert.equal(passportCount.count, 0, 'Evidence passport must be rolled back');
+
+      // Verify zero orphaned audit logs for this passport action
+      const auditCount = container.db.raw
+        .prepare("SELECT count(*) as count FROM audit_logs WHERE action = 'EVIDENCE_PASSPORT_GENERATED' AND milestone_id = ?")
+        .get(milestoneId) as any;
+      assert.equal(auditCount.count, 0, 'Passport audit log must be rolled back');
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // Check D.16 / Test 51: Test concurrent passport generation
+  it('51. (D.16) handles concurrent passport generation without data race corruption or audit gaps', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, devToken } = await setupActiveContract(container);
+
+      await sendRequest(container.app, {
+        method: 'POST',
+        path: `/api/v1/milestones/${milestoneId}/evidence`,
+        headers: { Authorization: `Bearer ${devToken}` },
+        body: { demoFixtureKey: 'SUCCESSFUL_SUBMISSION' },
+      });
+
+      // Execute 3 concurrent passport generations
+      const [p1, p2, p3] = await Promise.all([
+        container.evidencePassportService.generatePassport(contractId, milestoneId),
+        container.evidencePassportService.generatePassport(contractId, milestoneId),
+        container.evidencePassportService.generatePassport(contractId, milestoneId),
+      ]);
+
+      assert.ok(p1.passportDigestSha256);
+      assert.ok(p2.passportDigestSha256);
+      assert.ok(p3.passportDigestSha256);
+      assert.equal(p1.isCryptographicallyValid, true);
+      assert.equal(p2.isCryptographicallyValid, true);
+      assert.equal(p3.isCryptographicallyValid, true);
+
+      // Verify audit chain integrity remains intact
+      const verifyRes = container.auditService.verifyChain();
+      assert.equal(verifyRes.valid, true, 'Audit hash chain must remain valid after concurrent generation');
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // Check D.17 / Test 52: Test mutation of every security-relevant digest-protected field
+  it('52. (D.17) verifies mutation of every security-relevant field invalidates passport cryptographic digest', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, devToken } = await setupActiveContract(container);
+
+      await sendRequest(container.app, {
+        method: 'POST',
+        path: `/api/v1/milestones/${milestoneId}/evidence`,
+        headers: { Authorization: `Bearer ${devToken}` },
+        body: { demoFixtureKey: 'SUCCESSFUL_SUBMISSION' },
+      });
+
+      const passport = await container.evidencePassportService.generatePassport(contractId, milestoneId);
+      assert.equal(container.evidencePassportService.verifyPassportIntegrity(passport), true);
+
+      // 10 security-relevant mutation targets
+      const mutations: Array<{ name: string; mutate: (p: EvidencePassport) => void }> = [
+        { name: 'identity.milestoneTitle', mutate: (p) => { p.identity.milestoneTitle = 'Forged Title'; } },
+        { name: 'identity.overallStatus', mutate: (p) => { p.identity.overallStatus = p.identity.overallStatus === 'VERIFIED' ? 'FAILED' : 'VERIFIED'; } },
+        { name: 'sourceIdentity.commitSha', mutate: (p) => { p.sourceIdentity.commitSha = '0000000000000000000000000000000000000000'; } },
+        { name: 'ciCd.runId', mutate: (p) => { p.ciCd.runId = 999999999; } },
+        { name: 'buildProvenance.artifactDigestSha256', mutate: (p) => { p.buildProvenance.artifactDigestSha256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; } },
+        { name: 'runtimeValidation.overallStatus', mutate: (p) => { p.runtimeValidation.overallStatus = p.runtimeValidation.overallStatus === 'PASSED' ? 'FAILED' : 'PASSED'; } },
+        { name: 'criteriaMapping[0].status', mutate: (p) => { if (p.criteriaMapping[0]) p.criteriaMapping[0].status = p.criteriaMapping[0].status === 'VERIFIED' ? 'FAILED' : 'VERIFIED'; } },
+        { name: 'settlementAuditTrace.auditEventReferences', mutate: (p) => { p.settlementAuditTrace.auditEventReferences.push('tampered_hash'); } },
+        { name: 'graph.nodes[0].label', mutate: (p) => { if (p.graph.nodes[0]) p.graph.nodes[0].label = 'Tampered Node'; } },
+        { name: 'graph.edges[0].toId', mutate: (p) => { if (p.graph.edges[0]) p.graph.edges[0].toId = 'tampered_to_id'; } },
+      ];
+
+      for (const m of mutations) {
+        const cloned: EvidencePassport = JSON.parse(JSON.stringify(passport));
+        m.mutate(cloned);
+        const isValid = container.evidencePassportService.verifyPassportIntegrity(cloned);
+        assert.equal(isValid, false, `Mutation on ${m.name} must fail cryptographic integrity check`);
+      }
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // Check D.18 / Test 53: Verify a freshly generated passport immediately passes retrieval verification
+  it('53. (D.18) verifies freshly generated passport immediately passes database retrieval verification', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, devToken } = await setupActiveContract(container);
+
+      await sendRequest(container.app, {
+        method: 'POST',
+        path: `/api/v1/milestones/${milestoneId}/evidence`,
+        headers: { Authorization: `Bearer ${devToken}` },
+        body: { demoFixtureKey: 'SUCCESSFUL_SUBMISSION' },
+      });
+
+      // Generate passport
+      const generated = await container.evidencePassportService.generatePassport(contractId, milestoneId);
+      assert.ok(generated.passportDigestSha256);
+
+      // Immediately retrieve via getPassport
+      const retrieved = await container.evidencePassportService.getPassport(contractId, milestoneId);
+
+      assert.equal(retrieved.id, generated.id);
+      assert.equal(retrieved.isCryptographicallyValid, true);
+      assert.equal(retrieved.passportDigestSha256, generated.passportDigestSha256);
+      assert.equal(retrieved.identity.overallStatus, generated.identity.overallStatus);
     } finally {
       cleanupFiles();
     }
