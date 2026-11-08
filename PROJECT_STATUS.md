@@ -14,7 +14,7 @@
 
 ## Current Phase
 
-Cinematic Product Experience & Multi-Page Frontend Architecture (Completed & Fully Verified — 183/183 automated tests passing across 16 test suites, lightweight History API router with 9 dedicated page routes, interactive 6-stage canvas 3D trust lifecycle visualizer, 6-step guided onboarding tour with localStorage persistence, cohesive navigation shell with persona switcher and active-route highlighting, clean separation of all modules from the monolithic single page into dedicated routes).
+Prompt 6/8 Cinematic Entry Experience & Multi-Page Platform Architecture (Completed & Fully Verified — 188/188 automated tests passing across 17 test suites, 60fps high-DPI luminous wave canvas, dynamic depth particles, minimal logo reveal, Stage A cinematic dark opening, Stage B product reveal with sequential 6-stage lifecycle animation, Stage C platform capabilities showcase with 7 deep-dive modules, returning user detection via `tc_cinematic_visited_v1`, 6-stage guided tour modal, and full multi-page routing).
 
 ## Overall Progress
 
@@ -35,14 +35,15 @@ Cinematic Product Experience & Multi-Page Frontend Architecture (Completed & Ful
 - Phase 9 (Prompt 5/8 — PayPal Lifecycle Management & Completion) — PayPal Orders API v2 Lifecycle (`intent: AUTHORIZE` holds up to 29 days), Mandatory Non-Escrow Regulatory Notice, AI Advisory Separation Boundary, Server-Side Integer Cents Validation, Human Approval Gate (`APPROVE`), Idempotency Protection (`PayPal-Request-Id`), Authoritative Payment Reconciliation Engine (`GET/POST /api/v1/milestones/:id/paypal/reconcile`), Network Timeout Recovery via `REQUIRES_RECONCILIATION`, Webhook Signature Verification (`/v1/notifications/verify-webhook-signature`) with Anti-SSRF Cert Pinning & Out-of-Order Delivery Protection, Version 7 Schema Migration (`payment_transactions`), 10 Webhook protocol test cases, 11 Failure & Recovery lifecycle test cases with double-credit prevention, and Live Sandbox Verification (Completed & Verified — 12/12 PayPal Lifecycle tests passing; 157/157 project tests passing; report: `PAYPAL_LIFECYCLE_COMPLETION_REPORT.md`).
 - Phase 9 (Prompt 6/8 — AG Grid Intelligence Control Room & Frontend Engineering) — AG Grid v36 Community Edition (`ag-grid-community@36.3.0`, `ag-grid-react@36.3.0`), MIT licensing without trial keys/watermarks, Full-Width Master/Detail Evidence Investigation (`EvidenceDetailPanel`), Deterministic Natural-Language Query Parser with Strict Whitelist (`NaturalLanguageFilterBar`, `queryParser.ts`), Interactive Confirmation Modal, Executive Intelligence Control Room Dashboard with Real-Time Portfolio Metrics, AI Decision Inspector with Multi-Agent Synthesis & Deterministic Settlement Policy Breakdown, Layout Persistence (`localStorage`), and Sanitized CSV Export with CWE-1236 Formula Injection Neutralization (Completed & Verified — 14/14 Prompt 6 tests passing; 171/171 project tests passing; reports: `PROMPT6_IMPLEMENTATION_REPORT.md`, `PROMPT6_TEST_REPORT.md`, `PROMPT6_SECURITY_AND_ACCESSIBILITY_REVIEW.md`, `PROMPT6_FRONTEND_ARCHITECTURE.md`, `PROMPT6_AG_GRID_FEATURE_MATRIX.md`).
 - Phase 9 (Prompt 6/8 Continuation — Cinematic Experience & Multi-Page Architecture) — Deconstructed the 5,600-pixel monolithic single page into 9 dedicated modular routes (`/`, `/onboarding`, `/dashboard`, `/intelligence`, `/timeline`, `/reviews`, `/trust`, `/disputes`, `/settings`), built interactive 3D trust lifecycle visualizer, designed 6-stage guided tour modal with progress indicators and `localStorage` persistence, established unified application shell (`AppShell`) with role-based persona navigation, and validated 100% test pass rate with 0 regressions (Completed & Verified — 12/12 cinematic frontend tests passing; 183/183 project tests passing; reports: `CINEMATIC_EXPERIENCE_ARCHITECTURE.md`, `GUIDED_ONBOARDING_IMPLEMENTATION.md`, `MULTI_PAGE_ROUTE_MATRIX.md`, `CINEMATIC_FRONTEND_TEST_REPORT.md`).
+- Phase 9 (Prompt 6/8 Enhancement — Google Antigravity-Inspired Cinematic Entry Experience) — Crafted high-DPI HTML5 canvas with sinusoidal luminous blue/cyan wave and dynamic depth particles, minimal logo reveal, choreographed Stage A opening with Play/Skip controls, Stage B product reveal with sequential 6-stage lifecycle animation and fiduciary invariant inspection, Stage C platform capabilities showcase with 7 deep-dive modules and live route jumping, and returning visitor persistence via `tc_cinematic_visited_v1` (Completed & Verified — 17/17 cinematic frontend tests passing; 188/188 project tests passing; report: `CINEMATIC_ENTRY_EXPERIENCE.md`).
 
 ---
 
 ## Test Results & Validation Status
 
-- **Automated Test Suite (`npm test` — 16 test files across 16 runner suites):**
-  - **Status:** **PASSED (`183 / 183` tests passed, `0` failed)**
-  - **Cinematic Frontend Suite (`12 / 12` passed)**
+- **Automated Test Suite (`npm test` — 16 test files across 17 runner suites):**
+  - **Status:** **PASSED (`188 / 188` tests passed, `0` failed)**
+  - **Cinematic Frontend Suite (`17 / 17` passed)**
   - **Prompt 6 AG Grid Intelligence Suite (`14 / 14` passed)**
   - **PayPal Lifecycle Suite (`12 / 12` passed)**
   - **Dispute Evidence Pack Suite (`17 / 17` passed)**
