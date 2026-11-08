@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
 import type {
   AcceptanceCriterion,
   AttestationVerificationStatus,
@@ -59,8 +62,6 @@ export interface GeneratePassportOptions {
   artifactDigestSha256?: string;
   forceRuntimeCheck?: boolean;
 }
-
-import net from 'node:net';
 
 /**
  * Checks whether an IPv4 or IPv6 address or sensitive internal hostname
@@ -142,6 +143,80 @@ export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
   if (a >= 240) return true;
 
   return false;
+}
+
+function createPinnedLookup(pinnedIp: string) {
+  const family = pinnedIp.includes(':') ? 6 : 4;
+  return (hostname: string, options: any, callback: any) => {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+    if (options && options.all) {
+      callback(null, [{ address: pinnedIp, family }]);
+    } else {
+      callback(null, pinnedIp, family);
+    }
+  };
+}
+
+interface SafePinnedHttpResponse {
+  status: number;
+  headers: Headers;
+}
+
+async function executeSafePinnedHttpRequest(
+  targetUrl: URL,
+  pinnedIp: string,
+  timeoutMs: number
+): Promise<SafePinnedHttpResponse> {
+  const isHttps = targetUrl.protocol === 'https:';
+  const httpModule = isHttps ? https : http;
+  const agent = isHttps
+    ? new https.Agent({ lookup: createPinnedLookup(pinnedIp) })
+    : new http.Agent({ lookup: createPinnedLookup(pinnedIp) });
+
+  return new Promise<SafePinnedHttpResponse>((resolve, reject) => {
+    const req = httpModule.request(
+      targetUrl,
+      {
+        method: 'GET',
+        agent,
+        timeout: timeoutMs,
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'User-Agent': 'MilestoneProof-EvidencePassport-Validator/1.0',
+          Host: targetUrl.host,
+        },
+        // Enforce TLS SNI and Certificate verification matching targetUrl.hostname
+        ...(isHttps
+          ? {
+              servername: targetUrl.hostname,
+            }
+          : {}),
+      },
+      (res) => {
+        const headers = new Headers();
+        for (const [key, val] of Object.entries(res.headers)) {
+          if (val) {
+            headers.set(key, Array.isArray(val) ? val.join(', ') : val);
+          }
+        }
+        res.resume(); // Safely discard body stream without memory buffering
+        resolve({
+          status: res.statusCode ?? 0,
+          headers,
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+    });
+
+    req.on('error', (err) => reject(err));
+    req.end();
+  });
 }
 
 /**
@@ -372,7 +447,7 @@ export class EvidencePassportService {
       auditEventReferences,
     };
 
-    // 14. Compute Canonical SHA-256 Digest of the Passport
+    // 14. Compute Deterministic Canonical SHA-256 Content Digest (before appending audit record)
     const passportPayloadWithoutDigest = {
       id: passportId,
       identity,
@@ -387,12 +462,12 @@ export class EvidencePassportService {
       settlementAuditTrace,
     };
 
-    const initialPassportDigest = crypto
+    const passportContentDigestSha256 = crypto
       .createHash('sha256')
       .update(canonicalizeJson(passportPayloadWithoutDigest))
       .digest('hex');
 
-    // Anchor the passport to the immutable audit chain atomically alongside snapshot persistence
+    // Anchor the passport content digest to the immutable audit chain atomically alongside snapshot persistence
     const auditActorId = contract.reviewerId || contract.clientId || 'reviewer_01';
     const passport: EvidencePassport = this.db.withTransaction(() => {
       const auditEntry = this.auditService.appendWithinTx({
@@ -407,7 +482,7 @@ export class EvidencePassportService {
         newState: overallStatus,
         payload: {
           passportId,
-          passportDigestSha256: initialPassportDigest,
+          passportContentDigestSha256,
           overallStatus,
           criteriaTotal: criteriaSummary.total,
           criteriaVerified: criteriaSummary.verified,
@@ -1003,20 +1078,32 @@ export class EvidencePassportService {
       };
     }
 
-    // Execute Safe HTTP Request with Timeout and Response Size Caps
-    const fetchFn = this.options?.fetchImpl ?? fetch;
+    // Execute Safe HTTP Request with IP-Pinning (TOCTOU / DNS Rebinding Protection)
+    const pinnedIp = resolvedIps[0] || parsedUrl.hostname;
     const startTime = Date.now();
     try {
       const timeoutMs = this.options?.runtimeValidationTimeoutMs ?? 3000;
-      const res = await fetchFn(fullCheckUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json, text/plain, */*',
-          'User-Agent': 'MilestoneProof-EvidencePassport-Validator/1.0',
-        },
-        redirect: 'manual', // Prevent automatic redirects to prevent SSRF redirect bypass
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      let res: { status: number; headers: Headers };
+
+      if (this.options?.fetchImpl) {
+        // Use injected mock fetch for testing
+        const fetchRes = await this.options.fetchImpl(fullCheckUrl, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json, text/plain, */*',
+            'User-Agent': 'MilestoneProof-EvidencePassport-Validator/1.0',
+          },
+          redirect: 'manual',
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        res = {
+          status: fetchRes.status,
+          headers: fetchRes.headers,
+        };
+      } else {
+        // Safe IP-pinned HTTP request eliminating DNS rebinding / TOCTOU
+        res = await executeSafePinnedHttpRequest(parsedUrl, pinnedIp, timeoutMs);
+      }
 
       const responseTimeMs = Date.now() - startTime;
 
