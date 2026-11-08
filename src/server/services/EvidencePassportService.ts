@@ -60,33 +60,59 @@ export interface GeneratePassportOptions {
   forceRuntimeCheck?: boolean;
 }
 
+import net from 'node:net';
+
 /**
- * Checks whether an IPv4 or IPv6 address belongs to private, loopback,
- * link-local, multicast, or cloud-metadata address spaces.
+ * Checks whether an IPv4 or IPv6 address or sensitive internal hostname
+ * belongs to private, loopback, link-local, multicast, or cloud-metadata address spaces.
  */
-export function isPrivateOrBlockedIp(ip: string): boolean {
-  const trimmed = ip.trim().toLowerCase();
+export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
+  const trimmed = ipOrHost.trim().toLowerCase();
+
+  // Hostname checks for sensitive local/cloud identifiers
+  if (
+    trimmed === 'localhost' ||
+    trimmed === 'metadata.google.internal' ||
+    trimmed.endsWith('.local') ||
+    trimmed.endsWith('.internal')
+  ) {
+    return true;
+  }
+
+  const ipType = net.isIP(trimmed);
+  if (ipType === 0) {
+    // It's a standard domain name (not an IP literal); domain validity is handled by DNS lookup
+    return false;
+  }
 
   // IPv6 checks
-  if (trimmed === '::1' || trimmed === '::' || trimmed === '0:0:0:0:0:0:0:1') {
-    return true; // Loopback
-  }
-  if (trimmed.startsWith('fe80:') || trimmed.startsWith('fe9') || trimmed.startsWith('fea') || trimmed.startsWith('feb')) {
-    return true; // Link-local fe80::/10
-  }
-  if (trimmed.startsWith('fc00:') || trimmed.startsWith('fd')) {
-    return true; // Unique local fc00::/7
-  }
-  if (trimmed.startsWith('::ffff:')) {
-    // IPv4-mapped IPv6
-    const ipv4Part = trimmed.slice(7);
-    return isPrivateOrBlockedIp(ipv4Part);
+  if (ipType === 6) {
+    if (trimmed === '::1' || trimmed === '::' || trimmed === '0:0:0:0:0:0:0:1') {
+      return true; // Loopback
+    }
+    if (
+      trimmed.startsWith('fe80:') ||
+      trimmed.startsWith('fe9') ||
+      trimmed.startsWith('fea') ||
+      trimmed.startsWith('feb')
+    ) {
+      return true; // Link-local fe80::/10
+    }
+    if (trimmed.startsWith('fc00:') || trimmed.startsWith('fd')) {
+      return true; // Unique local fc00::/7
+    }
+    if (trimmed.startsWith('::ffff:')) {
+      // IPv4-mapped IPv6
+      const ipv4Part = trimmed.slice(7);
+      return isPrivateOrBlockedIp(ipv4Part);
+    }
+    return false;
   }
 
   // IPv4 checks
   const parts = trimmed.split('.').map(Number);
   if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
-    return true; // Malformed -> treat as blocked
+    return true; // Malformed IP -> block
   }
 
   const [a, b] = parts;
@@ -361,33 +387,108 @@ export class EvidencePassportService {
       settlementAuditTrace,
     };
 
-    const passportDigestSha256 = crypto
+    const initialPassportDigest = crypto
       .createHash('sha256')
       .update(canonicalizeJson(passportPayloadWithoutDigest))
       .digest('hex');
 
-    const passport: EvidencePassport = {
-      ...passportPayloadWithoutDigest,
-      passportDigestSha256,
-      isCryptographicallyValid: true,
-    };
+    // Anchor the passport to the immutable audit chain atomically alongside snapshot persistence
+    const auditActorId = contract.reviewerId || contract.clientId || 'reviewer_01';
+    const passport: EvidencePassport = this.db.withTransaction(() => {
+      const auditEntry = this.auditService.appendWithinTx({
+        actorId: auditActorId,
+        actorRole: 'SYSTEM',
+        action: 'EVIDENCE_PASSPORT_GENERATED',
+        entityType: 'EVIDENCE',
+        entityId: passportId,
+        contractId,
+        milestoneId,
+        previousState: null,
+        newState: overallStatus,
+        payload: {
+          passportId,
+          passportDigestSha256: initialPassportDigest,
+          overallStatus,
+          criteriaTotal: criteriaSummary.total,
+          criteriaVerified: criteriaSummary.verified,
+          criteriaFailed: criteriaSummary.failed,
+          graphNodeCount: graph.nodes.length,
+          graphEdgeCount: graph.edges.length,
+        },
+      });
 
-    // Save passport snapshot in SQLite repository
-    this.passportRepo.save(passport);
+      // Anchor the audit entry reference into the trace
+      settlementAuditTrace.auditEventReferences.push(auditEntry.entryHash);
+
+      const finalPassportPayloadWithoutDigest = {
+        ...passportPayloadWithoutDigest,
+        settlementAuditTrace,
+      };
+
+      const passportDigestSha256 = crypto
+        .createHash('sha256')
+        .update(canonicalizeJson(finalPassportPayloadWithoutDigest))
+        .digest('hex');
+
+      const pass: EvidencePassport = {
+        ...finalPassportPayloadWithoutDigest,
+        passportDigestSha256,
+        isCryptographicallyValid: true,
+      };
+
+      // Save passport snapshot in SQLite repository
+      this.passportRepo.save(pass);
+
+      return pass;
+    });
 
     return passport;
   }
 
   /**
+   * Verifies the cryptographic integrity of an Evidence Passport against its canonical digest.
+   * Detects post-generation tampering in passport data, graph nodes, edges, criteria mappings, or stored digests.
+   */
+  public verifyPassportIntegrity(passport: EvidencePassport, storedDigest?: string): boolean {
+    if (!passport || !passport.passportDigestSha256) {
+      return false;
+    }
+
+    const { passportDigestSha256, isCryptographicallyValid, ...payloadWithoutDigest } = passport;
+    const computedDigest = crypto
+      .createHash('sha256')
+      .update(canonicalizeJson(payloadWithoutDigest))
+      .digest('hex');
+
+    const digestMatches = computedDigest === passportDigestSha256;
+    const storedMatches = storedDigest ? computedDigest === storedDigest : true;
+
+    return digestMatches && storedMatches;
+  }
+
+  /**
    * Retrieves an existing Evidence Passport or generates one on-demand.
+   * Re-verifies cryptographic integrity of the stored record against both the payload digest
+   * and the SQLite indexed digest column, detecting post-generation tampering.
    */
   public async getPassport(
     contractId: string,
     milestoneId: string
   ): Promise<EvidencePassport> {
-    const existing = this.passportRepo.findByMilestoneId(milestoneId);
-    if (existing && existing.identity.contractId === contractId) {
-      return existing;
+    const record = this.passportRepo.findWithDigestByMilestoneId(milestoneId);
+    if (record && record.passport.identity.contractId === contractId) {
+      const isValid = this.verifyPassportIntegrity(record.passport, record.storedDigest);
+      if (!isValid) {
+        return {
+          ...record.passport,
+          isCryptographicallyValid: false,
+          identity: {
+            ...record.passport.identity,
+            overallStatus: 'FAILED',
+          },
+        };
+      }
+      return record.passport;
     }
     return this.generatePassport(contractId, milestoneId);
   }
@@ -919,12 +1020,27 @@ export class EvidencePassportService {
 
       const responseTimeMs = Date.now() - startTime;
 
-      // Handle redirect status codes explicitly with destination re-verification
+      // Handle redirect status codes explicitly with destination re-verification and DNS check
       if (res.status >= 300 && res.status < 400) {
         const location = res.headers.get('location');
         if (location) {
           const redirectUrl = new URL(location, parsedUrl);
-          if (isPrivateOrBlockedIp(redirectUrl.hostname)) {
+
+          let redirectIps: string[] = [];
+          try {
+            if (this.options?.dnsLookupImpl) {
+              const resLookup = await this.options.dnsLookupImpl(redirectUrl.hostname);
+              redirectIps = resLookup.map((r) => r.address);
+            } else {
+              const lookups = await dns.promises.lookup(redirectUrl.hostname, { all: true });
+              redirectIps = lookups.map((l) => l.address);
+            }
+          } catch {
+            // DNS resolution for redirect target failed or host is an IP literal
+          }
+
+          const hasBlockedRedirectIp = redirectIps.some(isPrivateOrBlockedIp);
+          if (hasBlockedRedirectIp || isPrivateOrBlockedIp(redirectUrl.hostname)) {
             smokeChecks.push({
               name: 'HTTP_REDIRECT_SECURITY_FILTER',
               targetUrl: redirectUrl.toString(),
@@ -932,7 +1048,7 @@ export class EvidencePassportService {
               actualStatus: res.status,
               status: 'BLOCKED_SSRF',
               responseTimeMs,
-              details: `Blocked SSRF redirect to restricted host '${redirectUrl.hostname}'.`,
+              details: `Blocked SSRF redirect to restricted destination '${redirectUrl.hostname}' (${redirectIps.length > 0 ? redirectIps.join(', ') : 'blocked host'}).`,
             });
             return {
               runtimeValidationEnabled: true,
@@ -944,10 +1060,10 @@ export class EvidencePassportService {
                 ssrfValidated: false,
                 ipBlocked: true,
                 redirectsRestricted: true,
-                dnsResolvedIps: resolvedIps,
+                dnsResolvedIps: [...resolvedIps, ...redirectIps],
               },
               validatedAt: new Date().toISOString(),
-              details: 'SSRF protection blocked redirect to internal IP address.',
+              details: 'SSRF protection blocked redirect to internal IP address or restricted host.',
               limitationsNotice,
             };
           }
