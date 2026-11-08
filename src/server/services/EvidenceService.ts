@@ -305,7 +305,8 @@ export class EvidenceService {
   public submitDemoFixture(
     actor: User,
     milestoneId: string,
-    fixtureKey?: DemoFixtureKey
+    fixtureKey?: DemoFixtureKey,
+    overrideFields?: Partial<SubmitEvidenceInput>
   ): EvidenceSubmission {
     const fixture = fixtureKey
       ? DEMO_EVIDENCE_FIXTURES[fixtureKey]
@@ -319,6 +320,10 @@ export class EvidenceService {
       );
     }
 
-    return this.submitEvidence(actor, milestoneId, fixture.payload);
+    const payload = overrideFields
+      ? { ...fixture.payload, ...overrideFields }
+      : fixture.payload;
+
+    return this.submitEvidence(actor, milestoneId, payload);
   }
 }
