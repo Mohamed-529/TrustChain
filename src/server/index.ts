@@ -469,7 +469,8 @@ export function createServerApp(options?: {
     evaluationService,
     githubVerificationService,
     evidencePassportService,
-    contractRepo
+    contractRepo,
+    milestoneRepo
   );
   const reviewController = new ReviewController(humanReviewService);
   const scheduleController = new ScheduleController(

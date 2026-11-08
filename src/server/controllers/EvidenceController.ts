@@ -2,7 +2,7 @@ import type { EvidenceService } from '../services/EvidenceService.ts';
 import type { EvaluationService } from '../services/EvaluationService.ts';
 import type { GitHubVerificationService } from '../services/GitHubVerificationService.ts';
 import type { EvidencePassportService } from '../services/EvidencePassportService.ts';
-import type { ContractRepository } from '../repositories/DomainRepositories.ts';
+import type { ContractRepository, MilestoneRepository } from '../repositories/DomainRepositories.ts';
 import type { DemoFixtureKey } from '../services/DemoEvidenceFixtures.ts';
 import {
   AppError,
@@ -17,19 +17,22 @@ export class EvidenceController {
   private readonly githubVerificationService?: GitHubVerificationService;
   private readonly evidencePassportService?: EvidencePassportService;
   private readonly contractRepo?: ContractRepository;
+  private readonly milestoneRepo?: MilestoneRepository;
 
   constructor(
     evidenceService: EvidenceService,
     evaluationService: EvaluationService,
     githubVerificationService?: GitHubVerificationService,
     evidencePassportService?: EvidencePassportService,
-    contractRepo?: ContractRepository
+    contractRepo?: ContractRepository,
+    milestoneRepo?: MilestoneRepository
   ) {
     this.evidenceService = evidenceService;
     this.evaluationService = evaluationService;
     this.githubVerificationService = githubVerificationService;
     this.evidencePassportService = evidencePassportService;
     this.contractRepo = contractRepo;
+    this.milestoneRepo = milestoneRepo;
   }
 
   public submitEvidence = (req: ApiRequest, res: ApiResponse, next: NextFunction): void => {
@@ -226,7 +229,12 @@ export class EvidenceController {
         );
       }
 
-      const contractId = req.params.contractId || req.params.id;
+      const contractId =
+        req.params.contractId ||
+        (req.params.milestoneId && this.milestoneRepo
+          ? this.milestoneRepo.findById(req.params.milestoneId)?.contractId
+          : undefined) ||
+        req.params.id;
       const milestoneId = req.params.milestoneId || req.params.id;
       if (!contractId || !milestoneId) {
         throw new AppError(400, 'BAD_REQUEST', 'contractId and milestoneId are required.');
@@ -237,6 +245,17 @@ export class EvidenceController {
         const contract = this.contractRepo.findById(contractId);
         if (!contract) {
           throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${contractId}' not found.`);
+        }
+
+        if (this.milestoneRepo) {
+          const milestone = this.milestoneRepo.findById(milestoneId);
+          if (!milestone || milestone.contractId !== contract.id) {
+            throw new AppError(
+              404,
+              'MILESTONE_NOT_FOUND',
+              `Milestone '${milestoneId}' not found in contract '${contractId}'.`
+            );
+          }
         }
 
         const isParty =
@@ -255,12 +274,15 @@ export class EvidenceController {
       const previewUrl = typeof req.query.previewUrl === 'string' ? req.query.previewUrl : undefined;
       const healthEndpoint = typeof req.query.healthEndpoint === 'string' ? req.query.healthEndpoint : undefined;
       const artifactDigest = typeof req.query.artifactDigest === 'string' ? req.query.artifactDigest : undefined;
+      const forceRefresh = req.query.forceRefresh === 'true' || Boolean(previewUrl || healthEndpoint || artifactDigest);
 
-      const passport = await this.evidencePassportService.generatePassport(contractId, milestoneId, {
-        previewUrl,
-        healthEndpoint,
-        artifactDigestSha256: artifactDigest,
-      });
+      const passport = forceRefresh
+        ? await this.evidencePassportService.generatePassport(contractId, milestoneId, {
+            previewUrl,
+            healthEndpoint,
+            artifactDigestSha256: artifactDigest,
+          })
+        : await this.evidencePassportService.getPassport(contractId, milestoneId);
 
       res.status(200).json({ passport });
     } catch (err) {
@@ -283,6 +305,36 @@ export class EvidenceController {
           'PASSPORT_SERVICE_UNAVAILABLE',
           'Evidence Passport service is not initialized.'
         );
+      }
+
+      const milestoneId = req.params.milestoneId || req.params.id;
+      let contractId = req.params.contractId;
+      if (!contractId && milestoneId && this.milestoneRepo) {
+        const milestone = this.milestoneRepo.findById(milestoneId);
+        if (!milestone) {
+          throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' not found.`);
+        }
+        contractId = milestone.contractId;
+      }
+
+      // Enforce contract-party authorization check
+      if (contractId && this.contractRepo) {
+        const contract = this.contractRepo.findById(contractId);
+        if (!contract) {
+          throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${contractId}' not found.`);
+        }
+
+        const isParty =
+          req.actor.id === contract.clientId ||
+          req.actor.id === contract.developerId ||
+          req.actor.id === contract.reviewerId;
+        if (!isParty) {
+          throw new AppError(
+            403,
+            'FORBIDDEN_NOT_CONTRACT_PARTY',
+            'Only contract participants (Client, Developer, or Reviewer) may execute runtime validation.'
+          );
+        }
       }
 
       const bodyObj = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : {};
