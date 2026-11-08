@@ -4,24 +4,24 @@
 **Workspace:** Google Antigravity  
 **Repository:** `Mohamed-529/TrustChain`  
 **Branch:** `main`  
-**Status:** Completed & Fully Verified (`25 / 25` Evidence Passport tests passing; `100 / 100` total project tests passing across 10 suites)
+**Status:** Completed, Hardened & Fully Verified (`29 / 29` Evidence Passport tests passing; `104 / 104` total project tests passing across 10 suites)
 
 ---
 
 ## 1. Executive Summary
 
-MilestoneProof AI moves beyond superficial AI milestone grading by introducing the **Evidence Passport**: an authoritative, traceable, and cryptographically linked engineering record for software contract delivery.
+MilestoneProof AI moves beyond superficial AI milestone grading by introducing the **Evidence Passport**: an authoritative, traceable, and cryptographically verified engineering record for software development contract delivery.
 
-The Evidence Passport provides deterministic traceability across nine distinct verification pillars:
-1. **Agreed Milestone Acceptance Criteria:** Contract version, canonical criteria hash, and criterion-by-criterion evidence mapping.
+The Evidence Passport establishes deterministic traceability across nine distinct verification pillars:
+1. **Agreed Milestone Acceptance Criteria:** Contract version, canonical criteria hash (`criteriaHash`), and criterion-by-criterion evidence mapping.
 2. **GitHub Repository & Source Commit:** Normalized repository URL, branch, verified commit SHA, author identity, and pull request state.
 3. **Cryptographic Commit Signatures:** GPG / SSH / S/MIME signature verification with explicit status semantics (`VERIFIED`, `UNVERIFIED`, `INVALID`, `UNSUPPORTED`, `UNAVAILABLE`) and documented limitations.
 4. **CI/CD Execution Telemetry:** Automated workflow provider, run URL, exact commit matching check (`commitMatchesSource`), test counts, and code coverage.
 5. **Artifact Provenance & Digest Attestation:** SLSA v1.0 / in-toto build provenance attestation verification, SHA-256 binary digest recording, and builder identity checks.
-6. **Runtime Deployment Smoke-Testing & SSRF Guard:** Live endpoint HTTP status checks, latency measurement, and server-side request forgery (SSRF) protection against loopback, private IPv4/IPv6, and cloud metadata (AWS IMDSv1/v2).
+6. **Runtime Deployment Smoke-Testing & SSRF Guard:** Live endpoint HTTP status checks, latency measurement, and server-side request forgery (SSRF) protection against loopback, private IPv4/IPv6, cloud metadata (AWS IMDSv1/v2), and redirect destination inspection.
 7. **Multi-Agent Evaluation Synthesis:** Tri-agent findings from Evidence Agent, Risk Agent, and Arbitrator Agent, including explicit handling of agent disagreement and adversarial prompt-injection neutralization.
 8. **Deterministic Verification Outcomes:** Criteria-driven overall passport status (`VERIFIED`, `FAILED`, `UNVERIFIED`, `UNAVAILABLE`, `NOT_APPLICABLE`) and zero-permit blocking gates.
-9. **Audit Trail & Cryptographic Graph:** Directed acyclic graph (DAG) of all evidence nodes and hashes, embedded audit event sequence references, and a top-level canonical passport SHA-256 digest (`mpai-passport-canon-v1`).
+9. **Audit Trail & Cryptographic Graph:** Directed acyclic graph (DAG) of all evidence nodes and hashes, embedded audit event sequence references, immutable SQLite hash chain anchoring (`EVIDENCE_PASSPORT_GENERATED`), and a top-level canonical passport SHA-256 digest (`mpai-passport-canon-v1`).
 
 ---
 
@@ -43,86 +43,97 @@ export interface EvidencePassport {
   identity: EvidencePassportIdentity;
   sourceIdentity: EvidencePassportSourceIdentity;
   ciCd: EvidencePassportCiCd;
-  provenance: EvidencePassportProvenance;
-  runtime: EvidencePassportRuntime;
-  agentSummary: EvidencePassportAgentSummary;
-  criteriaSummary: EvidencePassportCriteriaSummary;
+  buildProvenance: EvidencePassportProvenance;
+  runtimeValidation: EvidencePassportRuntime;
   criteriaMapping: CriterionEvidenceMappingItem[];
+  criteriaSummary: {
+    total: number;
+    verified: number;
+    failed: number;
+    insufficient: number;
+    conflicting: number;
+  };
   graph: EvidenceGraph;
-  auditTrail: EvidencePassportAuditReference;
+  aiSummary: EvidencePassportAgentSummary;
+  settlementAuditTrace: EvidencePassportSettlementTrace;
   passportDigestSha256: string;
   isCryptographicallyValid: boolean;
-  generatedAt: string;
 }
 ```
 
-### 2.2 Database Storage (`src/server/repositories/Database.ts` & `DomainRepositories.ts`)
+### 2.2 Database Storage & Cryptographic Verification (`src/server/repositories/Database.ts` & `DomainRepositories.ts`)
 
 - **Schema Migration Version 5:** Added `evidence_passports` table with indexed lookups on `milestone_id`, `contract_id`, `submission_id`, and `created_at`.
 - **Repository Methods (`EvidencePassportRepository`):**
-  - `save(passport: EvidencePassport): void` (Atomic insert/replace with JSON-serialized subgraphs).
+  - `save(passport: EvidencePassport): void` (Atomic insert/replace with JSON-serialized subgraphs and extracted `passport_digest`).
   - `findByMilestoneId(milestoneId: string): EvidencePassport | null`
+  - `findWithDigestByMilestoneId(milestoneId: string): { passport: EvidencePassport; storedDigest: string } | null`
   - `findById(id: string): EvidencePassport | null`
+- **Integrity Verification Method (`EvidencePassportService.verifyPassportIntegrity`):**
+  - Recomputes canonical SHA-256 digest over the passport payload (excluding volatile fields `passportDigestSha256` and `isCryptographicallyValid`).
+  - Matches recomputed digest against both the object's `passportDigestSha256` and the SQLite indexed `passport_digest` column.
+  - If any graph node, edge, criteria mapping, or summary field has been modified in SQLite, `isCryptographicallyValid` is set to `false` and `overallStatus` becomes `FAILED`.
 
 ---
 
-## 3. Implementation Details
+## 3. Implementation Details & Genuine vs Simulated Capabilities
 
-### 3.1 Traceability Pillars
+### 3.1 Genuinely Executed vs Mocked/Unavailable Checks
 
-1. **Agreed Criteria Mapping:** Every acceptance criterion from the milestone definition is evaluated against source, CI/CD, security scan, provenance, or runtime evidence. If no proof is supplied for a required criterion, it is flagged as `UNVERIFIED` with reason `INSUFFICIENT_EVIDENCE`.
-2. **Commit Signature Verification:**
-   - Detects GPG/SSH signatures via GitHub verification payloads or developer attestations.
-   - Status transitions:
-     - `VERIFIED`: Valid GPG/SSH key signed by authorized committer.
-     - `UNVERIFIED`: Normal unsigned commit (standard in many development workflows; does not reject contract).
-     - `INVALID`: Expired key, revoked key, or corrupted signature.
-     - `UNSUPPORTED`: Unknown signature algorithm or unparseable payload.
-     - `UNAVAILABLE`: GitHub verification service unreachable.
-   - Documentation Notice: Clearly discloses that commit signature verifies *author identity*, not code correctness or absence of malicious intent.
-3. **CI/CD Execution & Foreign Commit Guard:**
-   - Verifies whether the CI workflow executed against the *exact* submitted commit (`ciReport.runCommitSha === submission.commitSha`).
-   - If CI executed on an unrelated or foreign commit, it is flagged as `FAILED` with discrepancy details.
-4. **Build Artifact Provenance:**
-   - Parses SLSA v1.0 provenance attestations and checks artifact digests.
-   - When no attestation is configured, returns `UNAVAILABLE` without failing the milestone.
-5. **Runtime Deployment Preview & SSRF Protection:**
-   - Performs automated smoke-testing against preview environments.
-   - Strict SSRF filter blocks:
-     - Loopback addresses (`127.0.0.0/8`, `::1`, `localhost`)
-     - RFC 1918 private subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
-     - Link-local and Carrier-Grade NAT (`169.254.0.0/16`, `100.64.0.0/10`)
-     - Cloud Instance Metadata (`169.254.169.254`, `metadata.google.internal`)
-     - Non-HTTP/HTTPS protocols (`file:`, `gopher:`, `ftp:`)
-     - Internal redirect targets (SSRF redirect hop protection)
-6. **Cryptographic Graph & Canonical Digest:**
-   - Constructs a DAG connecting Contract -> Milestone -> Submission -> Source/CI/Risk -> Passport.
-   - Computes canonical SHA-256 digest (`passportDigestSha256`) over canonical JSON representation with excluded volatile digest field.
-
-### 3.2 API Endpoints & RBAC
-
-- `GET /api/v1/contracts/:contractId/milestones/:milestoneId/evidence-passport`
-  - Contract-party RBAC enforced (`FORBIDDEN_NOT_CONTRACT_PARTY`).
-  - Supports query parameter `?forceRefresh=true` for on-demand re-verification.
-- `POST /api/v1/contracts/:contractId/milestones/:milestoneId/evidence-passport/runtime-validate`
-  - Validates preview URLs against SSRF filter and executes HTTP smoke-test.
-  - Restricted to authenticated contract participants.
-
-### 3.3 Milestone Workbench UI Integration (`src/components/EvidencePassportViewer.tsx`)
-
-A tabbed interface embedded directly inside the Milestone Workbench with 6 interactive views:
-1. **Criteria Mapping:** Visual table showing every contractual criterion mapped to evidence references, status badges, and gap descriptions.
-2. **Source & Signature:** Commit details, author info, GPG/SSH status, and cryptographic limitations advisory.
-3. **CI/CD Evidence:** Workflow status, test counts, coverage bar, and commit association indicator.
-4. **Artifact Provenance:** Digest verification status, SLSA level badge, and subject artifact SHA-256 hash.
-5. **Runtime & SSRF Guard:** Live endpoint status, response latency, and SSRF security filter status.
-6. **Cryptographic Graph & Audit:** Visual DAG node/edge metrics, canonical passport SHA-256 digest, and tamper-check badge.
+| Pillar | Genuine / Executed Check | Simulated / Offline Mode | Unavailable / Documented Limitation |
+|---|---|---|---|
+| **Agreed Criteria** | Canonical criteria SHA-256 hash, contract version comparison, criterion mapping. | Fully evaluated against domain models and test fixtures. | None. |
+| **Source Commit** | Repository coordinate parsing, PR URL matching, SHA normalization. | Git tree traversal is offline/fixture-based unless GitHub token configured. | Committer identity verifies key possession, not physical developer presence. |
+| **Commit Signatures** | Signature status state machine (`VERIFIED`, `UNVERIFIED`, `INVALID`, `UNSUPPORTED`, `UNAVAILABLE`). | GPG verification payload simulated via commit metadata / notes in demo tests. | Live GPG keyserver lookup requires external network access; marked `UNAVAILABLE` when unconfigured. |
+| **CI/CD Execution** | Exact commit matching check (`commitMatchesSource`), failure blocking, coverage/test counts. | Mock provenance records simulated in integration tests. | Foreign commit execution flagged as `FAILED`. |
+| **Build Provenance** | Binary digest SHA-256 matching, SLSA predicate mapping. | SLSA v1.0 attestation verified via structured metadata notes. | Live Sigstore Rekor transparency log queries are optional; marked `UNAVAILABLE` when missing. |
+| **Runtime Smoke-Test** | Real HTTP fetch, response code check (200 vs non-200), latency timing, timeout abortion. | Optional custom fetch/DNS injection for unit testing. | Network connectivity required; does not certify backend application logic correctness. |
+| **SSRF Security Guard** | Real DNS resolution (`dns.promises.lookup`), IPv4/IPv6 private IP filtering, cloud metadata blocking, redirect destination inspection. | Mock DNS lookup available for offline test isolation. | TOCTOU / DNS rebinding mitigated via manual redirect control and DNS re-resolution. |
+| **Audit Anchoring** | Atomic `EVIDENCE_PASSPORT_GENERATED` event logged to SQLite hash chain with unbroken `entry_hash` linkage. | Seeded audit chain verified by `verifyChain()`. | None. |
 
 ---
 
-## 4. Test Verification Matrix
+## 4. Test Verification Matrix & Count Reconciliation
 
-All 25 test cases in `src/server/__tests__/evidence_passport.test.ts` pass cleanly:
+### 4.1 Test Count & Suite Reconciliation
+
+The Node.js native test runner (`node --test`) reports:
+```
+ℹ tests 104
+ℹ suites 10
+ℹ pass 104
+ℹ fail 0
+```
+
+**Reconciliation Breakdown:**
+- **10 Test Suites:** The 10 suites reported by Node correspond to the 10 test files that define top-level `describe(...)` blocks:
+  1. `audit_replay.test.ts` (1 describe)
+  2. `evidence_passport.test.ts` (1 describe)
+  3. `phase1.test.ts` (1 describe)
+  4. `phase2.test.ts` (1 describe)
+  5. `phase3.test.ts` (1 describe)
+  6. `phase4.test.ts` (1 describe)
+  7. `phase5.test.ts` (1 describe)
+  8. `phase6.test.ts` (1 describe)
+  9. `phase7.test.ts` (1 describe)
+  10. `phase9_agent_integration.test.ts` (1 describe)
+- Two files (`phase8_foundation.test.ts` and `phase8_integration.test.ts`) use top-level `test(...)` blocks with `t.test(...)` subtests rather than `describe(...)`, which Node registers as top-level tests rather than suites.
+- **104 Passed Tests:**
+  - 29 tests in `evidence_passport.test.ts`
+  - 20 tests in `audit_replay.test.ts`
+  - 7 tests in `phase1.test.ts`
+  - 3 tests in `phase2.test.ts`
+  - 4 tests in `phase3.test.ts`
+  - 4 tests in `phase4.test.ts`
+  - 4 tests in `phase5.test.ts`
+  - 4 tests in `phase6.test.ts`
+  - 6 tests in `phase7.test.ts`
+  - 4 tests in `phase8_foundation.test.ts` (1 parent `test` + 3 subtests)
+  - 7 tests in `phase8_integration.test.ts` (1 parent `test` + 6 subtests)
+  - 12 tests in `phase9_agent_integration.test.ts`
+  - **Total: 29 + 20 + 7 + 3 + 4 + 4 + 4 + 4 + 6 + 4 + 7 + 12 = 104 passed tests.**
+
+### 4.2 Evidence Passport Test Matrix (29 Scenarios)
 
 | # | Test Scenario | Verified Outcome |
 |---|---|---|
@@ -149,8 +160,12 @@ All 25 test cases in `src/server/__tests__/evidence_passport.test.ts` pass clean
 | 21 | Neutralize adversarial prompt injection | `<untrusted_evidence>` sanitized |
 | 22 | Enforce mandatory human review before settlement | Policy engine requires human approval |
 | 23 | Guarantee zero autonomous PayPal operations | Read-only passport generation |
-| 24 | Block unauthorized outsiders | HTTP 403 `FORBIDDEN_NOT_CONTRACT_PARTY` |
+| 24 | Block unauthorized outsiders from reading passports | HTTP 403 `FORBIDDEN_NOT_CONTRACT_PARTY` |
 | 25 | Authenticated runtime validation endpoint with SSRF | HTTP 200 / SSRF block verified |
+| 26 | Block unauthorized outsiders from executing runtime validation | HTTP 403 `FORBIDDEN_NOT_CONTRACT_PARTY` |
+| 27 | Anchor passport digest to immutable audit record | `EVIDENCE_PASSPORT_GENERATED` logged |
+| 28 | Detect direct SQLite tampering in graph nodes or digest | `isCryptographicallyValid: false`, `FAILED` |
+| 29 | DNS resolution on redirect targets to private IP space | Redirect target resolving to `127.0.0.1` blocked |
 
 ---
 
@@ -159,4 +174,4 @@ All 25 test cases in `src/server/__tests__/evidence_passport.test.ts` pass clean
 1. **Read-Only Passport Generation:** No payment gateway operations, database mutations on ledger, or milestone status overrides occur during Evidence Passport generation or retrieval.
 2. **Zero Autonomous PayPal Execution:** Neither Evidence Passport nor AI agents can authorize, capture, or void payments.
 3. **Mandatory Human Review:** Human review is enforced by policy gates; passport serves strictly as decision intelligence.
-4. **Server-Authoritative Cryptographic Digest:** Passport digest is calculated strictly server-side using canonical JSON hashing.
+4. **Server-Authoritative Cryptographic Digest:** Passport digest is calculated strictly server-side using canonical JSON hashing and verified against SQLite storage upon every retrieval.
