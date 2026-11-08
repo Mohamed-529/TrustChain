@@ -386,6 +386,7 @@ export class AppDatabase {
       .prepare('SELECT version FROM schema_migrations WHERE version = 4')
       .get() as { version: number } | undefined;
     if (existingV4) {
+      this.runPhase10PassportMigrations();
       return;
     }
 
@@ -489,6 +490,42 @@ export class AppDatabase {
       this.raw
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(4, '004_phase7_evidence_provenance_and_github_verification', new Date().toISOString());
+    });
+
+    this.runPhase10PassportMigrations();
+  }
+
+  private runPhase10PassportMigrations(): void {
+    const existingV5 = this.raw
+      .prepare('SELECT version FROM schema_migrations WHERE version = 5')
+      .get() as { version: number } | undefined;
+    if (existingV5) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      this.raw.exec(`
+        CREATE TABLE IF NOT EXISTS evidence_passports (
+          id TEXT PRIMARY KEY,
+          milestone_id TEXT NOT NULL REFERENCES milestones(id) ON DELETE RESTRICT,
+          contract_id TEXT NOT NULL REFERENCES contracts(id) ON DELETE RESTRICT,
+          submission_id TEXT NOT NULL,
+          passport_digest TEXT NOT NULL CHECK (length(passport_digest) = 64),
+          overall_status TEXT NOT NULL,
+          criteria_summary_json TEXT NOT NULL DEFAULT '{}',
+          passport_data_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_evidence_passports_milestone_id
+          ON evidence_passports(milestone_id);
+        CREATE INDEX IF NOT EXISTS idx_evidence_passports_contract_id
+          ON evidence_passports(contract_id);
+      `);
+
+      this.raw
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+        .run(5, '005_prompt2_evidence_passport', new Date().toISOString());
     });
   }
 

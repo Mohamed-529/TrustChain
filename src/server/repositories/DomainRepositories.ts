@@ -10,6 +10,7 @@ import type {
   EvaluationRun,
   EvidenceAnalysis,
   EvidenceIntegrityVerification,
+  EvidencePassport,
   EvidenceProvenanceStatus,
   EvidenceProvenanceVerificationRecord,
   EvidenceReference,
@@ -1471,5 +1472,63 @@ export class GitHubWebhookEventRepository {
       );
   }
 }
+
+export class EvidencePassportRepository {
+  private readonly rawDb: DatabaseSync;
+
+  constructor(rawDb: DatabaseSync) {
+    this.rawDb = rawDb;
+  }
+
+  public save(passport: EvidencePassport): void {
+    this.rawDb
+      .prepare(
+        `INSERT OR REPLACE INTO evidence_passports (
+          id, milestone_id, contract_id, submission_id,
+          passport_digest, overall_status, criteria_summary_json,
+          passport_data_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        passport.id,
+        passport.identity.milestoneId,
+        passport.identity.contractId,
+        passport.sourceIdentity.commitSha || passport.id,
+        passport.passportDigestSha256,
+        passport.identity.overallStatus,
+        JSON.stringify(passport.criteriaSummary),
+        JSON.stringify(passport),
+        passport.identity.createdAt,
+        passport.identity.evaluatedAt ?? passport.identity.createdAt
+      );
+  }
+
+  public findByMilestoneId(milestoneId: string): EvidencePassport | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT passport_data_json FROM evidence_passports WHERE milestone_id = ? ORDER BY created_at DESC LIMIT 1'
+      )
+      .get(milestoneId) as { passport_data_json: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.passport_data_json) as EvidencePassport;
+    } catch {
+      return null;
+    }
+  }
+
+  public findById(id: string): EvidencePassport | null {
+    const row = this.rawDb
+      .prepare('SELECT passport_data_json FROM evidence_passports WHERE id = ?')
+      .get(id) as { passport_data_json: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.passport_data_json) as EvidencePassport;
+    } catch {
+      return null;
+    }
+  }
+}
+
 
 

@@ -35,7 +35,14 @@ export type PaymentStatus =
   | 'FAILED'
   | 'EXPIRED';
 
-export type RequiredProofType = 'CODE_COMMIT' | 'PULL_REQUEST' | 'CI_TESTS' | 'SECURITY_SCAN' | 'API_DOCS';
+export type RequiredProofType =
+  | 'CODE_COMMIT'
+  | 'PULL_REQUEST'
+  | 'CI_TESTS'
+  | 'SECURITY_SCAN'
+  | 'API_DOCS'
+  | 'RUNTIME_VALIDATION'
+  | 'DEPLOYMENT_PREVIEW';
 
 export interface User {
   id: string;
@@ -921,3 +928,260 @@ export interface GitHubWebhookEventRecord {
 
 
 
+
+
+/**
+ * ============================================================================
+ * PROMPT 2/8 — Evidence Passport Domain Models
+ * Traceable, Verifiable Engineering Evidence Record for Contract Milestones
+ * ============================================================================
+ */
+
+export type PassportVerificationStatus =
+  | 'VERIFIED'
+  | 'FAILED'
+  | 'UNVERIFIED'
+  | 'UNAVAILABLE'
+  | 'NOT_APPLICABLE';
+
+export type CommitSignatureStatus =
+  | 'VERIFIED'
+  | 'UNVERIFIED'
+  | 'INVALID'
+  | 'UNSUPPORTED'
+  | 'UNAVAILABLE';
+
+export type AttestationVerificationStatus =
+  | 'VERIFIED'
+  | 'FAILED'
+  | 'UNVERIFIED'
+  | 'UNAVAILABLE'
+  | 'NOT_APPLICABLE';
+
+export type RuntimeValidationStatus =
+  | 'PASSED'
+  | 'FAILED'
+  | 'SKIPPED'
+  | 'BLOCKED_SECURITY'
+  | 'UNAVAILABLE'
+  | 'NOT_APPLICABLE';
+
+export type CriterionMappingStatus =
+  | 'VERIFIED'
+  | 'FAILED'
+  | 'INSUFFICIENT_EVIDENCE'
+  | 'CONFLICTING_EVIDENCE';
+
+export interface EvidencePassportIdentity {
+  passportId: string;
+  contractId: string;
+  milestoneId: string;
+  milestoneTitle: string;
+  agreedAmountCents: number;
+  criteriaVersion: number;
+  criteriaHash: string;
+  createdAt: string;
+  evaluatedAt: string | null;
+  overallStatus: 'VERIFIED' | 'FAILED' | 'PARTIALLY_VERIFIED' | 'UNVERIFIED' | 'NEEDS_REVIEW';
+}
+
+export interface CommitAuthorMetadata {
+  name: string | null;
+  email: string | null;
+  login: string | null;
+  date: string | null;
+}
+
+export interface CommitSignatureVerificationInfo {
+  status: CommitSignatureStatus;
+  verified: boolean;
+  signerKeyId?: string | null;
+  signatureType?: string | null;
+  reason?: string | null;
+  signaturePayload?: string | null;
+  details: string;
+  limitationsNotice: string;
+}
+
+export interface EvidencePassportSourceIdentity {
+  repoUrl: string;
+  repoOwner: string;
+  repoName: string;
+  commitSha: string;
+  commitShortSha: string;
+  branch: string;
+  prNumber: number | null;
+  prUrl: string | null;
+  prStatus: 'MERGED' | 'OPEN' | 'CLOSED' | null;
+  author: CommitAuthorMetadata;
+  committer: CommitAuthorMetadata;
+  signature: CommitSignatureVerificationInfo;
+  status: PassportVerificationStatus;
+}
+
+export interface EvidencePassportCiCd {
+  provider: string;
+  workflowId: string | number | null;
+  workflowName: string | null;
+  runId: number | null;
+  runUrl: string | null;
+  associatedCommitSha: string | null;
+  commitMatchesSource: boolean;
+  status: string | null;
+  conclusion: string | null;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  coveragePct: number;
+  changedFiles: string[];
+  artifacts: Array<{ name: string; sizeBytes?: number; digest?: string }>;
+  verificationStatus: PassportVerificationStatus;
+  details: string;
+}
+
+export interface EvidencePassportProvenance {
+  attestationSupported: boolean;
+  artifactDigestSha256: string | null;
+  verificationStatus: AttestationVerificationStatus;
+  sourceRepo: string | null;
+  sourceCommit: string | null;
+  workflowIdentity: string | null;
+  predicateType: string | null;
+  verifiedAt: string | null;
+  details: string;
+  limitationsNotice: string;
+}
+
+export interface RuntimeSmokeCheckItem {
+  name: string;
+  targetUrl: string;
+  expectedStatus: number;
+  actualStatus: number | null;
+  status: 'PASSED' | 'FAILED' | 'BLOCKED_SSRF' | 'TIMEOUT' | 'UNAVAILABLE';
+  responseTimeMs: number | null;
+  details: string;
+}
+
+export interface EvidencePassportRuntime {
+  runtimeValidationEnabled: boolean;
+  previewUrl: string | null;
+  healthEndpoint: string | null;
+  overallStatus: RuntimeValidationStatus;
+  smokeChecks: RuntimeSmokeCheckItem[];
+  securityChecks: {
+    ssrfValidated: boolean;
+    ipBlocked: boolean;
+    redirectsRestricted: boolean;
+    dnsResolvedIps: string[];
+  };
+  validatedAt: string | null;
+  details: string;
+  limitationsNotice: string;
+}
+
+export interface CriterionEvidenceMappingItem {
+  criterionId: string;
+  criterionTitle: string;
+  description: string;
+  requiredProofType: string;
+  status: CriterionMappingStatus;
+  confidenceScore: number;
+  supportingEvidence: {
+    prRef?: string | null;
+    commitSha?: string | null;
+    fileReferences?: string[];
+    ciTestSummary?: string | null;
+    runtimeSmokeTest?: string | null;
+    aiObservation?: string | null;
+    evidenceCitationIds: string[];
+  };
+  discrepancyDetails?: string | null;
+  findings: string[];
+}
+
+export type EvidenceGraphNodeType =
+  | 'CRITERION'
+  | 'SOURCE_COMMIT'
+  | 'PULL_REQUEST'
+  | 'CI_WORKFLOW'
+  | 'BUILD_ARTIFACT'
+  | 'RUNTIME_CHECK'
+  | 'AI_EVALUATION'
+  | 'HUMAN_DECISION'
+  | 'AUDIT_EVENT';
+
+export interface EvidenceGraphNode {
+  id: string;
+  type: EvidenceGraphNodeType;
+  label: string;
+  hash: string;
+  status: PassportVerificationStatus;
+  metadata: Record<string, unknown>;
+}
+
+export interface EvidenceGraphEdge {
+  fromId: string;
+  toId: string;
+  relationship: string;
+  isValid: boolean;
+}
+
+export interface EvidenceGraph {
+  nodes: EvidenceGraphNode[];
+  edges: EvidenceGraphEdge[];
+  graphIntegrityValid: boolean;
+}
+
+export interface EvidencePassport {
+  id: string;
+  identity: EvidencePassportIdentity;
+  sourceIdentity: EvidencePassportSourceIdentity;
+  ciCd: EvidencePassportCiCd;
+  buildProvenance: EvidencePassportProvenance;
+  runtimeValidation: EvidencePassportRuntime;
+  criteriaMapping: CriterionEvidenceMappingItem[];
+  criteriaSummary: {
+    total: number;
+    verified: number;
+    failed: number;
+    insufficient: number;
+    conflicting: number;
+  };
+  graph: EvidenceGraph;
+  aiSummary: {
+    evidenceAgent?: {
+      model: string;
+      isMock: boolean;
+      coverageSummary: string;
+      missingProof: string[];
+    };
+    riskAgent?: {
+      model: string;
+      isMock: boolean;
+      overallRisk: string;
+      promptInjectionDetected: boolean;
+      flags: string[];
+    };
+    reviewSynthesizer?: {
+      model: string;
+      recommendation: string;
+      advisoryOnly: true;
+      disagreementSummary: string[];
+    };
+  };
+  settlementAuditTrace: {
+    permittedAmountCents: number;
+    gateBlocked: boolean;
+    blockingReasons: string[];
+    humanReviewRequired: boolean;
+    humanApproval: {
+      decision?: string;
+      approvedAmountCents?: number;
+      decidedBy?: string;
+      decidedAt?: string;
+    } | null;
+    auditEventReferences: string[];
+  };
+  passportDigestSha256: string;
+  isCryptographicallyValid: boolean;
+}
