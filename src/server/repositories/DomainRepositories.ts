@@ -1077,6 +1077,19 @@ export class PaymentTransactionRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  public findByPaypalCaptureId(captureId: string, excludeTxId?: string): PayPalTransactionRecord | null {
+    if (excludeTxId) {
+      const row = this.rawDb
+        .prepare('SELECT * FROM payment_transactions WHERE paypal_capture_id = ? AND id != ? LIMIT 1')
+        .get(captureId, excludeTxId);
+      return row ? this.mapRow(row) : null;
+    }
+    const row = this.rawDb
+      .prepare('SELECT * FROM payment_transactions WHERE paypal_capture_id = ? LIMIT 1')
+      .get(captureId);
+    return row ? this.mapRow(row) : null;
+  }
+
   public insert(tx: PayPalTransactionRecord): void {
     this.rawDb
       .prepare(

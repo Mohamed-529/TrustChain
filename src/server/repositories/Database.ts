@@ -241,6 +241,7 @@ export class AppDatabase {
           updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_payments_milestone_id ON payment_transactions(milestone_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_capture_id ON payment_transactions(paypal_capture_id);
 
         CREATE TABLE IF NOT EXISTS audit_logs (
           seq INTEGER PRIMARY KEY AUTOINCREMENT,
