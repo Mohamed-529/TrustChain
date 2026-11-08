@@ -554,6 +554,37 @@ export default function App() {
     }
   };
 
+  const handlePayPalReconcile = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/paypal/reconcile`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? 'PayPal reconciliation failed');
+      }
+      const rec = data.reconciliation;
+      setStatusBanner({
+        type: rec.outcome === 'IN_SYNC' ? 'info' : 'success',
+        message: `PayPal Reconciliation [${rec.outcome}]: ${rec.actionTaken}. Discrepancies: ${rec.discrepancies.length}`,
+      });
+      await refreshAllData(token, selectedMilestoneId, selectedContractId);
+    } catch (err) {
+      setStatusBanner({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'PayPal reconciliation error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const latestSub = reviewDetails?.latestSubmission;
   const latestEval = reviewDetails?.latestEvaluation;
   const policy = reviewDetails?.policyCalculation;
@@ -1012,8 +1043,30 @@ export default function App() {
                 </p>
               </div>
 
+              <div className="p-2.5 rounded bg-amber-950/40 border border-amber-800/80 text-[11px] text-amber-200">
+                <div className="font-semibold flex items-center gap-1">
+                  <span>⚖️</span> Non-Escrow Regulatory Notice:
+                </div>
+                <div className="text-[10px] text-amber-300/80 mt-0.5 leading-tight">
+                  PayPal Orders API v2 (intent: AUTHORIZE) creates a temporary 29-day authorization hold. TrustChain never takes custody of funds.
+                </div>
+              </div>
+
               <div className="p-3 rounded bg-slate-950 border border-slate-800 text-xs font-mono space-y-1">
-                <div>Payment State: {reviewDetails.milestone.paymentStatus}</div>
+                <div className="flex items-center justify-between">
+                  <span>Payment State:</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    latestTx?.status === 'CAPTURED' || latestTx?.status === 'SIMULATED_CAPTURED'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                      : latestTx?.status === 'REQUIRES_RECONCILIATION'
+                        ? 'bg-amber-950 text-amber-300 border border-amber-700 animate-pulse'
+                        : latestTx?.status === 'AUTHORIZED' || latestTx?.status === 'SIMULATED_AUTHORIZED'
+                          ? 'bg-indigo-950 text-indigo-300 border border-indigo-700'
+                          : 'bg-slate-800 text-slate-300'
+                  }`}>
+                    {latestTx?.status ?? reviewDetails.milestone.paymentStatus}
+                  </span>
+                </div>
                 {latestTx && (
                   <>
                     <div>Order ID: {latestTx.paypalOrderId ?? '—'}</div>
@@ -1022,6 +1075,11 @@ export default function App() {
                     <div className="text-emerald-400">
                       Captured: {formatUsdCents(latestTx.capturedAmountCents)}
                     </div>
+                    {latestTx.authExpiresAt && (
+                      <div className="text-[10px] text-indigo-300">
+                        Hold Valid Until: {new Date(latestTx.authExpiresAt).toLocaleDateString()}
+                      </div>
+                    )}
                     <div className="text-[10px] text-slate-400">
                       Mode: {latestTx.executionMode}
                     </div>
@@ -1030,26 +1088,38 @@ export default function App() {
               </div>
 
               <div className="space-y-2 text-xs">
+                {currentUser?.role === 'DEVELOPER' && (
+                  <div className="p-2 rounded bg-rose-950/40 border border-rose-800 text-[10px] text-rose-300">
+                    Separation of Duties: Developer persona cannot create orders, capture funds, or trigger settlement.
+                  </div>
+                )}
                 <button
-                  disabled={loading}
+                  disabled={loading || currentUser?.role === 'DEVELOPER'}
                   onClick={() => void handlePayPalAction('order')}
-                  className="w-full px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 font-medium text-white"
+                  className="w-full px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 font-medium text-white disabled:opacity-40"
                 >
                   1. Create PayPal Order (CLIENT • AUTHORIZE)
                 </button>
                 <button
-                  disabled={loading}
+                  disabled={loading || currentUser?.role === 'DEVELOPER'}
                   onClick={() => void handlePayPalAction('authorize')}
-                  className="w-full px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 font-medium text-white"
+                  className="w-full px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 font-medium text-white disabled:opacity-40"
                 >
                   2. Authorize PayPal Order (CLIENT • 29d Hold)
                 </button>
                 <button
-                  disabled={loading || reviewDetails.milestone.status !== 'APPROVED'}
+                  disabled={loading || currentUser?.role === 'DEVELOPER' || reviewDetails.milestone.status !== 'APPROVED'}
                   onClick={() => void handlePayPalAction('capture')}
                   className="w-full px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 font-semibold text-white"
                 >
                   3. Capture Approved Settlement (Requires APPROVE)
+                </button>
+                <button
+                  disabled={loading || currentUser?.role === 'DEVELOPER'}
+                  onClick={() => void handlePayPalReconcile()}
+                  className="w-full px-3 py-1.5 rounded bg-amber-800 hover:bg-amber-700 font-medium text-amber-100 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                >
+                  <span>🔄</span> Reconcile with PayPal Sandbox
                 </button>
               </div>
 
