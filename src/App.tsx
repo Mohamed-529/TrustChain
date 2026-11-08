@@ -13,9 +13,12 @@ import type {
   PayPalTransactionRecord,
   ScheduleRecoveryProposal,
   User,
+  DisputeEvidencePack,
+  DisputePackVerificationResult,
 } from './types/domain';
 import { BryntumGanttViewer } from './components/BryntumGanttViewer';
 import { EvidencePassportViewer } from './components/EvidencePassportViewer';
+import { DisputeEvidencePackViewer } from './components/DisputeEvidencePackViewer';
 
 function formatUsdCents(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return '—';
@@ -37,6 +40,7 @@ export default function App() {
     provenanceHistory: EvidenceProvenanceVerificationRecord[];
   } | null>(null);
   const [passport, setPassport] = useState<EvidencePassport | null>(null);
+  const [disputePack, setDisputePack] = useState<DisputeEvidencePack | null>(null);
   const [paypalTransactions, setPaypalTransactions] = useState<PayPalTransactionRecord[]>([]);
   const [ledgerRows, setLedgerRows] = useState<FinancialLedgerRow[]>([]);
   const [approvedAmountCentsInput, setApprovedAmountCentsInput] = useState<number>(0);
@@ -383,6 +387,94 @@ export default function App() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateDisputePack = async (reason?: string) => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/v1/contracts/${selectedContractId}/milestones/${selectedMilestoneId}/dispute-pack`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ reason }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? 'Dispute pack generation failed');
+      }
+      setDisputePack(data.disputePack);
+      setStatusBanner({
+        type: 'success',
+        message: `Dispute Evidence Pack '${data.disputePack.id}' generated and sealed. Status: ${data.disputePack.disputeStatus}.`,
+      });
+      await refreshAllData(token, selectedMilestoneId, selectedContractId);
+    } catch (err) {
+      setStatusBanner({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Dispute pack generation error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyDisputePack = async (): Promise<DisputePackVerificationResult | null> => {
+    if (!token || !disputePack) return null;
+    try {
+      const res = await fetch(
+        `/api/v1/contracts/${selectedContractId}/dispute-packs/${disputePack.id}/verify`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? 'Dispute pack verification failed');
+      }
+      return data.verification as DisputePackVerificationResult;
+    } catch (err) {
+      setStatusBanner({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Dispute pack verification error',
+      });
+      return null;
+    }
+  };
+
+  const handleExportDisputePack = async () => {
+    if (!token || !disputePack) return;
+    try {
+      const res = await fetch(
+        `/api/v1/contracts/${selectedContractId}/dispute-packs/${disputePack.id}/export`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? 'Dispute pack export failed');
+      }
+      const blob = new Blob([JSON.stringify(data.export, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dispute_pack_${disputePack.milestoneId}_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setStatusBanner({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Dispute pack export error',
+      });
     }
   };
 
@@ -984,6 +1076,17 @@ export default function App() {
             loading={loading}
             onRefresh={() => void refreshAllData(token, selectedMilestoneId, selectedContractId)}
             onValidateRuntime={handleValidateRuntime}
+          />
+        )}
+
+        {/* PROMPT 4/8: Dispute Evidence & Arbitration Pack */}
+        {reviewDetails && (
+          <DisputeEvidencePackViewer
+            disputePack={disputePack}
+            loading={loading}
+            onGeneratePack={handleGenerateDisputePack}
+            onVerifyPack={handleVerifyDisputePack}
+            onExportPack={handleExportDisputePack}
           />
         )}
 
