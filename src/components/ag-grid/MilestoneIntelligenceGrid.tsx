@@ -343,7 +343,7 @@ export function MilestoneIntelligenceGrid({
   );
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4 font-sans">
+    <section id="milestone-intelligence-grid-section" className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4 font-sans">
       {/* Grid Toolbar & Natural Language Filter */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

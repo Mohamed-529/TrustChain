@@ -14,28 +14,34 @@ import type {
   ScheduleRecoveryProposal,
   User,
   DisputeEvidencePack,
-  DisputePackVerificationResult,
-} from './types/domain';
-import { BryntumGanttViewer } from './components/BryntumGanttViewer';
-import { EvidencePassportViewer } from './components/EvidencePassportViewer';
-import { DisputeEvidencePackViewer } from './components/DisputeEvidencePackViewer';
-import { MilestoneIntelligenceGrid } from './components/ag-grid/MilestoneIntelligenceGrid';
-import { IntelligenceControlRoomDashboard } from './components/dashboard/IntelligenceControlRoomDashboard';
-import { AiDecisionInspectorModal } from './components/dashboard/AiDecisionInspectorModal';
+  AuditLogEntry,
+} from './types/domain.ts';
 
-function formatUsdCents(cents: number | null | undefined): string {
-  if (cents === null || cents === undefined) return '—';
-  return `$${(cents / 100).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+import { RouterProvider, usePathname, useNavigate } from './router/Router.tsx';
+import { AppShell } from './components/layout/AppShell.tsx';
+import { GuidedTourModal, STORAGE_KEY_ONBOARDING } from './components/onboarding/GuidedTourModal.tsx';
+import { WelcomeLandingPage } from './components/landing/WelcomeLandingPage.tsx';
+import { DashboardPage } from './pages/DashboardPage.tsx';
+import { IntelligencePage } from './pages/IntelligencePage.tsx';
+import { TimelinePage } from './pages/TimelinePage.tsx';
+import { ReviewsPage } from './pages/ReviewsPage.tsx';
+import { TrustPage } from './pages/TrustPage.tsx';
+import { DisputesPage } from './pages/DisputesPage.tsx';
+import { SettingsPage } from './pages/SettingsPage.tsx';
 
-export default function App() {
+function AppContent() {
+  const currentPath = usePathname();
+  const navigate = useNavigate();
+
+  // Authentication & Session
   const [token, setToken] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Active Contract & Milestone Scope
   const [selectedContractId] = useState<string>('contract_seed_01');
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('ms_seed_01');
+
+  // Domain Telemetry & Workbench Data
   const [scheduleData, setScheduleData] = useState<ContractScheduleResponse | null>(null);
   const [reviewDetails, setReviewDetails] = useState<MilestoneReviewDetails | null>(null);
   const [provenanceData, setProvenanceData] = useState<{
@@ -46,12 +52,16 @@ export default function App() {
   const [disputePack, setDisputePack] = useState<DisputeEvidencePack | null>(null);
   const [paypalTransactions, setPaypalTransactions] = useState<PayPalTransactionRecord[]>([]);
   const [ledgerRows, setLedgerRows] = useState<FinancialLedgerRow[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+
+  // Form Inputs & Review Modals
   const [approvedAmountCentsInput, setApprovedAmountCentsInput] = useState<number>(0);
   const [justification, setJustification] = useState<string>('');
   const [scheduleDecisionReason, setScheduleDecisionReason] = useState<string>(
     'Approved +7d recovery window for CI stabilization; contractual budget and acceptance criteria unchanged.'
   );
-  const [showApproveConfirmModal, setShowApproveConfirmModal] = useState<boolean>(false);
+
+  // Global UI Controls
   const [statusBanner, setStatusBanner] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
@@ -59,7 +69,23 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [quickFilterType, setQuickFilterType] = useState<string>('ALL');
   const [showAiInspector, setShowAiInspector] = useState<boolean>(false);
+  const [showTour, setShowTour] = useState<boolean>(false);
 
+  // 1. Check for First-Visit Guided Tour
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hasCompletedTour = localStorage.getItem(STORAGE_KEY_ONBOARDING);
+      if (!hasCompletedTour && window.location.pathname === '/') {
+        // Automatically invite first-time visitors to the guided tour
+        setShowTour(true);
+      }
+      if (window.location.pathname === '/onboarding') {
+        setShowTour(true);
+      }
+    }
+  }, []);
+
+  // 2. Switch Persona Handler
   const switchPersona = useCallback(async (userId: string) => {
     try {
       const res = await fetch('/api/v1/auth/demo-switch', {
@@ -85,12 +111,13 @@ export default function App() {
     }
   }, []);
 
+  // 3. Comprehensive Data Refresh Provider
   const refreshAllData = useCallback(
     async (activeToken: string, milestoneId: string, contractId: string) => {
       if (!activeToken) return;
       setLoading(true);
       try {
-        const [schedRes, revRes, provRes, ppRes, ledgerRes, passRes] = await Promise.all([
+        const [schedRes, revRes, provRes, ppRes, ledgerRes, passRes, auditRes] = await Promise.all([
           fetch(`/api/v1/contracts/${contractId}/schedule`, {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
@@ -107,6 +134,9 @@ export default function App() {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
           fetch(`/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`, {
+            headers: { Authorization: `Bearer ${activeToken}` },
+          }),
+          fetch('/api/v1/audit', {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
         ]);
@@ -139,6 +169,10 @@ export default function App() {
           const passData = (await passRes.json()) as { passport: EvidencePassport };
           setPassport(passData.passport);
         }
+        if (auditRes.ok) {
+          const auditData = (await auditRes.json()) as { logs: AuditLogEntry[] };
+          setAuditLogs(auditData.logs);
+        }
       } catch (err) {
         setStatusBanner({
           type: 'error',
@@ -151,16 +185,19 @@ export default function App() {
     []
   );
 
+  // Initial authentication on mount
   useEffect(() => {
     void switchPersona('reviewer_01');
   }, [switchPersona]);
 
+  // Refresh domain data when token or selection changes
   useEffect(() => {
     if (token) {
       void refreshAllData(token, selectedMilestoneId, selectedContractId);
     }
   }, [token, selectedMilestoneId, selectedContractId, refreshAllData]);
 
+  // 4. Action Handlers
   const handleLoadControlTowerDemoScenario = async () => {
     if (!token) return;
     setLoading(true);
@@ -176,8 +213,7 @@ export default function App() {
       setScheduleData(data.schedule);
       setStatusBanner({
         type: 'success',
-        message:
-          'Loaded Bryntum Control Tower 3-Milestone Demo: M1 Completed (100%), M2 Failed CI & Overdue, M3 Blocked by Dependency + AI Schedule Recovery Proposal generated.',
+        message: 'Loaded Bryntum Control Tower 3-Milestone Risk & Recovery Demo.',
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -212,7 +248,7 @@ export default function App() {
       setScheduleData(data.schedule);
       setStatusBanner({
         type: 'success',
-        message: `AI Schedule-Risk Analysis complete: ${data.createdProposals.length} recovery proposal(s) ready for fiduciary review.`,
+        message: `AI Schedule-Risk Analysis complete: ${data.createdProposals.length} recovery proposal(s) ready for review.`,
       });
     } catch (err) {
       setStatusBanner({
@@ -248,43 +284,39 @@ export default function App() {
       );
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Schedule proposal review failed');
+        throw new Error(data.error?.message ?? 'Failed to review schedule proposal');
       }
       setScheduleData(data.schedule);
       setStatusBanner({
         type: 'success',
-        message: `Schedule proposal ${proposal.id} ${decision}D. Downstream Finish-to-Start dependencies recalculated; contractual budget (${formatUsdCents(proposal.preservesContractualAmountCents)}) unchanged.`,
+        message: `Schedule proposal ${proposal.id} ${decision}D. Downstream Finish-to-Start dependencies recalculated.`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
       setStatusBanner({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Schedule proposal review error',
+        message: err instanceof Error ? err.message : 'Failed to submit proposal review',
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLoadDemoEvidence = async (fixtureKey: string) => {
+  const handleSubmitDemoEvidence = async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence`, {
+      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence/demo-submission`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ demoFixtureKey: fixtureKey }),
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Evidence submission failed');
+        throw new Error(data.error?.message ?? 'Demo evidence submission failed');
       }
       setStatusBanner({
         type: 'success',
-        message: `Submitted demo evidence attempt #${data.submission.attemptNumber} (${fixtureKey}).`,
+        message: `Submitted delivery evidence attempt #${data.submission.attemptNumber} (Commit: ${data.submission.evidence.commitHash.slice(0, 10)}).`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -297,7 +329,7 @@ export default function App() {
     }
   };
 
-  const handleRunEvaluation = async () => {
+  const handleRunAiEvaluation = async () => {
     if (!token) return;
     setLoading(true);
     try {
@@ -311,7 +343,7 @@ export default function App() {
       }
       setStatusBanner({
         type: 'success',
-        message: `Multi-Agent evaluation completed: ${data.evaluation.arbitratorRecommendation.recommendedOutcome} (Permitted cap: ${formatUsdCents(data.evaluation.policyCalculation.permittedAmountCents)}).`,
+        message: `Tri-Agent AI Advisory Synthesis completed: Arbitrator recommends ${data.evaluation.arbitratorRecommendation.recommendedOutcome} (Risk: ${data.evaluation.riskAnalysis.overallRiskSeverity}).`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -324,31 +356,22 @@ export default function App() {
     }
   };
 
-  const handleVerifyGitHubProvenance = async () => {
+  const handleVerifyGithubProvenance = async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence/verify`, {
+      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence/verify-provenance`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({}),
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error?.message ?? 'GitHub provenance verification failed');
       }
-      const prov = data.provenance as EvidenceProvenanceVerificationRecord;
+      const prov = data.verificationRecord;
       setStatusBanner({
-        type:
-          prov.verificationStatus === 'VERIFIED'
-            ? 'success'
-            : prov.verificationStatus === 'FAILED'
-              ? 'error'
-              : 'info',
-        message: `Independent GitHub Provenance Verification: status=${prov.verificationStatus ?? prov.overallStatus} (mode=${prov.verificationMode}, SHA-256 integrity=${prov.integrity.payloadHashMatches ? 'MATCH' : 'TAMPERED'}).`,
+        type: 'info',
+        message: `Independent GitHub Provenance Verification: status=${prov.verificationStatus ?? prov.overallStatus} (integrity=${prov.integrity?.payloadHashMatches ? 'MATCH' : 'TAMPERED'}).`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -407,7 +430,9 @@ export default function App() {
             'content-type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ reason }),
+          body: JSON.stringify({
+            reason: reason ?? 'Dispute Pack generated for external arbitration',
+          }),
         }
       );
       const data = await res.json();
@@ -417,62 +442,60 @@ export default function App() {
       setDisputePack(data.disputePack);
       setStatusBanner({
         type: 'success',
-        message: `Dispute Evidence Pack '${data.disputePack.id}' generated and sealed. Status: ${data.disputePack.disputeStatus}.`,
+        message: `Dispute Evidence Pack generated (Digest: ${data.disputePack.packDigestSha256.slice(0, 16)}...).`,
       });
-      await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
       setStatusBanner({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Dispute pack generation error',
+        message: err instanceof Error ? err.message : 'Dispute pack error',
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyDisputePack = async (): Promise<DisputePackVerificationResult | null> => {
-    if (!token || !disputePack) return null;
+  const handleVerifyDisputePack = async () => {
+    if (!token) return;
+    setLoading(true);
     try {
       const res = await fetch(
-        `/api/v1/contracts/${selectedContractId}/dispute-packs/${disputePack.id}/verify`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        `/api/v1/contracts/${selectedContractId}/milestones/${selectedMilestoneId}/dispute-pack/verify`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error?.message ?? 'Dispute pack verification failed');
       }
-      return data.verification as DisputePackVerificationResult;
+      setStatusBanner({
+        type: data.verification.overallStatus === 'VERIFIED' ? 'success' : 'error',
+        message: `Dispute Pack Verification (${data.verification.overallStatus}): digestMatch=${data.verification.digestMatches}, auditValid=${data.verification.auditChainValid}.`,
+      });
     } catch (err) {
       setStatusBanner({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Dispute pack verification error',
+        message: err instanceof Error ? err.message : 'Verification error',
       });
-      return null;
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleExportDisputePack = async () => {
-    if (!token || !disputePack) return;
+    if (!token) return;
     try {
       const res = await fetch(
-        `/api/v1/contracts/${selectedContractId}/dispute-packs/${disputePack.id}/export`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        `/api/v1/contracts/${selectedContractId}/milestones/${selectedMilestoneId}/dispute-pack/export`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error?.message ?? 'Dispute pack export failed');
       }
-      const blob = new Blob([JSON.stringify(data.export, null, 2)], {
-        type: 'application/json',
-      });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `dispute_pack_${disputePack.milestoneId}_${Date.now()}.json`;
+      a.download = `dispute-pack-${selectedMilestoneId}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -488,7 +511,6 @@ export default function App() {
   ) => {
     if (!token) return;
     setLoading(true);
-    setShowApproveConfirmModal(false);
     try {
       const res = await fetch(
         `/api/v1/milestones/${selectedMilestoneId}/review/${actionEndpoint}`,
@@ -590,830 +612,150 @@ export default function App() {
     }
   };
 
-  const latestSub = reviewDetails?.latestSubmission;
-  const latestEval = reviewDetails?.latestEvaluation;
-  const policy = reviewDetails?.policyCalculation;
-  const latestTx = paypalTransactions[0] ?? null;
-
-  const handleOpenPassport = (mId: string) => {
-    setSelectedMilestoneId(mId);
-    document.getElementById('evidence-passport-section')?.scrollIntoView({ behavior: 'smooth' });
+  const handleGeneratePassport = async () => {
+    await handleVerifyGithubProvenance();
   };
 
-  const handleOpenDisputePack = (mId: string) => {
-    setSelectedMilestoneId(mId);
-    document.getElementById('dispute-pack-section')?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // 5. Multi-Page Route Dispatcher
+  const renderActivePage = () => {
+    switch (currentPath) {
+      case '/dashboard':
+        return (
+          <DashboardPage
+            ledgerRows={ledgerRows}
+            scheduleData={scheduleData}
+            onSelectQuickFilter={(qf) => setQuickFilterType(qf)}
+          />
+        );
 
-  const handleOpenAiInspector = (mId: string) => {
-    setSelectedMilestoneId(mId);
-    setShowAiInspector(true);
+      case '/intelligence':
+        return (
+          <IntelligencePage
+            ledgerRows={ledgerRows}
+            token={token}
+            selectedMilestoneId={selectedMilestoneId}
+            onSelectMilestone={(id) => setSelectedMilestoneId(id)}
+            onOpenPassport={(id) => {
+              setSelectedMilestoneId(id);
+              navigate('/trust');
+            }}
+            onOpenDisputePack={(id) => {
+              setSelectedMilestoneId(id);
+              navigate('/disputes');
+            }}
+            showAiInspector={showAiInspector}
+            setShowAiInspector={setShowAiInspector}
+            reviewDetails={reviewDetails}
+            quickFilterType={quickFilterType}
+          />
+        );
+
+      case '/timeline':
+        return (
+          <TimelinePage
+            scheduleData={scheduleData}
+            loading={loading}
+            onLoadControlTowerDemo={handleLoadControlTowerDemoScenario}
+            onAnalyzeScheduleRisk={handleAnalyzeScheduleRisk}
+            onReviewProposal={handleReviewScheduleProposal}
+            scheduleDecisionReason={scheduleDecisionReason}
+            setScheduleDecisionReason={setScheduleDecisionReason}
+          />
+        );
+
+      case '/reviews':
+        return (
+          <ReviewsPage
+            currentUser={currentUser}
+            selectedMilestoneId={selectedMilestoneId}
+            setSelectedMilestoneId={setSelectedMilestoneId}
+            reviewDetails={reviewDetails}
+            provenanceData={provenanceData}
+            paypalTransactions={paypalTransactions}
+            loading={loading}
+            approvedAmountCentsInput={approvedAmountCentsInput}
+            setApprovedAmountCentsInput={setApprovedAmountCentsInput}
+            justification={justification}
+            setJustification={setJustification}
+            onSubmitDemoEvidence={handleSubmitDemoEvidence}
+            onVerifyGithubProvenance={handleVerifyGithubProvenance}
+            onRunAiEvaluation={handleRunAiEvaluation}
+            onReviewAction={handleReviewAction}
+            onPayPalAction={handlePayPalAction}
+            onPayPalReconcile={handlePayPalReconcile}
+            onOpenAiInspector={() => setShowAiInspector(true)}
+            onOpenPassport={() => navigate('/trust')}
+            onOpenDisputePack={() => navigate('/disputes')}
+          />
+        );
+
+      case '/trust':
+        return (
+          <TrustPage
+            passport={passport}
+            provenanceData={provenanceData}
+            token={token}
+            selectedContractId={selectedContractId}
+            selectedMilestoneId={selectedMilestoneId}
+            onRefreshData={() => refreshAllData(token, selectedMilestoneId, selectedContractId)}
+            onVerifyGithubProvenance={handleVerifyGithubProvenance}
+            onValidateRuntime={handleValidateRuntime}
+            onGeneratePassport={handleGeneratePassport}
+            loading={loading}
+          />
+        );
+
+      case '/disputes':
+        return (
+          <DisputesPage
+            disputePack={disputePack}
+            token={token}
+            selectedContractId={selectedContractId}
+            selectedMilestoneId={selectedMilestoneId}
+            onGenerateDisputePack={handleGenerateDisputePack}
+            onVerifyDisputePack={handleVerifyDisputePack}
+            onExportDisputePack={handleExportDisputePack}
+            loading={loading}
+          />
+        );
+
+      case '/settings':
+        return (
+          <SettingsPage
+            currentUser={currentUser}
+            onSwitchPersona={switchPersona}
+            auditLogs={auditLogs}
+            onStartTour={() => setShowTour(true)}
+            statusBanner={statusBanner}
+          />
+        );
+
+      case '/':
+      case '/onboarding':
+      default:
+        return <WelcomeLandingPage onStartTour={() => setShowTour(true)} />;
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header & Persona Switcher */}
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              MilestoneProof AI — Evidence-to-Settlement Control Tower
-            </h1>
-            <p className="text-sm text-slate-400">
-              Primary Sponsor Integrations: Bryntum Gantt Delivery Control Tower • APIMatic Validated OpenAPI & SDK • PayPal Orders API v2
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase tracking-wider text-slate-400 mr-2">
-              Active Persona:
-            </span>
-            {[
-              { id: 'client_01', label: 'Client (Elena)' },
-              { id: 'dev_01', label: 'Developer (Marcus)' },
-              { id: 'reviewer_01', label: 'Reviewer (Sophia)' },
-            ].map((p) => (
-              <button
-                key={p.id}
-                onClick={() => void switchPersona(p.id)}
-                className={`px-3 py-1.5 rounded text-xs font-medium border transition ${
-                  currentUser?.id === p.id
-                    ? 'bg-emerald-600 border-emerald-500 text-white'
-                    : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </header>
+    <AppShell
+      currentUser={currentUser}
+      onSwitchPersona={switchPersona}
+      statusBanner={statusBanner}
+      onStartTour={() => setShowTour(true)}
+    >
+      {renderActivePage()}
 
-        {statusBanner && (
-          <div
-            className={`p-3 rounded border text-sm ${
-              statusBanner.type === 'error'
-                ? 'bg-rose-950/60 border-rose-700 text-rose-200'
-                : statusBanner.type === 'success'
-                  ? 'bg-emerald-950/60 border-emerald-700 text-emerald-200'
-                  : 'bg-slate-900 border-slate-700 text-slate-200'
-            }`}
-          >
-            {statusBanner.message}
-          </div>
-        )}
+      {/* Interactive Guided Tour Modal */}
+      <GuidedTourModal isOpen={showTour} onClose={() => setShowTour(false)} />
+    </AppShell>
+  );
+}
 
-        {/* EXECUTIVE CONTROL ROOM DASHBOARD */}
-        <IntelligenceControlRoomDashboard
-          ledgerRows={ledgerRows}
-          scheduleData={scheduleData}
-          onSelectQuickFilter={(qf) => setQuickFilterType(qf)}
-        />
-
-        {/* PRIMARY SPONSOR INTEGRATION A: BRYNTUM GANTT SOFTWARE DELIVERY CONTROL TOWER */}
-        <section className="bg-slate-900 border border-indigo-900/80 rounded-lg p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700">
-                  SPONSOR INTEGRATION A • BRYNTUM GANTT
-                </span>
-                <h2 className="text-lg font-bold text-white">
-                  Evidence-Aware Software Delivery Control Tower
-                </h2>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Synchronized with backend milestones, Finish-to-Start dependencies (type=2), Baseline vs. Actual variance, Critical Path, and Human-Controlled Schedule Recovery.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                disabled={loading}
-                onClick={() => void handleLoadControlTowerDemoScenario()}
-                className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white"
-              >
-                Load 3-Milestone Risk & Recovery Demo
-              </button>
-              <button
-                disabled={loading}
-                onClick={() => void handleAnalyzeScheduleRisk()}
-                className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200"
-              >
-                Run AI Schedule-Risk Advisor
-              </button>
-            </div>
-          </div>
-
-          {scheduleData && (
-            <>
-              {/* Control Tower KPI Summary Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs font-mono">
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-slate-400">Tasks</div>
-                  <div className="text-base font-bold text-white">
-                    {scheduleData.summary.totalMilestones}
-                  </div>
-                </div>
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-slate-400">Completed</div>
-                  <div className="text-base font-bold text-emerald-400">
-                    {scheduleData.summary.completedCount}
-                  </div>
-                </div>
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-slate-400">Overdue / CI Fail</div>
-                  <div className="text-base font-bold text-rose-400">
-                    {scheduleData.summary.overdueCount}
-                  </div>
-                </div>
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-slate-400">Blocked by Dep</div>
-                  <div className="text-base font-bold text-amber-400">
-                    {scheduleData.summary.blockedByDependencyCount}
-                  </div>
-                </div>
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-slate-400">Critical Path</div>
-                  <div className="text-base font-bold text-indigo-400">
-                    {scheduleData.summary.criticalPathCount} tasks
-                  </div>
-                </div>
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
-                  <div className="text-slate-400">Pending Proposals</div>
-                  <div className="text-base font-bold text-amber-300">
-                    {scheduleData.summary.pendingProposalsCount}
-                  </div>
-                </div>
-              </div>
-
-              {/* Genuine Bryntum Gantt Delivery Control Tower */}
-              <div className="pt-2">
-                <BryntumGanttViewer
-                  schedule={scheduleData}
-                  tasks={scheduleData.tasks}
-                  dependencies={scheduleData.dependencies}
-                  readOnly={true}
-                  height="440px"
-                />
-              </div>
-
-              {/* Human-Controlled Schedule Recovery Proposals */}
-              {scheduleData.proposals.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <h3 className="text-sm font-semibold text-amber-300">
-                    AI Schedule-Risk Recovery Proposals (Human Fiduciary Approval Required)
-                  </h3>
-                  {scheduleData.proposals.map((prop) => (
-                    <div
-                      key={prop.id}
-                      className="p-4 rounded bg-slate-950 border border-amber-800/70 space-y-2 text-xs"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="font-semibold text-white">
-                          Proposal {prop.id} — {prop.milestoneTitle} (+{prop.delayDays}d recovery shift)
-                        </div>
-                        <span className="px-2 py-0.5 rounded font-mono text-[11px] bg-amber-950 text-amber-300 border border-amber-700">
-                          {prop.status}
-                        </span>
-                      </div>
-                      <p className="text-slate-300">{prop.aiRationale}</p>
-                      <div className="text-[11px] font-mono text-slate-400">
-                        Supporting Evidence IDs:{' '}
-                        {prop.supportingEvidenceIds.join(', ') || 'None uploaded'} | Downstream
-                        Cascades:{' '}
-                        {prop.downstreamCascades
-                          .map(
-                            (c) =>
-                              `${c.milestoneId} (${c.previousEndDate.slice(0, 10)} → ${c.proposedEndDate.slice(0, 10)})`
-                          )
-                          .join(', ') || 'None'}
-                      </div>
-
-                      {prop.status === 'PENDING' && (
-                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
-                          <input
-                            type="text"
-                            value={scheduleDecisionReason}
-                            onChange={(e) => setScheduleDecisionReason(e.target.value)}
-                            className="flex-1 min-w-[260px] px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-white"
-                            placeholder="Fiduciary reason for approving/rejecting schedule recovery..."
-                          />
-                          <button
-                            disabled={loading}
-                            onClick={() => void handleReviewScheduleProposal(prop, 'APPROVE')}
-                            className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 font-semibold text-white"
-                          >
-                            Approve Schedule Recovery (Client/Reviewer)
-                          </button>
-                          <button
-                            disabled={loading}
-                            onClick={() => void handleReviewScheduleProposal(prop, 'REJECT')}
-                            className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 font-semibold text-white"
-                          >
-                            Reject Proposal
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-        {/* Milestone Selector */}
-        <div className="flex flex-wrap gap-3">
-          {['ms_seed_01', 'ms_seed_02', 'ms_seed_03'].map((msId, idx) => (
-            <button
-              key={msId}
-              onClick={() => setSelectedMilestoneId(msId)}
-              className={`px-4 py-2 rounded border text-sm font-medium ${
-                selectedMilestoneId === msId
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              Milestone {idx + 1} ({msId})
-            </button>
-          ))}
-        </div>
-
-        {/* Main Review & PayPal Settlement Grid */}
-        {reviewDetails && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-            {/* Column 1: Milestone & Evidence Summary */}
-            <section className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-white">1. Evidence Summary</h2>
-                <span className="px-2.5 py-0.5 rounded text-xs font-mono bg-slate-800 text-indigo-300 border border-slate-700">
-                  {reviewDetails.stateMachineStatus}
-                </span>
-              </div>
-              <p className="text-sm text-slate-300 font-medium">{reviewDetails.milestone.title}</p>
-              <p className="text-xs text-slate-400">
-                Agreed Budget:{' '}
-                <span className="font-mono text-white">
-                  {formatUsdCents(reviewDetails.milestone.agreedAmountCents)}
-                </span>
-              </p>
-
-              {latestSub ? (
-                <div className="text-xs space-y-2 bg-slate-950 p-3 rounded border border-slate-800 font-mono">
-                  <div>Attempt #{latestSub.attemptNumber}</div>
-                  <div className="truncate">Repo: {latestSub.repoUrl}</div>
-                  <div>Commit: {latestSub.commitSha.slice(0, 12)}</div>
-                  <div>
-                    PR Status: <span className="text-amber-300">{latestSub.prStatus}</span>
-                  </div>
-                  <div>
-                    CI: {latestSub.ciReport.status} ({latestSub.ciReport.passedTests}/
-                    {latestSub.ciReport.totalTests} passed, {latestSub.ciReport.coveragePct}%)
-                  </div>
-                  <div>
-                    Security Scan: {latestSub.securityScan.scanner} (
-                    {latestSub.securityScan.status}, {latestSub.securityScan.findings.length}{' '}
-                    findings)
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 italic">No delivery evidence submitted yet.</p>
-              )}
-
-              <div className="pt-2 space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    disabled={loading}
-                    onClick={() =>
-                      void handleLoadDemoEvidence(
-                        selectedMilestoneId === 'ms_seed_01'
-                          ? 'SUCCESSFUL_SUBMISSION'
-                          : selectedMilestoneId === 'ms_seed_02'
-                            ? 'INCOMPLETE_SUBMISSION'
-                            : 'SUSPICIOUS_CONTRADICTORY_SUBMISSION'
-                      )
-                    }
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded border border-slate-700"
-                  >
-                    Submit Demo Evidence
-                  </button>
-                  <button
-                    disabled={loading || !latestSub}
-                    onClick={() => void handleVerifyGitHubProvenance()}
-                    className="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-xs rounded font-medium text-white"
-                  >
-                    Verify GitHub Provenance
-                  </button>
-                  <button
-                    disabled={loading || !latestSub}
-                    onClick={() => void handleRunEvaluation()}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs rounded font-medium"
-                  >
-                    Run AI Evaluation
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Column 2: AI Findings & Risk Flags (Advisory Only) */}
-            <section className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-white">2. AI Findings</h2>
-                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-950 text-amber-300 border border-amber-700">
-                  ADVISORY ONLY
-                </span>
-              </div>
-
-              {latestEval ? (
-                <div className="space-y-3 text-xs">
-                  <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                    <div className="font-semibold text-slate-200">
-                      Outcome:{' '}
-                      <span className="font-mono text-amber-300">
-                        {latestEval.arbitratorRecommendation.recommendedOutcome}
-                      </span>
-                    </div>
-                    <p className="text-slate-400">
-                      {latestEval.arbitratorRecommendation.rationale}
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                    <div className="font-semibold text-slate-200">
-                      Evidence ({latestEval.evidenceAnalysis.verifiedCount}/
-                      {latestEval.evidenceAnalysis.totalCount} Verified)
-                    </div>
-                    {latestEval.evidenceAnalysis.missingEvidence.length > 0 && (
-                      <ul className="list-disc list-inside text-amber-300 space-y-0.5">
-                        {latestEval.evidenceAnalysis.missingEvidence.map((m, i) => (
-                          <li key={i}>{m}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                    <div className="font-semibold text-slate-200">
-                      Risk Severity:{' '}
-                      <span className="font-mono text-rose-300">
-                        {latestEval.riskAnalysis.overallRiskSeverity}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 italic">
-                  Run Multi-Agent Evaluation to view findings.
-                </p>
-              )}
-            </section>
-
-            {/* Column 3: Deterministic Policy & Human Review Actions */}
-            <section className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4">
-              <h2 className="text-base font-semibold text-white">3. Policy & Human Review</h2>
-
-              {policy ? (
-                <div className="p-3 rounded bg-slate-950 border border-slate-800 text-xs font-mono space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Milestone Budget:</span>
-                    <span>{formatUsdCents(policy.agreedAmountCents)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Late Penalty ({policy.lateDays}d):</span>
-                    <span>-{formatUsdCents(policy.latePenaltyCents)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-800 pt-1.5 font-bold text-emerald-400">
-                    <span>Permitted Cap:</span>
-                    <span>{formatUsdCents(policy.permittedAmountCents)}</span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 italic">
-                  Policy calculation pending evaluation.
-                </p>
-              )}
-
-              <div className="space-y-3 pt-2 border-t border-slate-800 text-xs">
-                <div>
-                  <label className="block text-slate-300 mb-1">
-                    Approved Amount (Cents, max{' '}
-                    {reviewDetails.allowedActions.maxPermittedAmountCents}c):
-                  </label>
-                  <input
-                    type="number"
-                    value={approvedAmountCentsInput}
-                    onChange={(e) => setApprovedAmountCentsInput(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 rounded bg-slate-950 border border-slate-700 font-mono text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 mb-1">
-                    Justification (min 5 chars):
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={justification}
-                    onChange={(e) => setJustification(e.target.value)}
-                    placeholder="Document reason for review decision..."
-                    className="w-full px-3 py-1.5 rounded bg-slate-950 border border-slate-700 text-white"
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    disabled={
-                      loading ||
-                      !reviewDetails.allowedActions.canApprove ||
-                      justification.trim().length < 5
-                    }
-                    onClick={() => setShowApproveConfirmModal(true)}
-                    className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 font-semibold text-white"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    disabled={
-                      loading ||
-                      !reviewDetails.allowedActions.canRequestChanges ||
-                      justification.trim().length < 5
-                    }
-                    onClick={() => void handleReviewAction('request-changes')}
-                    className="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-500 disabled:opacity-40 font-semibold text-white"
-                  >
-                    Request Changes
-                  </button>
-                  <button
-                    disabled={
-                      loading ||
-                      !reviewDetails.allowedActions.canReject ||
-                      justification.trim().length < 5
-                    }
-                    onClick={() => void handleReviewAction('reject')}
-                    className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 disabled:opacity-40 font-semibold text-white"
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Column 4: Primary Sponsor Integration B — PayPal Orders API v2 & APIMatic */}
-            <section className="bg-slate-900 border border-emerald-900/80 rounded-lg p-5 space-y-4">
-              <div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">
-                  SPONSOR B • APIMATIC & PAYPAL v2
-                </span>
-                <h2 className="text-base font-semibold text-white mt-1">
-                  4. PayPal Orders API v2 Settlement
-                </h2>
-                <p className="text-[11px] text-slate-400">
-                  intent: AUTHORIZE (Non-Escrow Hold) → Human Approval Gate → Idempotent Capture
-                </p>
-              </div>
-
-              <div className="p-2.5 rounded bg-amber-950/40 border border-amber-800/80 text-[11px] text-amber-200">
-                <div className="font-semibold flex items-center gap-1">
-                  <span>⚖️</span> Non-Escrow Regulatory Notice:
-                </div>
-                <div className="text-[10px] text-amber-300/80 mt-0.5 leading-tight">
-                  PayPal Orders API v2 (intent: AUTHORIZE) creates a temporary 29-day authorization hold. TrustChain never takes custody of funds.
-                </div>
-              </div>
-
-              <div className="p-3 rounded bg-slate-950 border border-slate-800 text-xs font-mono space-y-1">
-                <div className="flex items-center justify-between">
-                  <span>Payment State:</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    latestTx?.status === 'CAPTURED' || latestTx?.status === 'SIMULATED_CAPTURED'
-                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
-                      : latestTx?.status === 'REQUIRES_RECONCILIATION'
-                        ? 'bg-amber-950 text-amber-300 border border-amber-700 animate-pulse'
-                        : latestTx?.status === 'AUTHORIZED' || latestTx?.status === 'SIMULATED_AUTHORIZED'
-                          ? 'bg-indigo-950 text-indigo-300 border border-indigo-700'
-                          : 'bg-slate-800 text-slate-300'
-                  }`}>
-                    {latestTx?.status ?? reviewDetails.milestone.paymentStatus}
-                  </span>
-                </div>
-                {latestTx && (
-                  <>
-                    <div>Order ID: {latestTx.paypalOrderId ?? '—'}</div>
-                    <div>Auth ID: {latestTx.paypalAuthorizationId ?? '—'}</div>
-                    <div>Capture ID: {latestTx.paypalCaptureId ?? '—'}</div>
-                    <div className="text-emerald-400">
-                      Captured: {formatUsdCents(latestTx.capturedAmountCents)}
-                    </div>
-                    {latestTx.authExpiresAt && (
-                      <div className="text-[10px] text-indigo-300">
-                        Hold Valid Until: {new Date(latestTx.authExpiresAt).toLocaleDateString()}
-                      </div>
-                    )}
-                    <div className="text-[10px] text-slate-400">
-                      Mode: {latestTx.executionMode}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="space-y-2 text-xs">
-                {currentUser?.role === 'DEVELOPER' && (
-                  <div className="p-2 rounded bg-rose-950/40 border border-rose-800 text-[10px] text-rose-300">
-                    Separation of Duties: Developer persona cannot create orders, capture funds, or trigger settlement.
-                  </div>
-                )}
-                <button
-                  disabled={loading || currentUser?.role === 'DEVELOPER'}
-                  onClick={() => void handlePayPalAction('order')}
-                  className="w-full px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 font-medium text-white disabled:opacity-40"
-                >
-                  1. Create PayPal Order (CLIENT • AUTHORIZE)
-                </button>
-                <button
-                  disabled={loading || currentUser?.role === 'DEVELOPER'}
-                  onClick={() => void handlePayPalAction('authorize')}
-                  className="w-full px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 font-medium text-white disabled:opacity-40"
-                >
-                  2. Authorize PayPal Order (CLIENT • 29d Hold)
-                </button>
-                <button
-                  disabled={loading || currentUser?.role === 'DEVELOPER' || reviewDetails.milestone.status !== 'APPROVED'}
-                  onClick={() => void handlePayPalAction('capture')}
-                  className="w-full px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 font-semibold text-white"
-                >
-                  3. Capture Approved Settlement (Requires APPROVE)
-                </button>
-                <button
-                  disabled={loading || currentUser?.role === 'DEVELOPER'}
-                  onClick={() => void handlePayPalReconcile()}
-                  className="w-full px-3 py-1.5 rounded bg-amber-800 hover:bg-amber-700 font-medium text-amber-100 disabled:opacity-40 flex items-center justify-center gap-1.5"
-                >
-                  <span>🔄</span> Reconcile with PayPal Sandbox
-                </button>
-              </div>
-
-              <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                APIMatic Contract:{' '}
-                <a
-                  href="/api/v1/openapi.yaml"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-indigo-400 underline"
-                >
-                  /api/v1/openapi.yaml
-                </a>{' '}
-                • SDK: <code className="text-slate-300">src/sdk/MilestoneProofClient.ts</code>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* PROMPT 2/8: Evidence Passport — Traceable Engineering Evidence Record */}
-        {reviewDetails && (
-          <EvidencePassportViewer
-            passport={passport}
-            loading={loading}
-            onRefresh={() => void refreshAllData(token, selectedMilestoneId, selectedContractId)}
-            onValidateRuntime={handleValidateRuntime}
-          />
-        )}
-
-        {/* PROMPT 4/8: Dispute Evidence & Arbitration Pack */}
-        {reviewDetails && (
-          <DisputeEvidencePackViewer
-            disputePack={disputePack}
-            loading={loading}
-            onGeneratePack={handleGenerateDisputePack}
-            onVerifyPack={handleVerifyDisputePack}
-            onExportPack={handleExportDisputePack}
-          />
-        )}
-
-        {/* Phase 7: Evidence Provenance & Independent GitHub Verification Panel */}
-        {reviewDetails && (
-          <section className="bg-slate-900 border border-sky-900/80 rounded-lg p-5 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-950 text-sky-300 border border-sky-700">
-                    PHASE 7 • GITHUB API & SHA-256 PROVENANCE
-                  </span>
-                  <h2 className="text-base font-bold text-white">
-                    Independent Evidence Provenance & Canonical Integrity Verification
-                  </h2>
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Verifies Repository, Commit SHA, Pull Request merge state, and GitHub Actions workflow run against GitHub REST API + deterministic SHA-256 payload digest (mpai-evidence-canon-v1).
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {(() => {
-                  const prov = provenanceData?.latestProvenance ?? reviewDetails.latestProvenance;
-                  const statusLabel =
-                    prov?.verificationStatus ??
-                    prov?.overallStatus ??
-                    latestSub?.provenanceStatus ??
-                    'UNAVAILABLE';
-                  const badgeStyle =
-                    statusLabel === 'VERIFIED'
-                      ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                      : statusLabel === 'FAILED' ||
-                          statusLabel === 'MISMATCH_DETECTED' ||
-                          statusLabel === 'TAMPERED_PAYLOAD'
-                        ? 'bg-rose-950 text-rose-300 border-rose-700'
-                        : statusLabel === 'PENDING'
-                          ? 'bg-amber-950 text-amber-300 border-amber-700'
-                          : 'bg-slate-800 text-slate-300 border-slate-700';
-                  return (
-                    <span className={`px-2.5 py-1 rounded text-xs font-mono border ${badgeStyle}`}>
-                      Status: {statusLabel}
-                    </span>
-                  );
-                })()}
-                <button
-                  disabled={loading || !latestSub}
-                  onClick={() => void handleVerifyGitHubProvenance()}
-                  className="px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-xs font-semibold text-white"
-                >
-                  Re-Verify via GitHub API
-                </button>
-              </div>
-            </div>
-
-            {(() => {
-              const prov = provenanceData?.latestProvenance ?? reviewDetails.latestProvenance;
-              if (!latestSub) {
-                return (
-                  <p className="text-xs text-slate-500 italic">
-                    Submit delivery evidence on this milestone to inspect canonical SHA-256 integrity and GitHub API provenance.
-                  </p>
-                );
-              }
-              return (
-                <div className="space-y-3 text-xs">
-                  {/* Canonical SHA-256 Integrity Bar */}
-                  <div className="p-3 rounded bg-slate-950 border border-slate-800 font-mono flex flex-wrap items-center justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <div className="text-slate-300">
-                        Canonical SHA-256 Digest ({latestSub.canonicalizationVersion ?? 'mpai-evidence-canon-v1'}):{' '}
-                        <span className="text-sky-300">{latestSub.payloadSha256 ?? '—'}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-400">
-                        Hashed At: {latestSub.payloadHashedAt ?? latestSub.submittedAt} • Verification Attempts:{' '}
-                        {provenanceData?.provenanceHistory.length ?? (prov ? 1 : 0)}
-                        {prov ? ` • Last Verified: ${prov.verifiedAt} (${prov.verificationMode})` : ''}
-                      </div>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[11px] border ${
-                        prov
-                          ? prov.integrity.payloadHashMatches
-                            ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                            : 'bg-rose-950 text-rose-300 border-rose-700'
-                          : 'bg-slate-900 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      {prov
-                        ? prov.integrity.payloadHashMatches
-                          ? 'SHA-256 INTEGRITY VERIFIED'
-                          : 'TAMPER DETECTED'
-                        : 'HASH RECORDED'}
-                    </span>
-                  </div>
-
-                  {/* 4 Artifact Provenance Cards */}
-                  {prov && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 font-mono">
-                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-sans font-semibold text-white">Repository</span>
-                          <span className="text-[11px] text-sky-300">{prov.repository.status}</span>
-                        </div>
-                        <div className="truncate text-slate-300">
-                          {prov.repository.canonicalFullName ??
-                            `${prov.repository.owner}/${prov.repository.repo}`}
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-sans">
-                          {prov.repository.details}
-                        </div>
-                      </div>
-
-                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-sans font-semibold text-white">Commit</span>
-                          <span className="text-[11px] text-sky-300">{prov.commit.status}</span>
-                        </div>
-                        <div className="truncate text-slate-300">
-                          SHA: {(prov.commit.canonicalSha ?? prov.commit.submittedSha).slice(0, 12)}
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-sans">
-                          {prov.commit.details}
-                        </div>
-                      </div>
-
-                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-sans font-semibold text-white">Pull Request</span>
-                          <span className="text-[11px] text-sky-300">{prov.pullRequest.status}</span>
-                        </div>
-                        <div className="truncate text-slate-300">
-                          PR #{prov.pullRequest.prNumber ?? '—'} ({prov.pullRequest.actualPrStatus ?? '—'})
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-sans">
-                          {prov.pullRequest.details}
-                        </div>
-                      </div>
-
-                      <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-sans font-semibold text-white">GitHub Actions</span>
-                          <span className="text-[11px] text-sky-300">{prov.workflowRun.status}</span>
-                        </div>
-                        <div className="truncate text-slate-300">
-                          Run #{prov.workflowRun.runId ?? '—'} ({prov.workflowRun.conclusion ?? prov.workflowRun.runStatus ?? '—'})
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-sans">
-                          {prov.workflowRun.details}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {prov && prov.blockingReasons.length > 0 && (
-                    <div className="p-3 rounded bg-rose-950/50 border border-rose-800 text-rose-200 space-y-1">
-                      <div className="font-semibold">Provenance Blocking Reasons:</div>
-                      <ul className="list-disc list-inside space-y-0.5">
-                        {prov.blockingReasons.map((reason, idx) => (
-                          <li key={idx}>{reason}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </section>
-        )}
-
-        {/* Confirmation Modal Before Approval */}
-        {showApproveConfirmModal && reviewDetails && (
-          <div className="fixed inset-0 bg-black/75 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 border border-slate-700 rounded-lg max-w-md w-full p-6 space-y-4">
-              <h3 className="text-lg font-bold text-white">
-                Confirm Fiduciary Milestone Approval
-              </h3>
-              <p className="text-xs text-slate-300">
-                You are about to record an authoritative human approval for{' '}
-                <span className="font-semibold text-white">{reviewDetails.milestone.title}</span>.
-              </p>
-              <div className="p-3 bg-slate-950 rounded border border-slate-800 text-xs font-mono space-y-1">
-                <div>
-                  Permitted Policy Cap:{' '}
-                  {formatUsdCents(reviewDetails.allowedActions.maxPermittedAmountCents)}
-                </div>
-                <div className="text-emerald-400 font-bold">
-                  Approved Payout: {formatUsdCents(approvedAmountCentsInput)} (
-                  {approvedAmountCentsInput} cents)
-                </div>
-                <div>Reason: {justification}</div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  onClick={() => setShowApproveConfirmModal(false)}
-                  className="px-3 py-1.5 rounded bg-slate-800 text-xs text-slate-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => void handleReviewAction('approve')}
-                  className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white"
-                >
-                  Confirm & Sign Approval
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PRIMARY AG GRID MILESTONE INTELLIGENCE CONTROL ROOM */}
-        <MilestoneIntelligenceGrid
-          ledgerRows={ledgerRows}
-          token={token}
-          selectedMilestoneId={selectedMilestoneId}
-          onSelectMilestone={(mId) => setSelectedMilestoneId(mId)}
-          onOpenPassport={handleOpenPassport}
-          onOpenDisputePack={handleOpenDisputePack}
-          onOpenAiInspector={handleOpenAiInspector}
-          quickFilterType={quickFilterType}
-        />
-
-        {/* AI Decision Inspector Modal */}
-        <AiDecisionInspectorModal
-          isOpen={showAiInspector}
-          onClose={() => setShowAiInspector(false)}
-          reviewDetails={reviewDetails}
-          onOpenPassport={() => handleOpenPassport(selectedMilestoneId)}
-          onOpenDisputePack={() => handleOpenDisputePack(selectedMilestoneId)}
-        />
-      </div>
-    </div>
+export default function App() {
+  return (
+    <RouterProvider>
+      <AppContent />
+    </RouterProvider>
   );
 }
