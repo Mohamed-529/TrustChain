@@ -62,8 +62,9 @@ export class PayPalService {
   private readonly paymentRepo: PaymentTransactionRepository;
   private readonly settlementPolicyService: SettlementPolicyService;
   private readonly auditService: AuditService;
-  private readonly options?: PayPalServiceOptions;
+  private options?: PayPalServiceOptions;
   private readonly activeWebhookLocks = new Set<string>();
+  private readonly activeReconciliationLocks = new Set<string>();
 
   constructor(
     db: AppDatabase,
@@ -85,6 +86,13 @@ export class PayPalService {
     this.settlementPolicyService = settlementPolicyService;
     this.auditService = auditService;
     this.options = options;
+  }
+
+  public setFetchImpl(fetchImpl: typeof fetch): void {
+    if (!this.options) {
+      this.options = {};
+    }
+    this.options.fetchImpl = fetchImpl;
   }
 
   private getFetch(): typeof fetch {
@@ -368,28 +376,37 @@ export class PayPalService {
     if (isLive) {
       const token = await this.getLivePayPalAccessToken();
       const baseUrl = this.getApiBaseUrl();
-      const orderRes = await this.getFetch()(`${baseUrl}/v2/checkout/orders`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'PayPal-Request-Id': idempotencyKey,
-        },
-        body: JSON.stringify({
-          intent: 'AUTHORIZE',
-          purchase_units: [
-            {
-              reference_id: milestone.id,
-              custom_id: contract.id,
-              description: `${contract.title} — ${milestone.title}`.slice(0, 127),
-              amount: {
-                currency_code: 'USD',
-                value: amountUsd,
+      let orderRes: Response;
+      try {
+        orderRes = await this.getFetch()(`${baseUrl}/v2/checkout/orders`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'PayPal-Request-Id': idempotencyKey,
+          },
+          body: JSON.stringify({
+            intent: 'AUTHORIZE',
+            purchase_units: [
+              {
+                reference_id: milestone.id,
+                custom_id: contract.id,
+                description: `${contract.title} — ${milestone.title}`.slice(0, 127),
+                amount: {
+                  currency_code: 'USD',
+                  value: amountUsd,
+                },
               },
-            },
-          ],
-        }),
-      });
+            ],
+          }),
+        });
+      } catch (networkErr: any) {
+        throw new AppError(
+          504,
+          'PAYPAL_ORDER_CREATE_TIMEOUT',
+          `Network timeout while creating PayPal order: ${networkErr?.message ?? String(networkErr)}. Safe to retry with the same PayPal-Request-Id.`
+        );
+      }
 
       if (!orderRes.ok) {
         const errText = await orderRes.text();
@@ -554,20 +571,112 @@ export class PayPalService {
     if (isLive) {
       const token = await this.getLivePayPalAccessToken();
       const baseUrl = this.getApiBaseUrl();
-      const authRes = await this.getFetch()(
-        `${baseUrl}/v2/checkout/orders/${encodeURIComponent(targetOrderId)}/authorize`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'PayPal-Request-Id': idempotencyKey,
-          },
-          body: JSON.stringify({}),
-        }
-      );
+      let authRes: Response;
+      try {
+        authRes = await this.getFetch()(
+          `${baseUrl}/v2/checkout/orders/${encodeURIComponent(targetOrderId)}/authorize`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'PayPal-Request-Id': idempotencyKey,
+            },
+            body: JSON.stringify({}),
+          }
+        );
+      } catch (networkErr: any) {
+        this.db.withTransaction(() => {
+          const timeoutTx: PayPalTransactionRecord = {
+            id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
+            milestoneId: milestone.id,
+            approvalId: null,
+            paypalOrderId: targetOrderId,
+            paypalAuthorizationId: null,
+            paypalCaptureId: null,
+            idempotencyKey,
+            authorizedAmountCents: milestone.agreedAmountCents,
+            capturedAmountCents: 0,
+            currency: 'USD',
+            status: 'REQUIRES_RECONCILIATION',
+            executionMode: 'PAYPAL_SANDBOX',
+            nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+            authExpiresAt: null,
+            rawPaypalResponse: { error: networkErr?.message ?? 'Network error during authorize' },
+            updatedAt: nowIso,
+          };
+          this.paymentRepo.insert(timeoutTx);
+          this.auditService.appendWithinTx({
+            actorId: actor.id,
+            actorRole: actor.role,
+            action: 'PAYPAL_AUTHORIZATION_AMBIGUOUS_TIMEOUT',
+            entityType: 'PAYMENT',
+            entityId: timeoutTx.id,
+            contractId: contract.id,
+            milestoneId: milestone.id,
+            previousState: milestone.paymentStatus,
+            newState: 'REQUIRES_RECONCILIATION',
+            payload: {
+              error: networkErr?.message ?? 'Network error during authorize',
+              idempotencyKey,
+            },
+            timestamp: nowIso,
+          });
+        });
+        throw new AppError(
+          504,
+          'PAYPAL_AUTHORIZE_TIMEOUT_REQUIRES_RECONCILIATION',
+          'Network timeout during PayPal order authorization. State recorded as REQUIRES_RECONCILIATION.'
+        );
+      }
 
       if (!authRes.ok) {
+        if (authRes.status >= 500) {
+          const errText = await authRes.text();
+          this.db.withTransaction(() => {
+            const timeoutTx: PayPalTransactionRecord = {
+              id: `ptx_${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`,
+              milestoneId: milestone.id,
+              approvalId: null,
+              paypalOrderId: targetOrderId,
+              paypalAuthorizationId: null,
+              paypalCaptureId: null,
+              idempotencyKey,
+              authorizedAmountCents: milestone.agreedAmountCents,
+              capturedAmountCents: 0,
+              currency: 'USD',
+              status: 'REQUIRES_RECONCILIATION',
+              executionMode: 'PAYPAL_SANDBOX',
+              nonEscrowDisclosure: PAYPAL_NON_ESCROW_DISCLOSURE,
+              authExpiresAt: null,
+              rawPaypalResponse: { httpStatus: authRes.status, error: errText },
+              updatedAt: nowIso,
+            };
+            this.paymentRepo.insert(timeoutTx);
+            this.auditService.appendWithinTx({
+              actorId: actor.id,
+              actorRole: actor.role,
+              action: 'PAYPAL_AUTHORIZATION_AMBIGUOUS_GATEWAY_ERROR',
+              entityType: 'PAYMENT',
+              entityId: timeoutTx.id,
+              contractId: contract.id,
+              milestoneId: milestone.id,
+              previousState: milestone.paymentStatus,
+              newState: 'REQUIRES_RECONCILIATION',
+              payload: {
+                httpStatus: authRes.status,
+                error: errText,
+                idempotencyKey,
+              },
+              timestamp: nowIso,
+            });
+          });
+          throw new AppError(
+            502,
+            'PAYPAL_GATEWAY_ERROR_REQUIRES_RECONCILIATION',
+            `PayPal returned HTTP ${authRes.status}. State recorded as REQUIRES_RECONCILIATION.`
+          );
+        }
         const errText = await authRes.text();
         throw new AppError(
           422,
@@ -1400,13 +1509,17 @@ export class PayPalService {
           }
 
           let matchedTx =
+            this.paymentRepo.findByPaypalCaptureId(resourceId) ??
             this.paymentRepo.findByPaypalAuthorizationId(resourceId) ??
             this.paymentRepo.findByPaypalOrderId(resourceId);
 
           let reconciledStatus = 'VERIFIED_LOGGED';
 
           if (matchedTx) {
-            if (
+            // 1. Guard against out-of-order mutations on terminal CAPTURED or SETTLED milestones
+            if (matchedTx.status === 'CAPTURED' || matchedTx.status === 'SIMULATED_CAPTURED') {
+              reconciledStatus = 'TERMINAL_STATE_PRESERVED';
+            } else if (
               eventType === 'PAYMENT.AUTHORIZATION.VOIDED' &&
               (matchedTx.status === 'AUTHORIZED' || matchedTx.status === 'SIMULATED_AUTHORIZED')
             ) {
@@ -1437,7 +1550,42 @@ export class PayPalService {
                 nowIso
               );
               reconciledStatus = `RECONCILED_${newPayStatus}`;
+            } else if (eventType === 'PAYMENT.CAPTURE.COMPLETED') {
+              // Validate currency, human approval, and amount bounds before accepting webhook capture
+              const resAmount = (resource?.amount as { currency_code?: string; value?: string }) ?? {};
+              const resCurrency = resAmount.currency_code ?? 'USD';
+              const resCents = resAmount.value ? Math.round(parseFloat(resAmount.value) * 100) : null;
+              const approval = this.approvalRepo.findLatestByMilestoneId(matchedTx.milestoneId);
+
+              if (resCurrency !== 'USD') {
+                reconciledStatus = 'REJECTED_CURRENCY_MISMATCH';
+              } else if (!approval || approval.decision !== 'APPROVE') {
+                reconciledStatus = 'REJECTED_MISSING_HUMAN_APPROVAL';
+              } else if (resCents !== null && resCents !== approval.approvedAmountCents) {
+                reconciledStatus = 'REJECTED_AMOUNT_MISMATCH';
+              } else if (matchedTx.status === 'CAPTURE_PENDING' || matchedTx.status === 'REQUIRES_RECONCILIATION') {
+                const capId = String(resource?.id ?? matchedTx.paypalCaptureId ?? '');
+                matchedTx = {
+                  ...matchedTx,
+                  status: 'CAPTURED',
+                  paypalCaptureId: capId || matchedTx.paypalCaptureId,
+                  capturedAmountCents: resCents ?? matchedTx.authorizedAmountCents,
+                  updatedAt: nowIso,
+                };
+                this.paymentRepo.update(matchedTx);
+                this.milestoneRepo.updatePaymentStatus(matchedTx.milestoneId, 'CAPTURED', 'SETTLED', nowIso);
+                reconciledStatus = 'RECONCILED_CAPTURED_SETTLED';
+              }
+            } else if (
+              eventType.startsWith('UNKNOWN') ||
+              (!eventType.startsWith('PAYMENT.') && !eventType.startsWith('CHECKOUT.'))
+            ) {
+              reconciledStatus = 'VERIFIED_UNKNOWN_EVENT_NOOP';
+            } else {
+              reconciledStatus = 'VERIFIED_LOGGED';
             }
+          } else {
+            reconciledStatus = 'VERIFIED_UNMATCHED_RESOURCE_NOOP';
           }
 
           if (webhookRepo) {
@@ -1684,45 +1832,355 @@ export class PayPalService {
     actor: User,
     milestoneId: string
   ): Promise<PayPalReconciliationReport> {
-    const milestone = this.milestoneRepo.findById(milestoneId);
-    if (!milestone) {
-      throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' was not found.`);
-    }
-
-    const contract = this.contractRepo.findById(milestone.contractId);
-    if (!contract) {
-      throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${milestone.contractId}' was not found.`);
-    }
-
-    // Separation-of-Duties: Developer cannot trigger payment reconciliation
-    if (actor.role === 'DEVELOPER' || actor.id === contract.developerId) {
+    if (this.activeReconciliationLocks.has(milestoneId)) {
       throw new AppError(
-        403,
-        'FORBIDDEN_NOT_CONTRACT_FIDUCIARY',
-        `Developer '${actor.id}' cannot trigger payment reconciliation for milestone '${milestoneId}'.`
+        409,
+        'RECONCILIATION_IN_PROGRESS',
+        `A reconciliation process is already active for milestone '${milestoneId}'.`
       );
     }
+    this.activeReconciliationLocks.add(milestoneId);
 
-    if (actor.id !== contract.clientId && actor.id !== contract.reviewerId) {
-      throw new AppError(
-        403,
-        'FORBIDDEN_NOT_CONTRACT_FIDUCIARY',
-        `Actor '${actor.id}' is not authorized to reconcile payments for contract '${contract.id}'.`
-      );
-    }
+    try {
+      const milestone = this.milestoneRepo.findById(milestoneId);
+      if (!milestone) {
+        throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' was not found.`);
+      }
 
-    const latestTx = this.paymentRepo.findLatestByMilestoneId(milestoneId);
-    const nowIso = new Date().toISOString();
+      const contract = this.contractRepo.findById(milestone.contractId);
+      if (!contract) {
+        throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${milestone.contractId}' was not found.`);
+      }
 
-    if (!latestTx) {
-      const emptyReport: PayPalReconciliationReport = {
+      // Separation-of-Duties: Developer cannot trigger payment reconciliation
+      if (actor.role === 'DEVELOPER' || actor.id === contract.developerId) {
+        throw new AppError(
+          403,
+          'FORBIDDEN_NOT_CONTRACT_FIDUCIARY',
+          `Developer '${actor.id}' cannot trigger payment reconciliation for milestone '${milestoneId}'.`
+        );
+      }
+
+      if (actor.id !== contract.clientId && actor.id !== contract.reviewerId) {
+        throw new AppError(
+          403,
+          'FORBIDDEN_NOT_CONTRACT_FIDUCIARY',
+          `Actor '${actor.id}' is not authorized to reconcile payments for contract '${contract.id}'.`
+        );
+      }
+
+      const latestTx = this.paymentRepo.findLatestByMilestoneId(milestoneId);
+      const nowIso = new Date().toISOString();
+
+      if (!latestTx) {
+        const emptyReport: PayPalReconciliationReport = {
+          milestoneId,
+          contractId: contract.id,
+          localTransaction: null,
+          remotePayPalRecord: null,
+          outcome: 'REMOTE_RECORD_NOT_FOUND',
+          discrepancies: ['No payment transactions found in local database for milestone.'],
+          actionTaken: 'NO_OP',
+          reconciledAt: nowIso,
+          reconciledBy: {
+            id: actor.id,
+            role: actor.role,
+          },
+        };
+
+        this.db.withTransaction(() => {
+          this.auditService.appendWithinTx({
+            actorId: actor.id,
+            actorRole: actor.role,
+            action: 'PAYPAL_PAYMENT_RECONCILED',
+            entityType: 'PAYMENT',
+            entityId: milestoneId,
+            contractId: contract.id,
+            milestoneId,
+            previousState: null,
+            newState: 'REMOTE_RECORD_NOT_FOUND',
+            payload: {
+              outcome: 'REMOTE_RECORD_NOT_FOUND',
+              discrepancies: emptyReport.discrepancies,
+              actionTaken: emptyReport.actionTaken,
+            },
+            timestamp: nowIso,
+          });
+        });
+
+        return emptyReport;
+      }
+
+      // Check if milestone is already SETTLED locally (idempotent repeated reconciliation)
+      if (milestone.status === 'SETTLED' || milestone.paymentStatus === 'CAPTURED') {
+        const settledReport: PayPalReconciliationReport = {
+          milestoneId,
+          contractId: contract.id,
+          localTransaction: {
+            id: latestTx.id,
+            status: latestTx.status,
+            authorizedAmountCents: latestTx.authorizedAmountCents,
+            capturedAmountCents: latestTx.capturedAmountCents,
+            paypalOrderId: latestTx.paypalOrderId,
+            paypalAuthorizationId: latestTx.paypalAuthorizationId,
+            paypalCaptureId: latestTx.paypalCaptureId,
+            updatedAt: latestTx.updatedAt,
+          },
+          remotePayPalRecord: null,
+          outcome: 'IN_SYNC',
+          discrepancies: [],
+          actionTaken: 'NO_OP_ALREADY_SETTLED',
+          reconciledAt: nowIso,
+          reconciledBy: {
+            id: actor.id,
+            role: actor.role,
+          },
+        };
+
+        this.db.withTransaction(() => {
+          this.auditService.appendWithinTx({
+            actorId: actor.id,
+            actorRole: actor.role,
+            action: 'PAYPAL_PAYMENT_RECONCILED',
+            entityType: 'PAYMENT',
+            entityId: latestTx.id,
+            contractId: contract.id,
+            milestoneId,
+            previousState: latestTx.status,
+            newState: 'IN_SYNC',
+            payload: {
+              outcome: 'IN_SYNC',
+              discrepancies: [],
+              actionTaken: 'NO_OP_ALREADY_SETTLED',
+            },
+            timestamp: nowIso,
+          });
+        });
+
+        return settledReport;
+      }
+
+      const isLive = this.isLivePayPalConfigured() && latestTx.executionMode === 'PAYPAL_SANDBOX';
+      const discrepancies: string[] = [];
+      let remoteRecord: {
+        orderId: string | null;
+        authorizationId: string | null;
+        captureId: string | null;
+        status: string | null;
+        authorizedAmountCents: number | null;
+        capturedAmountCents: number | null;
+        createTime: string | null;
+        updateTime: string | null;
+      } | null = null;
+
+      let outcome: PayPalReconciliationOutcome = 'IN_SYNC';
+      let actionTaken = 'NO_OP_LOCAL_ALIGNED';
+
+      if (isLive) {
+        let remoteOrder: Record<string, unknown> | null = null;
+        let remoteAuth: Record<string, unknown> | null = null;
+        let remoteCap: Record<string, unknown> | null = null;
+        let remoteQueryError: Error | null = null;
+
+        try {
+          if (latestTx.paypalCaptureId) {
+            remoteCap = await this.getRemotePayPalCapture(latestTx.paypalCaptureId);
+          }
+          if (latestTx.paypalAuthorizationId) {
+            remoteAuth = await this.getRemotePayPalAuthorization(latestTx.paypalAuthorizationId);
+          }
+          if (latestTx.paypalOrderId) {
+            remoteOrder = await this.getRemotePayPalOrder(latestTx.paypalOrderId);
+          }
+          // If remoteAuth is null but remoteOrder has authorizations in purchase_units, extract it
+          if (!remoteAuth && remoteOrder) {
+            const units = remoteOrder.purchase_units as Array<Record<string, any>> | undefined;
+            const authObj = units?.[0]?.payments?.authorizations?.[0];
+            if (authObj && typeof authObj === 'object') {
+              remoteAuth = authObj;
+            }
+          }
+        } catch (queryErr: any) {
+          remoteQueryError = queryErr;
+        }
+
+        if (remoteQueryError) {
+          outcome = 'REQUIRES_RECONCILIATION';
+          actionTaken = 'PRESERVED_UNCERTAINTY_ON_NETWORK_ERROR';
+          discrepancies.push(
+            `Network or remote gateway error querying PayPal: ${remoteQueryError.message}. State remains unchanged.`
+          );
+        } else if (!remoteOrder && !remoteAuth && !remoteCap) {
+          outcome = 'REMOTE_RECORD_NOT_FOUND';
+          discrepancies.push('No matching order, authorization, or capture found in PayPal sandbox.');
+          actionTaken = 'FLAGGED_REMOTE_NOT_FOUND';
+        } else {
+          // Check remote identifier matches
+          if (remoteOrder && remoteOrder.id && latestTx.paypalOrderId && remoteOrder.id !== latestTx.paypalOrderId) {
+            outcome = 'MANUAL_INTERVENTION_REQUIRED';
+            actionTaken = 'FLAGGED_IDENTIFIER_MISMATCH';
+            discrepancies.push(
+              `Remote order ID '${remoteOrder.id}' does not match expected local order ID '${latestTx.paypalOrderId}'.`
+            );
+          }
+          if (remoteAuth && remoteAuth.id && latestTx.paypalAuthorizationId && remoteAuth.id !== latestTx.paypalAuthorizationId) {
+            outcome = 'MANUAL_INTERVENTION_REQUIRED';
+            actionTaken = 'FLAGGED_IDENTIFIER_MISMATCH';
+            discrepancies.push(
+              `Remote authorization ID '${remoteAuth.id}' does not match expected local authorization ID '${latestTx.paypalAuthorizationId}'.`
+            );
+          }
+
+          const rawStatus = (remoteCap?.status ?? remoteAuth?.status ?? remoteOrder?.status ?? 'UNKNOWN') as string;
+          const capAmountObj = remoteCap?.amount as { currency_code?: string; value?: string } | undefined;
+          const authAmountObj = remoteAuth?.amount as { currency_code?: string; value?: string } | undefined;
+          const remoteCapCents = capAmountObj?.value ? Math.round(parseFloat(capAmountObj.value) * 100) : null;
+          const remoteAuthCents = authAmountObj?.value ? Math.round(parseFloat(authAmountObj.value) * 100) : null;
+
+          remoteRecord = {
+            orderId: (remoteOrder?.id as string) ?? latestTx.paypalOrderId,
+            authorizationId: (remoteAuth?.id as string) ?? latestTx.paypalAuthorizationId,
+            captureId: (remoteCap?.id as string) ?? latestTx.paypalCaptureId,
+            status: rawStatus.toUpperCase(),
+            authorizedAmountCents: remoteAuthCents,
+            capturedAmountCents: remoteCapCents,
+            createTime: (remoteCap?.create_time ?? remoteAuth?.create_time ?? remoteOrder?.create_time ?? null) as string | null,
+            updateTime: (remoteCap?.update_time ?? remoteAuth?.update_time ?? remoteOrder?.update_time ?? null) as string | null,
+          };
+
+          if (outcome === 'IN_SYNC') {
+            if (latestTx.status === 'REQUIRES_RECONCILIATION' || latestTx.status === 'CAPTURE_PENDING' || latestTx.status === 'AUTHORIZED') {
+              if (remoteRecord.status === 'COMPLETED') {
+                // Strict financial gates before permitting capture & settlement:
+                const latestApproval = this.approvalRepo.findLatestByMilestoneId(milestone.id);
+                const capCurrency = (capAmountObj?.currency_code ?? 'USD').toUpperCase();
+                const capId = String(remoteCap?.id ?? latestTx.paypalCaptureId ?? '');
+                const existingCapTx = capId ? this.paymentRepo.findByPaypalCaptureId(capId, latestTx.id) : null;
+
+                if (!latestApproval || latestApproval.decision !== 'APPROVE') {
+                  outcome = 'MANUAL_INTERVENTION_REQUIRED';
+                  actionTaken = 'FLAGGED_UNAUTHORIZED_REMOTE_CAPTURE';
+                  discrepancies.push(
+                    'Remote capture completed on PayPal, but local milestone lacks an approved human approval record (HUMAN_APPROVAL: APPROVE). Settlement rejected.'
+                  );
+                } else if (capCurrency !== 'USD') {
+                  outcome = 'MANUAL_INTERVENTION_REQUIRED';
+                  actionTaken = 'FLAGGED_CURRENCY_MISMATCH';
+                  discrepancies.push(
+                    `Remote capture currency '${capCurrency}' does not match required currency 'USD'. Settlement rejected.`
+                  );
+                } else if (remoteCapCents === null || remoteCapCents !== latestApproval.approvedAmountCents) {
+                  outcome = 'MANUAL_INTERVENTION_REQUIRED';
+                  actionTaken = 'FLAGGED_AMOUNT_MISMATCH';
+                  discrepancies.push(
+                    `Remote capture amount ${remoteCapCents} cents does not match approved amount ${latestApproval.approvedAmountCents} cents. Settlement rejected.`
+                  );
+                } else if (existingCapTx && existingCapTx.id !== latestTx.id) {
+                  outcome = 'MANUAL_INTERVENTION_REQUIRED';
+                  actionTaken = 'FLAGGED_DOUBLE_CREDIT_ATTEMPT';
+                  discrepancies.push(
+                    `Remote capture ID '${capId}' is already credited to transaction '${existingCapTx.id}' (milestone '${existingCapTx.milestoneId}'). Double-credit settlement rejected.`
+                  );
+                } else {
+                  outcome = 'RECONCILED_LOCAL_UPDATED';
+                  actionTaken = 'UPDATED_LOCAL_TO_CAPTURED_AND_SETTLED';
+                  discrepancies.push('Local state was ambiguous; remote PayPal capture confirmed COMPLETED and passed all validation checks.');
+                  this.db.withTransaction(() => {
+                    const updatedTx: PayPalTransactionRecord = {
+                      ...latestTx,
+                      status: 'CAPTURED',
+                      capturedAmountCents: remoteCapCents ?? latestTx.authorizedAmountCents,
+                      paypalCaptureId: remoteRecord?.captureId ?? latestTx.paypalCaptureId,
+                      updatedAt: nowIso,
+                    };
+                    this.paymentRepo.update(updatedTx);
+                    this.milestoneRepo.updatePaymentStatus(milestone.id, 'CAPTURED', 'SETTLED', nowIso);
+                  });
+                }
+              } else if (remoteRecord.status === 'CREATED' && latestTx.status === 'REQUIRES_RECONCILIATION' && remoteAuth) {
+                // Recover from ambiguous authorization timeout to AUTHORIZED
+                outcome = 'RECONCILED_LOCAL_UPDATED';
+                actionTaken = 'UPDATED_LOCAL_TO_AUTHORIZED';
+                discrepancies.push('Remote PayPal authorization confirmed active (CREATED); local state reconciled to AUTHORIZED.');
+                this.db.withTransaction(() => {
+                  const updatedTx: PayPalTransactionRecord = {
+                    ...latestTx,
+                    status: 'AUTHORIZED',
+                    paypalAuthorizationId: (remoteAuth?.id as string) ?? latestTx.paypalAuthorizationId,
+                    updatedAt: nowIso,
+                  };
+                  this.paymentRepo.update(updatedTx);
+                  this.milestoneRepo.updatePaymentStatus(milestone.id, 'AUTHORIZED', null, nowIso);
+                });
+              } else if (remoteRecord.status === 'VOIDED' || remoteRecord.status === 'DENIED') {
+                outcome = 'RECONCILED_LOCAL_UPDATED';
+                actionTaken = 'UPDATED_LOCAL_TO_FAILED';
+                discrepancies.push(`Remote PayPal status is ${remoteRecord.status}.`);
+                this.db.withTransaction(() => {
+                  const updatedTx: PayPalTransactionRecord = {
+                    ...latestTx,
+                    status: remoteRecord?.status === 'VOIDED' ? 'VOIDED' : 'CAPTURE_FAILED',
+                    updatedAt: nowIso,
+                  };
+                  this.paymentRepo.update(updatedTx);
+                  this.milestoneRepo.updatePaymentStatus(milestone.id, updatedTx.status === 'VOIDED' ? 'VOIDED' : 'FAILED', null, nowIso);
+                });
+              } else {
+                outcome = 'MANUAL_INTERVENTION_REQUIRED';
+                discrepancies.push(`Remote status is ${remoteRecord.status}; cannot automatically resolve.`);
+                actionTaken = 'FLAGGED_MANUAL_REVIEW';
+              }
+            }
+          }
+        }
+      } else {
+        const isSettled = latestTx.status === 'SIMULATED_CAPTURED' || latestTx.status === 'SIMULATED_PARTIALLY_CAPTURED';
+        remoteRecord = {
+          orderId: latestTx.paypalOrderId,
+          authorizationId: latestTx.paypalAuthorizationId,
+          captureId: latestTx.paypalCaptureId,
+          status: isSettled ? 'COMPLETED' : latestTx.status === 'SIMULATED_AUTHORIZED' ? 'AUTHORIZED' : 'CREATED',
+          authorizedAmountCents: latestTx.authorizedAmountCents,
+          capturedAmountCents: latestTx.capturedAmountCents,
+          createTime: latestTx.updatedAt,
+          updateTime: latestTx.updatedAt,
+        };
+
+        if (latestTx.status === 'REQUIRES_RECONCILIATION') {
+          outcome = 'RECONCILED_LOCAL_UPDATED';
+          actionTaken = 'SIMULATION_RECONCILED_TO_AUTHORIZED';
+          discrepancies.push('Resolved simulated ambiguous state to SIMULATED_AUTHORIZED.');
+          this.db.withTransaction(() => {
+            const updatedTx: PayPalTransactionRecord = {
+              ...latestTx,
+              status: 'SIMULATED_AUTHORIZED',
+              updatedAt: nowIso,
+            };
+            this.paymentRepo.update(updatedTx);
+          });
+        } else {
+          outcome = 'IN_SYNC';
+          actionTaken = 'NO_OP_SIMULATION_IN_SYNC';
+        }
+      }
+
+      const report: PayPalReconciliationReport = {
         milestoneId,
         contractId: contract.id,
-        localTransaction: null,
-        remotePayPalRecord: null,
-        outcome: 'REMOTE_RECORD_NOT_FOUND',
-        discrepancies: ['No payment transactions found in local database for milestone.'],
-        actionTaken: 'NO_OP',
+        localTransaction: {
+          id: latestTx.id,
+          status: latestTx.status,
+          authorizedAmountCents: latestTx.authorizedAmountCents,
+          capturedAmountCents: latestTx.capturedAmountCents,
+          paypalOrderId: latestTx.paypalOrderId,
+          paypalAuthorizationId: latestTx.paypalAuthorizationId,
+          paypalCaptureId: latestTx.paypalCaptureId,
+          updatedAt: latestTx.updatedAt,
+        },
+        remotePayPalRecord: remoteRecord,
+        outcome,
+        discrepancies,
+        actionTaken,
         reconciledAt: nowIso,
         reconciledBy: {
           id: actor.id,
@@ -1736,207 +2194,24 @@ export class PayPalService {
           actorRole: actor.role,
           action: 'PAYPAL_PAYMENT_RECONCILED',
           entityType: 'PAYMENT',
-          entityId: milestoneId,
+          entityId: latestTx.id,
           contractId: contract.id,
           milestoneId,
-          previousState: null,
-          newState: 'REMOTE_RECORD_NOT_FOUND',
+          previousState: latestTx.status,
+          newState: outcome,
           payload: {
-            outcome: 'REMOTE_RECORD_NOT_FOUND',
-            discrepancies: emptyReport.discrepancies,
-            actionTaken: emptyReport.actionTaken,
+            outcome,
+            discrepancies,
+            actionTaken,
+            remoteRecord,
           },
           timestamp: nowIso,
         });
       });
 
-      return emptyReport;
+      return report;
+    } finally {
+      this.activeReconciliationLocks.delete(milestoneId);
     }
-
-    const isLive = this.isLivePayPalConfigured() && latestTx.executionMode === 'PAYPAL_SANDBOX';
-    const discrepancies: string[] = [];
-    let remoteRecord: {
-      orderId: string | null;
-      authorizationId: string | null;
-      captureId: string | null;
-      status: string | null;
-      authorizedAmountCents: number | null;
-      capturedAmountCents: number | null;
-      createTime: string | null;
-      updateTime: string | null;
-    } | null = null;
-
-    let outcome: PayPalReconciliationOutcome = 'IN_SYNC';
-    let actionTaken = 'NO_OP_LOCAL_ALIGNED';
-
-    if (isLive) {
-      let remoteOrder: Record<string, unknown> | null = null;
-      let remoteAuth: Record<string, unknown> | null = null;
-      let remoteCap: Record<string, unknown> | null = null;
-
-      if (latestTx.paypalCaptureId) {
-        remoteCap = await this.getRemotePayPalCapture(latestTx.paypalCaptureId);
-      }
-      if (latestTx.paypalAuthorizationId) {
-        remoteAuth = await this.getRemotePayPalAuthorization(latestTx.paypalAuthorizationId);
-      }
-      if (latestTx.paypalOrderId) {
-        remoteOrder = await this.getRemotePayPalOrder(latestTx.paypalOrderId);
-      }
-
-      if (!remoteOrder && !remoteAuth && !remoteCap) {
-        outcome = 'REMOTE_RECORD_NOT_FOUND';
-        discrepancies.push('No matching order, authorization, or capture found in PayPal sandbox.');
-        actionTaken = 'FLAGGED_REMOTE_NOT_FOUND';
-      } else {
-        const rawStatus = (remoteCap?.status ?? remoteAuth?.status ?? remoteOrder?.status ?? 'UNKNOWN') as string;
-        const capAmountObj = remoteCap?.amount as { value?: string } | undefined;
-        const authAmountObj = remoteAuth?.amount as { value?: string } | undefined;
-        const remoteCapCents = capAmountObj?.value ? Math.round(parseFloat(capAmountObj.value) * 100) : null;
-        const remoteAuthCents = authAmountObj?.value ? Math.round(parseFloat(authAmountObj.value) * 100) : null;
-
-        remoteRecord = {
-          orderId: (remoteOrder?.id as string) ?? latestTx.paypalOrderId,
-          authorizationId: (remoteAuth?.id as string) ?? latestTx.paypalAuthorizationId,
-          captureId: (remoteCap?.id as string) ?? latestTx.paypalCaptureId,
-          status: rawStatus.toUpperCase(),
-          authorizedAmountCents: remoteAuthCents,
-          capturedAmountCents: remoteCapCents,
-          createTime: (remoteCap?.create_time ?? remoteAuth?.create_time ?? remoteOrder?.create_time ?? null) as string | null,
-          updateTime: (remoteCap?.update_time ?? remoteAuth?.update_time ?? remoteOrder?.update_time ?? null) as string | null,
-        };
-
-        if (latestTx.status === 'REQUIRES_RECONCILIATION' || latestTx.status === 'CAPTURE_PENDING') {
-          if (remoteRecord.status === 'COMPLETED') {
-            outcome = 'RECONCILED_LOCAL_UPDATED';
-            actionTaken = 'UPDATED_LOCAL_TO_CAPTURED_AND_SETTLED';
-            discrepancies.push('Local state was ambiguous; remote PayPal capture confirmed COMPLETED.');
-            this.db.withTransaction(() => {
-              const updatedTx: PayPalTransactionRecord = {
-                ...latestTx,
-                status: 'CAPTURED',
-                capturedAmountCents: remoteCapCents ?? latestTx.authorizedAmountCents,
-                paypalCaptureId: remoteRecord?.captureId ?? latestTx.paypalCaptureId,
-                updatedAt: nowIso,
-              };
-              this.paymentRepo.update(updatedTx);
-              this.milestoneRepo.updatePaymentStatus(milestone.id, 'CAPTURED', 'SETTLED', nowIso);
-            });
-          } else if (remoteRecord.status === 'VOIDED' || remoteRecord.status === 'DENIED') {
-            outcome = 'RECONCILED_LOCAL_UPDATED';
-            actionTaken = 'UPDATED_LOCAL_TO_FAILED';
-            discrepancies.push(`Remote PayPal status is ${remoteRecord.status}.`);
-            this.db.withTransaction(() => {
-              const updatedTx: PayPalTransactionRecord = {
-                ...latestTx,
-                status: remoteRecord?.status === 'VOIDED' ? 'VOIDED' : 'CAPTURE_FAILED',
-                updatedAt: nowIso,
-              };
-              this.paymentRepo.update(updatedTx);
-              this.milestoneRepo.updatePaymentStatus(milestone.id, updatedTx.status === 'VOIDED' ? 'VOIDED' : 'FAILED', null, nowIso);
-            });
-          } else {
-            outcome = 'MANUAL_INTERVENTION_REQUIRED';
-            discrepancies.push(`Remote status is ${remoteRecord.status}; cannot automatically resolve.`);
-            actionTaken = 'FLAGGED_MANUAL_REVIEW';
-          }
-        } else if (latestTx.status === 'AUTHORIZED') {
-          if (remoteRecord.status === 'VOIDED') {
-            outcome = 'RECONCILED_LOCAL_UPDATED';
-            actionTaken = 'UPDATED_LOCAL_TO_VOIDED';
-            discrepancies.push('Remote authorization was voided out-of-band on PayPal.');
-            this.db.withTransaction(() => {
-              const updatedTx: PayPalTransactionRecord = {
-                ...latestTx,
-                status: 'VOIDED',
-                updatedAt: nowIso,
-              };
-              this.paymentRepo.update(updatedTx);
-              this.milestoneRepo.updatePaymentStatus(milestone.id, 'VOIDED', null, nowIso);
-            });
-          } else if (remoteRecord.status === 'CAPTURED' || remoteRecord.status === 'COMPLETED') {
-            outcome = 'MANUAL_INTERVENTION_REQUIRED';
-            discrepancies.push('Remote shows captured out-of-band without TrustChain human approval gate.');
-            actionTaken = 'FLAGGED_UNAUTHORIZED_REMOTE_CAPTURE';
-          }
-        }
-      }
-    } else {
-      const isSettled = latestTx.status === 'SIMULATED_CAPTURED' || latestTx.status === 'SIMULATED_PARTIALLY_CAPTURED';
-      remoteRecord = {
-        orderId: latestTx.paypalOrderId,
-        authorizationId: latestTx.paypalAuthorizationId,
-        captureId: latestTx.paypalCaptureId,
-        status: isSettled ? 'COMPLETED' : latestTx.status === 'SIMULATED_AUTHORIZED' ? 'AUTHORIZED' : 'CREATED',
-        authorizedAmountCents: latestTx.authorizedAmountCents,
-        capturedAmountCents: latestTx.capturedAmountCents,
-        createTime: latestTx.updatedAt,
-        updateTime: latestTx.updatedAt,
-      };
-
-      if (latestTx.status === 'REQUIRES_RECONCILIATION') {
-        outcome = 'RECONCILED_LOCAL_UPDATED';
-        actionTaken = 'SIMULATION_RECONCILED_TO_AUTHORIZED';
-        discrepancies.push('Resolved simulated ambiguous state to SIMULATED_AUTHORIZED.');
-        this.db.withTransaction(() => {
-          const updatedTx: PayPalTransactionRecord = {
-            ...latestTx,
-            status: 'SIMULATED_AUTHORIZED',
-            updatedAt: nowIso,
-          };
-          this.paymentRepo.update(updatedTx);
-        });
-      } else {
-        outcome = 'IN_SYNC';
-        actionTaken = 'NO_OP_SIMULATION_IN_SYNC';
-      }
-    }
-
-    const report: PayPalReconciliationReport = {
-      milestoneId,
-      contractId: contract.id,
-      localTransaction: {
-        id: latestTx.id,
-        status: latestTx.status,
-        authorizedAmountCents: latestTx.authorizedAmountCents,
-        capturedAmountCents: latestTx.capturedAmountCents,
-        paypalOrderId: latestTx.paypalOrderId,
-        paypalAuthorizationId: latestTx.paypalAuthorizationId,
-        paypalCaptureId: latestTx.paypalCaptureId,
-        updatedAt: latestTx.updatedAt,
-      },
-      remotePayPalRecord: remoteRecord,
-      outcome,
-      discrepancies,
-      actionTaken,
-      reconciledAt: nowIso,
-      reconciledBy: {
-        id: actor.id,
-        role: actor.role,
-      },
-    };
-
-    this.db.withTransaction(() => {
-      this.auditService.appendWithinTx({
-        actorId: actor.id,
-        actorRole: actor.role,
-        action: 'PAYPAL_PAYMENT_RECONCILED',
-        entityType: 'PAYMENT',
-        entityId: latestTx.id,
-        contractId: contract.id,
-        milestoneId,
-        previousState: latestTx.status,
-        newState: outcome,
-        payload: {
-          outcome,
-          discrepancies,
-          actionTaken,
-        remoteRecord,
-        },
-        timestamp: nowIso,
-      });
-    });
-
-    return report;
   }
 }
