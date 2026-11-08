@@ -58,5 +58,5 @@ Prompt 5/8 — TrustChain PayPal Lifecycle Completion & External Verification (C
   - **Status:** **PASSED (`0` errors, clean compilation across all server, SDK, types, and UI files)**.
 - **Production Client Build (`npm run build` — `vite build`):**
   - **Status:** **PASSED (Production bundle generated cleanly with 0 errors in 3.37s)**.
-- **PayPal Developer Sandbox MCP Validation:**
-  - **Status:** **VERIFIED (Live sandbox order `74D011968N1850338` created with `intent: AUTHORIZE` and retrieved via `get_order`)**.
+- **PayPal Developer Sandbox Live Validation:**
+  - **Status:** **VERIFIED (Live sandbox order `0N806388NV784822T` created with `intent: AUTHORIZE`, approved by US sandbox buyer John Doe, authorized via PayPal Orders API v2 as `63431076A90318908`, and captured as `4L688309CS300123Y` with status `COMPLETED`)**.

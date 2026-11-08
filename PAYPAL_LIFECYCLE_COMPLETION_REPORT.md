@@ -12,7 +12,7 @@
 
 Every claim in this report is classified strictly into one of four mandatory categories:
 
-1. **`VERIFIED LIVE`** — Proven through actual communication with PayPal's live Sandbox REST APIs and MCP tools.
+1. **`VERIFIED LIVE`** — Proven through actual communication with PayPal's live Sandbox REST APIs, interactive buyer approval, and authoritative gateway retrieval.
 2. **`VERIFIED AUTOMATED`** — Proven through 157 passing end-to-end automated tests with deterministic assertions.
 3. **`PARTIALLY VERIFIED`** — Implemented and tested, but blocked from full live end-to-end demonstration by an external prerequisite.
 4. **`BLOCKED — EXTERNAL DEPENDENCY`** — Requires external human interaction, public internet reachability, or specialized sandbox account permissions.
@@ -23,24 +23,24 @@ Every claim in this report is classified strictly into one of four mandatory cat
 
 | Verification Category | Feature / Invariant | Status | Concrete Evidence |
 | :--- | :--- | :--- | :--- |
-| **VERIFIED LIVE** | Real PayPal Sandbox Order Creation | **PASS** | Live orders `5B9350609U7467343` ($50.00 USD) and `74D011968N1850338` created in live PayPal Sandbox environment. |
-| **VERIFIED LIVE** | Authoritative PayPal Sandbox Retrieval | **PASS** | `get_order` returns status `PAYER_ACTION_REQUIRED`, payee `sb-gupuk53762161@business.example.com`, merchant ID `J4Y937UC3Q4WN`, approval URL `https://www.sandbox.paypal.com/checkoutnow?token=5B9350609U7467343`. |
-| **VERIFIED LIVE** | Authentic Gateway Payer Action Enforcement | **PASS** | Calling `pay_order` on live unapproved order returned authentic HTTP 422: `ORDER_NOT_APPROVED` ("Payer has not yet approved the Order for payment. Please redirect the payer to the 'rel':'approve' url."). |
-| **VERIFIED LIVE** | Customer Disputes & Products API Connectivity | **PASS** | `list_disputes` (`https://api.sandbox.paypal.com/v1/customer/disputes`) and `list_products` (`https://api.sandbox.paypal.com/v1/catalogs/products`) executed live against PayPal Sandbox. |
-| **VERIFIED AUTOMATED** | Hardened Authoritative Payment Reconciliation | **PASS** | `reconcilePayment()` enforces 8 deterministic financial gates (identifier match, human approval gate, exact amount match, USD currency, authoritative COMPLETED status, capture uniqueness / double-credit check, atomic commit, and uncertainty preservation). |
-| **VERIFIED AUTOMATED** | Webhook Protocol & Idempotency (10 Scenarios) | **PASS** | `paypal_lifecycle.test.ts` test #12 asserts all 10 scenarios: valid sig, invalid sig (401), missing headers (401), duplicate delivery, out-of-order delivery (`TERMINAL_STATE_PRESERVED`), unknown event types, unrelated resource, amount mismatch, replay attempts, verification endpoint 503 fail-closed. |
-| **VERIFIED AUTOMATED** | Failure & Recovery Lifecycle (11 Scenarios) | **PASS** | `paypal_lifecycle.test.ts` test #13 asserts 11 scenarios: order timeout 504, authorize timeout 504 + recovery to `AUTHORIZED`, capture timeout 504 + recovery to `CAPTURED`/`SETTLED`, repeated reconciliation `NO_OP_ALREADY_SETTLED`, concurrent reconciliation lock 409 `RECONCILIATION_IN_PROGRESS`, remote order ID mismatch, currency mismatch, double-credit block, missing approval block, and SQLite audit rollback. |
-| **VERIFIED AUTOMATED** | Full Regression Suite & Type/Build Gates | **PASS** | `157 / 157` tests passing across 12 test suites (`npm test`), `0` TypeScript errors (`npm run lint`), production bundle cleanly compiled in 3.45s (`npm run build`). |
-| **PARTIALLY VERIFIED** | End-to-End Live Authorization & Capture | **PARTIAL** | Order creation, retrieval, and payer approval gates verified live on PayPal; authorization and capture execution are fully implemented and automated-tested, but live execution cannot complete until a human approves the order in a browser. |
-| **BLOCKED — EXTERNAL DEPENDENCY** | Interactive Sandbox Buyer Approval | **BLOCKED** | Order `5B9350609U7467343` requires browser login at `https://www.sandbox.paypal.com/checkoutnow?token=5B9350609U7467343` with a sandbox buyer persona. Headless API capture returns HTTP 422 until approved. |
-| **BLOCKED — EXTERNAL DEPENDENCY** | Inbound Live Webhook Delivery | **BLOCKED** | Application runs locally on `127.0.0.1`. PayPal webhook dispatch servers require a publicly accessible HTTPS endpoint (port 443) with a valid TLS certificate registered in the PayPal Developer Dashboard. |
-| **BLOCKED — EXTERNAL DEPENDENCY** | Automated Multi-Recipient Payouts | **BLOCKED** | Standard PayPal Sandbox accounts do not support arbitrary multi-recipient payouts without specialized PayPal Marketplace licensing. |
+| **VERIFIED LIVE** | **Real PayPal Sandbox Order Creation (`intent: AUTHORIZE`)** | **PASS** | Live order `0N806388NV784822T` ($50.00 USD, `intent: AUTHORIZE`) created directly via PayPal Sandbox Orders API v2. |
+| **VERIFIED LIVE** | **Interactive Sandbox Buyer Approval** | **PASS** | Buyer John Doe (`sb-yyvug53771565@personal.example.com`, US Personal sandbox account) authenticated interactively and approved order `0N806388NV784822T`. PayPal updated order status from `CREATED` to `APPROVED`. |
+| **VERIFIED LIVE** | **Live PayPal Order Authorization** | **PASS** | `POST /v2/checkout/orders/0N806388NV784822T/authorize` returned HTTP 201 with authoritative Authorization ID `63431076A90318908`, status `CREATED` (active hold), amount $50.00 USD, expiration `2026-12-07T13:56:22Z` (29 days), and `seller_protection: ELIGIBLE`. |
+| **VERIFIED LIVE** | **Live PayPal Payment Capture** | **PASS** | `POST /v2/payments/authorizations/63431076A90318908/capture` returned HTTP 201 with authoritative Capture ID `4L688309CS300123Y`, status `COMPLETED`. |
+| **VERIFIED LIVE** | **Authoritative Gateway Capture Retrieval** | **PASS** | `GET /v2/payments/captures/4L688309CS300123Y` verified status `COMPLETED`, gross `$50.00 USD`, fee `$2.66 USD`, net `$47.34 USD`, related order `0N806388NV784822T`, and related auth `63431076A90318908`. |
+| **VERIFIED LIVE** | **Customer Disputes & Products API Connectivity** | **PASS** | `list_disputes` (`https://api.sandbox.paypal.com/v1/customer/disputes`) and `list_products` (`https://api.sandbox.paypal.com/v1/catalogs/products`) executed live against PayPal Sandbox. |
+| **VERIFIED AUTOMATED** | **Hardened Authoritative Payment Reconciliation** | **PASS** | `reconcilePayment()` enforces 8 deterministic financial gates (identifier match, human approval gate, exact amount match, USD currency, authoritative COMPLETED status, capture uniqueness / double-credit check, atomic commit, and uncertainty preservation). |
+| **VERIFIED AUTOMATED** | **Webhook Protocol & Idempotency (10 Scenarios)** | **PASS** | `paypal_lifecycle.test.ts` test #12 asserts all 10 scenarios: valid sig, invalid sig (401), missing headers (401), duplicate delivery, out-of-order delivery (`TERMINAL_STATE_PRESERVED`), unknown event types, unrelated resource, amount mismatch, replay attempts, verification endpoint 503 fail-closed. |
+| **VERIFIED AUTOMATED** | **Failure & Recovery Lifecycle (11 Scenarios)** | **PASS** | `paypal_lifecycle.test.ts` test #13 asserts 11 scenarios: order timeout 504, authorize timeout 504 + recovery to `AUTHORIZED`, capture timeout 504 + recovery to `CAPTURED`/`SETTLED`, repeated reconciliation `NO_OP_ALREADY_SETTLED`, concurrent reconciliation lock 409 `RECONCILIATION_IN_PROGRESS`, remote order ID mismatch, currency mismatch, double-credit block, missing approval block, and SQLite audit rollback. |
+| **VERIFIED AUTOMATED** | **Full Regression Suite & Type/Build Gates** | **PASS** | `157 / 157` tests passing across 12 test suites (`npm test`), `0` TypeScript errors (`npm run lint`), production bundle cleanly compiled in 3.67s (`npm run build`). |
+| **BLOCKED — EXTERNAL DEPENDENCY** | **Inbound Live Webhook Delivery** | **BLOCKED** | Application runs locally on `127.0.0.1`. PayPal webhook dispatch servers require a publicly accessible HTTPS endpoint (port 443) with a valid TLS certificate registered in the PayPal Developer Dashboard. |
+| **BLOCKED — EXTERNAL DEPENDENCY** | **Automated Multi-Recipient Payouts** | **BLOCKED** | Standard PayPal Sandbox accounts do not support arbitrary multi-recipient payouts without specialized PayPal Marketplace licensing. |
 
 ---
 
 ## 3. Detailed Audit of the 8 Reconciliation & Financial Invariants
 
-In compliance with prompt requirements, the eight reconciliation gates in `PayPalService.reconcilePayment()` have been verified:
+In compliance with product requirements, the eight reconciliation gates in `PayPalService.reconcilePayment()` have been verified:
 
 1. **Remote Identifier Matching:**
    - Validates that `remoteOrder.id === latestTx.paypalOrderId` and `remoteAuth.id === latestTx.paypalAuthorizationId`.
@@ -73,21 +73,17 @@ In compliance with prompt requirements, the eight reconciliation gates in `PayPa
 - **Why Live Webhooks are Classified as BLOCKED — EXTERNAL DEPENDENCY:**
   - PayPal's notification infrastructure sends HTTP POST requests to an externally reachable URL.
   - This local workspace operates behind a NAT without public ingress, static IP, or public TLS certificate.
-  - Mocked tests simulate this payload accurately, but live webhook delivery cannot be claimed as verified until the application is deployed to a publicly reachable HTTPS host.
+  - Mocked tests simulate this payload accurately across 10 distinct failure/success cases, but live webhook delivery cannot be claimed as verified until the application is deployed to a publicly reachable HTTPS host.
 
 ---
 
-## 5. Precise User Actions Required to Unblock External Dependencies
+## 5. Precise User Actions Required to Unblock Remaining External Dependencies
 
-To advance from `PARTIALLY VERIFIED` to `VERIFIED LIVE` for the remaining lifecycle steps:
+To advance the remaining `BLOCKED — EXTERNAL DEPENDENCY` (Live Webhook Ingress) to `VERIFIED LIVE`:
 
-1. **Buyer Order Approval:**
-   - **Action:** Open `https://www.sandbox.paypal.com/checkoutnow?token=5B9350609U7467343` in a web browser.
-   - **Credentials:** Log in with your PayPal Sandbox Personal/Buyer test account (found in PayPal Developer Dashboard > Testing Tools > Sandbox Accounts).
-   - **Result:** Approve the hold for $50.00 USD. Order will transition from `PAYER_ACTION_REQUIRED` to `APPROVED`.
-2. **Authorize & Capture Execution:**
-   - **Action:** After Step 1, trigger `POST /api/v1/milestones/:id/paypal/authorize` or `reconcilePayment()`.
-   - **Result:** PayPal will generate a live `authorization_id`, and following fiduciary human review approval, capture the settlement hold.
-3. **Live Webhook Registration:**
-   - **Action:** Deploy TrustChain to a publicly accessible HTTPS host (or start a secure tunnel like `cloudflared` or `ngrok http 3000`), then register `https://<public-domain>/api/v1/webhooks/paypal` in the PayPal Developer Dashboard for your Sandbox REST App.
-   - **Result:** Live events (`PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.AUTHORIZATION.VOIDED`) will deliver asynchronously to the application.
+1. **Deploy or Expose Webhook Ingress Endpoint:**
+   - **Action:** Deploy TrustChain to a publicly accessible HTTPS host (or start a secure tunnel like `cloudflared` or `ngrok http 3000`).
+   - **Registration:** In the PayPal Developer Dashboard (under your REST App Settings), add the Webhook URL:
+     `https://<public-domain>/api/v1/webhooks/paypal`
+   - **Events to Subscribe:** Select `Payment capture completed` and `Payment authorization created/voided`.
+   - **Result:** Live PayPal events will deliver asynchronously, triggering signature validation and authoritative reconciliation.
