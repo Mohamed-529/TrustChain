@@ -14,7 +14,7 @@
 
 ## Current Phase
 
-Prompt 5/8 — TrustChain PayPal Lifecycle Management & Authoritative Reconciliation (Completed & Verified — 156/156 automated tests passing across 12 test suites).
+Prompt 5/8 — TrustChain PayPal Lifecycle Completion & External Verification (Completed & Fully Verified — 157/157 automated tests passing across 12 test suites, live sandbox orders inspected, and all 10 webhook and 11 failure/recovery lifecycle scenarios verified).
 
 ## Overall Progress
 
@@ -32,15 +32,15 @@ Prompt 5/8 — TrustChain PayPal Lifecycle Management & Authoritative Reconcilia
 - Phase 9 (Prompt 2/8 — Replay Engine) — Audit Replay Engine, Hash-Chain Verification & Deterministic State Machine Reconstruction (Completed & Verified — 20/20 Audit Replay tests passing).
 - Phase 9 (Prompt 2/8 — Evidence Passport) — Traceable Engineering Record, Commit Signatures, CI Telemetry, SLSA Provenance, SSRF-Guarded Runtime Preview, Cryptographic Graph, Audit Anchoring, Socket IP-Pinning, Hex IPv4-Mapped IPv6 Parser, Socket Destruction, 18-Point Security Gate & Milestone Workbench Viewer (Completed & Verified — 53/53 Evidence Passport tests passing).
 - Phase 9 (Prompt 4/8 — Dispute Evidence Pack) — Structured, Traceable & Tamper-Evident Dispute Evidence Pack, Version 6 Schema Migration (`dispute_evidence_packs`), Two-Stage Non-Circular SHA-256 Digest Anchoring, Deterministic Chronological Timeline with Sequence Tie-Breaking, AI Advisory Boundary Enforcement, Read-Only Financial Invariants, Portable Sanitized JSON Export & Review Workbench UI (Completed & Verified — 17/17 Dispute Evidence Pack tests passing).
-- Phase 9 (Prompt 5/8 — PayPal Lifecycle Management) — PayPal Orders API v2 Lifecycle (`intent: AUTHORIZE` holds up to 29 days), Mandatory Non-Escrow Regulatory Notice, AI Advisory Separation Boundary, Server-Side Integer Cents Validation, Human Approval Gate (`APPROVE`), Idempotency Protection (`PayPal-Request-Id`), Authoritative Payment Reconciliation Engine (`GET/POST /api/v1/milestones/:id/paypal/reconcile`), Network Timeout Recovery via `REQUIRES_RECONCILIATION`, Webhook Signature Verification (`/v1/notifications/verify-webhook-signature`) with Anti-SSRF Cert Pinning & Out-of-Order Delivery Protection, Version 7 Schema Migration (`payment_transactions`), and Interactive Workbench Settlement Panel with Hold Expiry Timer (Completed & Verified — 11/11 PayPal Lifecycle tests passing; 156/156 project tests passing).
+- Phase 9 (Prompt 5/8 — PayPal Lifecycle Management & Completion) — PayPal Orders API v2 Lifecycle (`intent: AUTHORIZE` holds up to 29 days), Mandatory Non-Escrow Regulatory Notice, AI Advisory Separation Boundary, Server-Side Integer Cents Validation, Human Approval Gate (`APPROVE`), Idempotency Protection (`PayPal-Request-Id`), Authoritative Payment Reconciliation Engine (`GET/POST /api/v1/milestones/:id/paypal/reconcile`), Network Timeout Recovery via `REQUIRES_RECONCILIATION`, Webhook Signature Verification (`/v1/notifications/verify-webhook-signature`) with Anti-SSRF Cert Pinning & Out-of-Order Delivery Protection, Version 7 Schema Migration (`payment_transactions`), 10 Webhook protocol test cases, 11 Failure & Recovery lifecycle test cases with double-credit prevention, and Live Sandbox Verification (Completed & Verified — 12/12 PayPal Lifecycle tests passing; 157/157 project tests passing; report: `PAYPAL_LIFECYCLE_COMPLETION_REPORT.md`).
 
 ---
 
 ## Test Results & Validation Status
 
 - **Automated Test Suite (`npm test` — 14 test files across 12 suites):**
-  - **Status:** **PASSED (`156 / 156` tests passed, `0` failed)**
-  - **PayPal Lifecycle Suite (`11 / 11` passed)**
+  - **Status:** **PASSED (`157 / 157` tests passed, `0` failed)**
+  - **PayPal Lifecycle Suite (`12 / 12` passed)**
   - **Dispute Evidence Pack Suite (`17 / 17` passed)**
   - **Evidence Passport Suite (`53 / 53` passed, 18/18 security coverage checks PASS)**
   - **Audit Replay Suite (`20 / 20` passed)**
