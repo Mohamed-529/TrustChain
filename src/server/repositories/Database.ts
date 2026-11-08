@@ -231,6 +231,9 @@ export class AppDatabase {
             'ORDER_CREATED', 'AUTHORIZED', 'CAPTURED', 'PARTIALLY_CAPTURED_VOIDED',
             'SIMULATED_ORDER_CREATED', 'SIMULATED_AUTHORIZED',
             'SIMULATED_CAPTURED', 'SIMULATED_PARTIALLY_CAPTURED',
+            'ORDER_CREATION_PENDING', 'AUTHORIZATION_PENDING', 'CAPTURE_PENDING',
+            'AUTHORIZATION_FAILED', 'CAPTURE_FAILED', 'REQUIRES_RECONCILIATION',
+            'UNKNOWN_OUTCOME',
             'VOIDED', 'FAILED', 'EXPIRED'
           )),
           auth_expires_at TEXT NULL,
@@ -539,6 +542,7 @@ export class AppDatabase {
       .prepare('SELECT version FROM schema_migrations WHERE version = 6')
       .get() as { version: number } | undefined;
     if (existingV6) {
+      this.runPhase12PayPalLifecycleMigrations();
       return;
     }
 
@@ -565,6 +569,54 @@ export class AppDatabase {
       this.raw
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(6, '006_prompt4_dispute_evidence_pack', new Date().toISOString());
+    });
+
+    this.runPhase12PayPalLifecycleMigrations();
+  }
+
+  private runPhase12PayPalLifecycleMigrations(): void {
+    const existingV7 = this.raw
+      .prepare('SELECT version FROM schema_migrations WHERE version = 7')
+      .get() as { version: number } | undefined;
+    if (existingV7) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      this.raw.exec(`
+        CREATE TABLE IF NOT EXISTS payment_transactions_new (
+          id TEXT PRIMARY KEY,
+          milestone_id TEXT NOT NULL REFERENCES milestones(id) ON DELETE RESTRICT,
+          approval_id TEXT NULL REFERENCES human_approvals(id) ON DELETE RESTRICT,
+          paypal_order_id TEXT NULL,
+          paypal_authorization_id TEXT NULL,
+          paypal_capture_id TEXT NULL,
+          idempotency_key TEXT UNIQUE NOT NULL,
+          authorized_amount_cents INTEGER NOT NULL CHECK (authorized_amount_cents >= 0),
+          captured_amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (captured_amount_cents >= 0),
+          currency TEXT NOT NULL CHECK (currency = 'USD'),
+          status TEXT NOT NULL CHECK (status IN (
+            'ORDER_CREATED', 'AUTHORIZED', 'CAPTURED', 'PARTIALLY_CAPTURED_VOIDED',
+            'SIMULATED_ORDER_CREATED', 'SIMULATED_AUTHORIZED',
+            'SIMULATED_CAPTURED', 'SIMULATED_PARTIALLY_CAPTURED',
+            'ORDER_CREATION_PENDING', 'AUTHORIZATION_PENDING', 'CAPTURE_PENDING',
+            'AUTHORIZATION_FAILED', 'CAPTURE_FAILED', 'REQUIRES_RECONCILIATION',
+            'UNKNOWN_OUTCOME',
+            'VOIDED', 'FAILED', 'EXPIRED'
+          )),
+          auth_expires_at TEXT NULL,
+          raw_paypal_response_json TEXT NOT NULL DEFAULT '{}',
+          updated_at TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO payment_transactions_new SELECT * FROM payment_transactions;
+        DROP TABLE payment_transactions;
+        ALTER TABLE payment_transactions_new RENAME TO payment_transactions;
+        CREATE INDEX IF NOT EXISTS idx_payments_milestone_id ON payment_transactions(milestone_id);
+      `);
+
+      this.raw
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+        .run(7, '007_prompt5_paypal_lifecycle_statuses', new Date().toISOString());
     });
   }
 

@@ -712,9 +712,55 @@ export type PayPalTransactionStatus =
   | 'SIMULATED_AUTHORIZED'
   | 'SIMULATED_CAPTURED'
   | 'SIMULATED_PARTIALLY_CAPTURED'
+  | 'ORDER_CREATION_PENDING'
+  | 'AUTHORIZATION_PENDING'
+  | 'CAPTURE_PENDING'
+  | 'AUTHORIZATION_FAILED'
+  | 'CAPTURE_FAILED'
+  | 'REQUIRES_RECONCILIATION'
+  | 'UNKNOWN_OUTCOME'
   | 'VOIDED'
   | 'FAILED'
   | 'EXPIRED';
+
+export type PayPalReconciliationOutcome =
+  | 'IN_SYNC'
+  | 'RECONCILED_LOCAL_UPDATED'
+  | 'MANUAL_INTERVENTION_REQUIRED'
+  | 'REMOTE_RECORD_NOT_FOUND';
+
+export interface PayPalReconciliationReport {
+  milestoneId: string;
+  contractId: string;
+  localTransaction: {
+    id: string;
+    status: PayPalTransactionStatus;
+    authorizedAmountCents: number;
+    capturedAmountCents: number;
+    paypalOrderId: string | null;
+    paypalAuthorizationId: string | null;
+    paypalCaptureId: string | null;
+    updatedAt: string;
+  } | null;
+  remotePayPalRecord: {
+    orderId: string | null;
+    authorizationId: string | null;
+    captureId: string | null;
+    status: string | null;
+    authorizedAmountCents: number | null;
+    capturedAmountCents: number | null;
+    createTime: string | null;
+    updateTime: string | null;
+  } | null;
+  outcome: PayPalReconciliationOutcome;
+  discrepancies: string[];
+  actionTaken: string;
+  reconciledAt: string;
+  reconciledBy: {
+    id: string;
+    role: string;
+  };
+}
 
 export type PayPalExecutionMode = 'PAYPAL_SANDBOX' | 'SANDBOX_SIMULATION';
 
