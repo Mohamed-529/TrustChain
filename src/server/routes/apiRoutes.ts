@@ -195,6 +195,28 @@ export function createApiRouter(params: {
     evidenceController.previewPolicy
   );
 
+  // Protected Evidence Passport endpoints
+  router.get(
+    '/contracts/:contractId/milestones/:milestoneId/evidence-passport',
+    authenticate,
+    evidenceController.getEvidencePassport
+  );
+  router.get(
+    '/milestones/:milestoneId/evidence-passport',
+    authenticate,
+    evidenceController.getEvidencePassport
+  );
+  router.post(
+    '/contracts/:contractId/milestones/:milestoneId/evidence-passport/runtime-validate',
+    authenticate,
+    evidenceController.validateRuntime
+  );
+  router.post(
+    '/milestones/:milestoneId/evidence-passport/runtime-validate',
+    authenticate,
+    evidenceController.validateRuntime
+  );
+
   // Protected Phase 4 Human Review Workflow & Financial Decision Ledger endpoints
   router.get('/milestones/:id/review', authenticate, reviewController.getReviewDetails);
   router.post('/milestones/:id/review', authenticate, reviewController.submitReview);

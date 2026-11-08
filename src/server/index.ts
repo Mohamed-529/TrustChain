@@ -7,6 +7,7 @@ import {
   ContractRepository,
   EvaluationRepository,
   EvidenceProvenanceRepository,
+  EvidencePassportRepository,
   EvidenceRepository,
   GitHubWebhookEventRepository,
   HumanApprovalRepository,
@@ -19,6 +20,10 @@ import {
 } from './repositories/DomainRepositories.ts';
 import { AuditService } from './services/AuditService.ts';
 import { AuditReplayService } from './services/AuditReplayService.ts';
+import {
+  EvidencePassportService,
+  type EvidencePassportServiceOptions,
+} from './services/EvidencePassportService.ts';
 import { AuthService, type AuthServiceOptions } from './services/AuthService.ts';
 import { ContractService } from './services/ContractService.ts';
 import { EvidenceService } from './services/EvidenceService.ts';
@@ -313,6 +318,8 @@ export interface ServerContainer {
   humanReviewService: HumanReviewService;
   scheduleControlTowerService: ScheduleControlTowerService;
   paypalService: PayPalService;
+  passportRepo: EvidencePassportRepository;
+  evidencePassportService: EvidencePassportService;
 }
 
 export function createServerApp(options?: {
@@ -321,6 +328,7 @@ export function createServerApp(options?: {
   evaluatorProvider?: MultiAgentEvaluatorProvider;
   paypalOptions?: PayPalServiceOptions;
   githubOptions?: GitHubVerificationServiceOptions;
+  passportOptions?: EvidencePassportServiceOptions;
 }): ServerContainer {
   const db = new AppDatabase(options?.dbPath);
   const userRepo = new UserRepository(db.raw);
@@ -335,6 +343,7 @@ export function createServerApp(options?: {
   const paymentRepo = new PaymentTransactionRepository(db.raw);
   const webhookEventRepo = new WebhookEventRepository(db.raw);
   const githubWebhookRepo = new GitHubWebhookEventRepository(db.raw);
+  const passportRepo = new EvidencePassportRepository(db.raw);
   const auditService = new AuditService(db.raw);
 
   const authService = new AuthService(
@@ -441,10 +450,26 @@ export function createServerApp(options?: {
     auditService,
     auditReplayService
   );
+  const evidencePassportService = new EvidencePassportService(
+    db,
+    contractRepo,
+    milestoneRepo,
+    evidenceRepo,
+    provenanceRepo,
+    evaluationRepo,
+    approvalRepo,
+    passportRepo,
+    auditService,
+    githubVerificationService,
+    options?.passportOptions
+  );
+
   const evidenceController = new EvidenceController(
     evidenceService,
     evaluationService,
-    githubVerificationService
+    githubVerificationService,
+    evidencePassportService,
+    contractRepo
   );
   const reviewController = new ReviewController(humanReviewService);
   const scheduleController = new ScheduleController(
@@ -493,6 +518,8 @@ export function createServerApp(options?: {
     humanReviewService,
     scheduleControlTowerService,
     paypalService,
+    passportRepo,
+    evidencePassportService,
   };
 }
 

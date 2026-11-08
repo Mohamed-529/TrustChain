@@ -1,6 +1,8 @@
 import type { EvidenceService } from '../services/EvidenceService.ts';
 import type { EvaluationService } from '../services/EvaluationService.ts';
 import type { GitHubVerificationService } from '../services/GitHubVerificationService.ts';
+import type { EvidencePassportService } from '../services/EvidencePassportService.ts';
+import type { ContractRepository } from '../repositories/DomainRepositories.ts';
 import type { DemoFixtureKey } from '../services/DemoEvidenceFixtures.ts';
 import {
   AppError,
@@ -13,15 +15,21 @@ export class EvidenceController {
   private readonly evidenceService: EvidenceService;
   private readonly evaluationService: EvaluationService;
   private readonly githubVerificationService?: GitHubVerificationService;
+  private readonly evidencePassportService?: EvidencePassportService;
+  private readonly contractRepo?: ContractRepository;
 
   constructor(
     evidenceService: EvidenceService,
     evaluationService: EvaluationService,
-    githubVerificationService?: GitHubVerificationService
+    githubVerificationService?: GitHubVerificationService,
+    evidencePassportService?: EvidencePassportService,
+    contractRepo?: ContractRepository
   ) {
     this.evidenceService = evidenceService;
     this.evaluationService = evaluationService;
     this.githubVerificationService = githubVerificationService;
+    this.evidencePassportService = evidencePassportService;
+    this.contractRepo = contractRepo;
   }
 
   public submitEvidence = (req: ApiRequest, res: ApiResponse, next: NextFunction): void => {
@@ -34,14 +42,13 @@ export class EvidenceController {
         req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : {};
 
       // Support deterministic demo fixture loader if `{ demoFixtureKey }` is explicitly requested
-      if (
-        typeof bodyObj.demoFixtureKey === 'string' &&
-        Object.keys(bodyObj).length === 1
-      ) {
+      if (typeof bodyObj.demoFixtureKey === 'string') {
+        const { demoFixtureKey, ...overrideFields } = bodyObj;
         const submission = this.evidenceService.submitDemoFixture(
           req.actor,
           req.params.id,
-          bodyObj.demoFixtureKey as DemoFixtureKey
+          demoFixtureKey as DemoFixtureKey,
+          Object.keys(overrideFields).length > 0 ? (overrideFields as any) : undefined
         );
         res.status(201).json({ submission });
         return;
@@ -197,6 +204,98 @@ export class EvidenceController {
         req.rawBody
       );
       res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  public getEvidencePassport = async (
+    req: ApiRequest,
+    res: ApiResponse,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.actor) {
+        throw new AppError(401, 'AUTH_TOKEN_REQUIRED', 'Authentication required.');
+      }
+      if (!this.evidencePassportService) {
+        throw new AppError(
+          503,
+          'PASSPORT_SERVICE_UNAVAILABLE',
+          'Evidence Passport service is not initialized.'
+        );
+      }
+
+      const contractId = req.params.contractId || req.params.id;
+      const milestoneId = req.params.milestoneId || req.params.id;
+      if (!contractId || !milestoneId) {
+        throw new AppError(400, 'BAD_REQUEST', 'contractId and milestoneId are required.');
+      }
+
+      // RBAC check: verify actor is part of the contract
+      if (this.contractRepo) {
+        const contract = this.contractRepo.findById(contractId);
+        if (!contract) {
+          throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${contractId}' not found.`);
+        }
+
+        const isParty =
+          req.actor.id === contract.clientId ||
+          req.actor.id === contract.developerId ||
+          req.actor.id === contract.reviewerId;
+        if (!isParty) {
+          throw new AppError(
+            403,
+            'FORBIDDEN_NOT_CONTRACT_PARTY',
+            'Only contract participants (Client, Developer, or Reviewer) may access the Evidence Passport.'
+          );
+        }
+      }
+
+      const previewUrl = typeof req.query.previewUrl === 'string' ? req.query.previewUrl : undefined;
+      const healthEndpoint = typeof req.query.healthEndpoint === 'string' ? req.query.healthEndpoint : undefined;
+      const artifactDigest = typeof req.query.artifactDigest === 'string' ? req.query.artifactDigest : undefined;
+
+      const passport = await this.evidencePassportService.generatePassport(contractId, milestoneId, {
+        previewUrl,
+        healthEndpoint,
+        artifactDigestSha256: artifactDigest,
+      });
+
+      res.status(200).json({ passport });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  public validateRuntime = async (
+    req: ApiRequest,
+    res: ApiResponse,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.actor) {
+        throw new AppError(401, 'AUTH_TOKEN_REQUIRED', 'Authentication required.');
+      }
+      if (!this.evidencePassportService) {
+        throw new AppError(
+          503,
+          'PASSPORT_SERVICE_UNAVAILABLE',
+          'Evidence Passport service is not initialized.'
+        );
+      }
+
+      const bodyObj = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : {};
+      const previewUrl = typeof bodyObj.previewUrl === 'string' ? bodyObj.previewUrl : undefined;
+      const healthEndpoint = typeof bodyObj.healthEndpoint === 'string' ? bodyObj.healthEndpoint : undefined;
+
+      const runtimeValidation = await this.evidencePassportService.executeRuntimeValidation(
+        previewUrl,
+        healthEndpoint,
+        true
+      );
+
+      res.status(200).json({ runtimeValidation });
     } catch (err) {
       next(err);
     }
