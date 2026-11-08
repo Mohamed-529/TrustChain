@@ -4,7 +4,7 @@
 **Workspace:** Google Antigravity  
 **Repository:** `Mohamed-529/TrustChain`  
 **Branch:** `main`  
-**Status:** Completed, Hardened & Fully Verified (`29 / 29` Evidence Passport tests passing; `104 / 104` total project tests passing across 10 suites)
+**Status:** Completed, Hardened & Fully Verified (`31 / 31` Evidence Passport tests passing; `106 / 106` total project tests passing across 10 suites)
 
 ---
 
@@ -118,8 +118,8 @@ The Node.js native test runner (`node --test`) reports:
   9. `phase7.test.ts` (1 describe)
   10. `phase9_agent_integration.test.ts` (1 describe)
 - Two files (`phase8_foundation.test.ts` and `phase8_integration.test.ts`) use top-level `test(...)` blocks with `t.test(...)` subtests rather than `describe(...)`, which Node registers as top-level tests rather than suites.
-- **104 Passed Tests:**
-  - 29 tests in `evidence_passport.test.ts`
+- **106 Passed Tests:**
+  - 31 tests in `evidence_passport.test.ts`
   - 20 tests in `audit_replay.test.ts`
   - 7 tests in `phase1.test.ts`
   - 3 tests in `phase2.test.ts`
@@ -131,9 +131,9 @@ The Node.js native test runner (`node --test`) reports:
   - 4 tests in `phase8_foundation.test.ts` (1 parent `test` + 3 subtests)
   - 7 tests in `phase8_integration.test.ts` (1 parent `test` + 6 subtests)
   - 12 tests in `phase9_agent_integration.test.ts`
-  - **Total: 29 + 20 + 7 + 3 + 4 + 4 + 4 + 4 + 6 + 4 + 7 + 12 = 104 passed tests.**
+  - **Total: 31 + 20 + 7 + 3 + 4 + 4 + 4 + 4 + 6 + 4 + 7 + 12 = 106 passed tests.**
 
-### 4.2 Evidence Passport Test Matrix (29 Scenarios)
+### 4.2 Evidence Passport Test Matrix (31 Scenarios)
 
 | # | Test Scenario | Verified Outcome |
 |---|---|---|
@@ -166,6 +166,8 @@ The Node.js native test runner (`node --test`) reports:
 | 27 | Anchor passport digest to immutable audit record | `EVIDENCE_PASSPORT_GENERATED` logged |
 | 28 | Detect direct SQLite tampering in graph nodes or digest | `isCryptographicallyValid: false`, `FAILED` |
 | 29 | DNS resolution on redirect targets to private IP space | Redirect target resolving to `127.0.0.1` blocked |
+| 30 | Socket-level IP-pinning preventing DNS rebinding TOCTOU | Connects strictly to validated pinned IP |
+| 31 | Non-circular audit anchoring and content digest immutability | Zero circular hashing dependency verified |
 
 ---
 

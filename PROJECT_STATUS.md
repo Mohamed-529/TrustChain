@@ -14,7 +14,7 @@
 
 ## Current Phase
 
-Prompt 2/8 — Evidence Passport Implementation & Security Hardening (Completed & Verified — 104/104 automated tests passing across 10 test suites).
+Prompt 2/8 — Evidence Passport Implementation & Security Hardening (Completed & Verified — 106/106 automated tests passing across 10 test suites).
 
 ## Overall Progress
 
@@ -30,15 +30,15 @@ Prompt 2/8 — Evidence Passport Implementation & Security Hardening (Completed 
 - Phase 8 — Bryntum Gantt Full Integration, UI Resilience & Comprehensive Project-Wide Audit (Completed & Verified — 9/9 Phase 8 tests passing).
 - Phase 9 (Prompt 1/8) — AI Agent Intelligence, Structured Output Schemas & Adversarial Evaluation (Completed & Verified — 12/12 Phase 9 tests passing).
 - Phase 9 (Prompt 2/8 — Replay Engine) — Audit Replay Engine, Hash-Chain Verification & Deterministic State Machine Reconstruction (Completed & Verified — 20/20 Audit Replay tests passing).
-- Phase 9 (Prompt 2/8 — Evidence Passport) — Traceable Engineering Record, Commit Signatures, CI Telemetry, SLSA Provenance, SSRF-Guarded Runtime Preview, Cryptographic Graph, Audit Anchoring, Tamper Detection & Milestone Workbench Viewer (Completed & Verified — 29/29 Evidence Passport tests passing).
+- Phase 9 (Prompt 2/8 — Evidence Passport) — Traceable Engineering Record, Commit Signatures, CI Telemetry, SLSA Provenance, SSRF-Guarded Runtime Preview, Cryptographic Graph, Audit Anchoring, Socket IP-Pinning & Milestone Workbench Viewer (Completed & Verified — 31/31 Evidence Passport tests passing).
 
 ---
 
 ## Test Results & Validation Status
 
 - **Automated Test Suite (`npm test` — 12 test files across 10 suites):**
-  - **Status:** **PASSED (`104 / 104` tests passed, `0` failed)**
-  - **Evidence Passport Suite (`29 / 29` passed)**
+  - **Status:** **PASSED (`106 / 106` tests passed, `0` failed)**
+  - **Evidence Passport Suite (`31 / 31` passed)**
   - **Audit Replay Suite (`20 / 20` passed)**
   - **Phase 1 Suite (`7 / 7` passed)**
   - **Phase 2 Suite (`3 / 3` passed)**
