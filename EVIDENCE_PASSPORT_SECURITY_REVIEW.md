@@ -109,12 +109,38 @@ The security boundaries evaluated and verified include:
 
 ## 4. Skills Utilized & Applied Discipline
 
-- **`systematic-debugging`:** Applied the 4-phase investigation protocol (reproduce, hypothesize, isolate, verify) to identify the hex-encoded IPv4-mapped IPv6 filter bypass (`::ffff:7f00:1`) and empty DNS lookup fall-through.
-- **`test-driven-development`:** Added regression tests 32–35 in `evidence_passport.test.ts` to assert that all IPv4-mapped formats, mixed DNS resolutions, empty resolutions, and redirect scheme violations are blocked before finalizing code changes.
+- **`systematic-debugging`:** Applied the 4-phase investigation protocol (reproduce, hypothesize, isolate, verify) to identify the hex-encoded IPv4-mapped IPv6 filter bypass (`::ffff:7f00:1`), empty DNS lookup fall-through, IPv6 bracket normalization (`[::ffff:a00:1]`), and test mutation state parity.
+- **`test-driven-development`:** Authored 18 dedicated security tests (Tests 36–53) establishing RED/GREEN cycles across socket pinning, TLS SNI, redirect loops, resource bounds, transaction rollbacks, and digest mutation.
+- **`api-test-suite-builder`:** Applied the 6-dimension API test matrix to assert happy paths, schema negatives, boundary caps, RBAC boundaries, concurrency, and SQLite transaction rollback modes.
 
 ---
 
-## 5. Residual Risks & Production Hardening Recommendations
+## 5. 18-Point Final Security Coverage Matrix
+
+| # | Section | Check Name | Status | Test Name / Verification |
+|:---|:---|:---|:---|:---|
+| **1** | **A. Socket & TLS** | Actual socket connection pinning (not just DNS helper) | **PASS** | `36. (A.1) verifies actual TCP socket connection pinning to resolved IP rather than system DNS` |
+| **2** | **A. Socket & TLS** | TLS hostname mismatch is rejected | **PASS** | `37. (A.2) verifies TLS hostname mismatch is strictly rejected by certificate verification` |
+| **3** | **A. Socket & TLS** | TLS SNI uses original hostname in Client Hello | **PASS** | `38. (A.3) verifies TLS SNI sends the original hostname in Client Hello` |
+| **4** | **A. Socket & TLS** | Agents cannot reuse connections across different hostnames | **PASS** | `39. (A.4) verifies agents cannot reuse connections across different hostnames (keepAlive: false)` |
+| **5** | **A. Socket & TLS** | All mixed DNS answers containing blocked addresses rejected | **PASS** | `40. (A.5) verifies all mixed DNS answers containing blocked addresses are strictly rejected` |
+| **6** | **B. Redirects** | Relative redirects resolved against base URL and followed | **PASS** | `41. (B.6) resolves and safely follows relative redirects against the base URL` |
+| **7** | **B. Redirects** | Redirects to private IP literals blocked before connecting | **PASS** | `42. (B.7) strictly blocks redirects pointing to private IP literals` |
+| **8** | **B. Redirects** | Redirect loops and maximum redirect count (depth > 3) | **PASS** | `43. (B.8) catches redirect loops and enforces maximum redirect depth` |
+| **9** | **B. Redirects** | Malformed Location headers safely handled | **PASS** | `44. (B.9) safely handles malformed Location headers without crashing` |
+| **10** | **B. Redirects** | Each redirect destination independently resolved and pinned | **PASS** | `45. (B.10) verifies each redirect hop destination is independently resolved and pinned` |
+| **11** | **C. Resource** | Request timeout aborts cleanly | **PASS** | `46. (C.11) aborts cleanly and reports TIMEOUT when destination server hangs` |
+| **12** | **C. Resource** | Premature connection termination/aborts caught cleanly | **PASS** | `47. (C.12) catches premature connection termination/aborts cleanly without unhandled crash` |
+| **13** | **C. Resource** | Socket and agent cleanup after success and failure | **PASS** | `48. (C.13) guarantees socket and agent cleanup after both successful and failed requests` |
+| **14** | **C. Resource** | Response-size limits enforced (stream destroyed) | **PASS** | `49. (C.14) enforces response size limits and destroys oversized incoming streams` |
+| **15** | **D. Integrity** | Failed audit transaction rollback | **PASS** | `50. (D.15) rolls back passport creation transaction when audit logging throws an exception` |
+| **16** | **D. Integrity** | Concurrent passport generation without data race corruption | **PASS** | `51. (D.16) handles concurrent passport generation without data race corruption or audit gaps` |
+| **17** | **D. Integrity** | Mutation of every security-relevant field invalidates digest | **PASS** | `52. (D.17) verifies mutation of every security-relevant field invalidates passport cryptographic digest` |
+| **18** | **D. Integrity** | Freshly generated passport passes retrieval verification | **PASS** | `53. (D.18) verifies freshly generated passport immediately passes database retrieval verification` |
+
+---
+
+## 6. Residual Risks & Production Hardening Recommendations
 
 1. **Defense-in-Depth Network Egress Isolation:**
    While socket-level IP-pinning completely prevents application-level DNS rebinding and private IP access, production multi-tenant deployments should additionally employ network-level egress security groups or an egress forward-proxy to prevent kernel-level or sub-process network escapes.
