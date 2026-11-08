@@ -5,7 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { createServerApp, type HttpApp } from '../index.ts';
-import { isPrivateOrBlockedIp } from '../services/EvidencePassportService.ts';
+import { EvidencePassportService, isPrivateOrBlockedIp } from '../services/EvidencePassportService.ts';
 import type { EvidencePassport } from '../../types/domain.ts';
 
 interface ApiResponse<T = any> {
@@ -976,6 +976,176 @@ describe('Prompt 2/8 — Evidence Passport: Verifiable Engineering Evidence Reco
       assert.equal(validateRes.status, 200);
       assert.equal(validateRes.body.runtimeValidation.overallStatus, 'BLOCKED_SECURITY');
       assert.equal(validateRes.body.runtimeValidation.securityChecks.ipBlocked, true);
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // 26. Runtime validation RBAC: blocks outsider users
+  it('26. blocks unauthorized outsiders from executing runtime validation with HTTP 403', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId } = await setupActiveContract(container);
+
+      // Create outsider user
+      const salt = crypto.randomBytes(16).toString('hex');
+      const derived = crypto.scryptSync('OutsiderPass!2026', Buffer.from(salt, 'hex'), 64);
+      const passHash = `${salt}:${derived.toString('hex')}`;
+
+      container.db.raw.exec(`
+        INSERT INTO users (id, name, email, password_hash, role, is_active, is_demo_account, created_at)
+        VALUES ('user_outsider_rv', 'Outsider Reviewer', 'outsider.rv@domain.example', '${passHash}', 'CLIENT', 1, 0, '2026-11-08T00:00:00.000Z')
+      `);
+
+      const loginRes = await sendRequest<{ token: string }>(container.app, {
+        method: 'POST',
+        path: '/api/v1/auth/login',
+        body: { email: 'outsider.rv@domain.example', password: 'OutsiderPass!2026' },
+      });
+      assert.equal(loginRes.status, 200);
+      const outsiderToken = loginRes.body.token;
+
+      const validateRes = await sendRequest(container.app, {
+        method: 'POST',
+        path: `/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport/runtime-validate`,
+        headers: { Authorization: `Bearer ${outsiderToken}` },
+        body: { previewUrl: 'https://example.com' },
+      });
+
+      assert.equal(validateRes.status, 403);
+      assert.equal(validateRes.body.error.code, 'FORBIDDEN_NOT_CONTRACT_PARTY');
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // 27. Anchoring to immutable audit chain
+  it('27. anchors passport digest to an immutable audit record and preserves chain integrity', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, clientToken } = await setupActiveContract(container);
+
+      const passRes = await sendRequest<{ passport: EvidencePassport }>(container.app, {
+        method: 'GET',
+        path: `/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`,
+        headers: { Authorization: `Bearer ${clientToken}` },
+      });
+      assert.equal(passRes.status, 200);
+      const passport = passRes.body.passport;
+
+      // Verify audit entry in audit_logs
+      const auditRow = container.db.raw
+        .prepare("SELECT * FROM audit_logs WHERE action = 'EVIDENCE_PASSPORT_GENERATED' AND entity_id = ?")
+        .get(passport.id) as any;
+
+      assert.ok(auditRow, 'Audit log entry must be present in SQLite audit_logs table');
+      assert.equal(auditRow.entity_type, 'EVIDENCE');
+      assert.ok(passport.settlementAuditTrace.auditEventReferences.includes(auditRow.entry_hash));
+
+      // Verify unbroken hash chain
+      const verifyRes = container.auditService.verifyChain();
+      assert.equal(verifyRes.valid, true, 'Audit hash chain must remain intact');
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // 28. Tamper detection on passport graph nodes, edges, or stored digest
+  it('28. detects direct SQLite tampering in graph nodes or stored digest and sets isCryptographicallyValid=false', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, clientToken } = await setupActiveContract(container);
+
+      // Generate passport initially
+      const passRes = await sendRequest<{ passport: EvidencePassport }>(container.app, {
+        method: 'GET',
+        path: `/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`,
+        headers: { Authorization: `Bearer ${clientToken}` },
+      });
+      assert.equal(passRes.status, 200);
+      assert.equal(passRes.body.passport.isCryptographicallyValid, true);
+
+      // Tamper with passport_data_json directly in SQLite (alter graph nodes)
+      const passportRow = container.db.raw
+        .prepare('SELECT passport_data_json FROM evidence_passports WHERE milestone_id = ?')
+        .get(milestoneId) as any;
+      const parsedData = JSON.parse(passportRow.passport_data_json);
+
+      // Maliciously modify a node label
+      parsedData.graph.nodes[0].label = 'MALICIOUS_OVERRIDE_NODE';
+      container.db.raw
+        .prepare('UPDATE evidence_passports SET passport_data_json = ? WHERE milestone_id = ?')
+        .run(JSON.stringify(parsedData), milestoneId);
+
+      // Query again: getPassport should detect tampering and mark isCryptographicallyValid = false
+      const tamperedRes = await sendRequest<{ passport: EvidencePassport }>(container.app, {
+        method: 'GET',
+        path: `/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`,
+        headers: { Authorization: `Bearer ${clientToken}` },
+      });
+
+      assert.equal(tamperedRes.status, 200);
+      assert.equal(tamperedRes.body.passport.isCryptographicallyValid, false);
+      assert.equal(tamperedRes.body.passport.identity.overallStatus, 'FAILED');
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // 29. Redirect destination DNS resolution check
+  it('29. resolves and intercepts redirect destination domains that point to private IP addresses', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, clientToken } = await setupActiveContract(container);
+
+      // Custom mock that simulates HTTP 302 redirect to a domain resolving to 127.0.0.1
+      const mockFetch: typeof fetch = async (input, init) => {
+        const urlStr = String(input);
+        if (urlStr.includes('redirect-source.example.com')) {
+          return new Response(null, {
+            status: 302,
+            headers: { Location: 'http://internal-domain.local:8080/secret' },
+          });
+        }
+        return new Response('ok', { status: 200 });
+      };
+
+      const mockDnsLookup = async (hostname: string) => {
+        if (hostname === 'redirect-source.example.com') {
+          return [{ address: '93.184.216.34', family: 4 }];
+        }
+        if (hostname === 'internal-domain.local') {
+          return [{ address: '127.0.0.1', family: 4 }];
+        }
+        return [{ address: '93.184.216.34', family: 4 }];
+      };
+
+      const customService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          fetchImpl: mockFetch,
+          dnsLookupImpl: mockDnsLookup,
+        }
+      );
+
+      const runtimeResult = await customService.executeRuntimeValidation(
+        'https://redirect-source.example.com',
+        '/health',
+        true
+      );
+
+      assert.equal(runtimeResult.overallStatus, 'BLOCKED_SECURITY');
+      assert.equal(runtimeResult.securityChecks.ipBlocked, true);
+      assert.ok(runtimeResult.details.includes('SSRF protection blocked redirect'));
     } finally {
       cleanupFiles();
     }
