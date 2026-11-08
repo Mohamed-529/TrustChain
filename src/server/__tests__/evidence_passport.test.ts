@@ -1150,4 +1150,143 @@ describe('Prompt 2/8 — Evidence Passport: Verifiable Engineering Evidence Reco
       cleanupFiles();
     }
   });
+
+  // 30. DNS Rebinding / TOCTOU IP-Pinning validation
+  it('30. enforces socket-level IP-pinning preventing DNS rebinding TOCTOU attacks', async () => {
+    const container = getIsolatedApp();
+    const testServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'healthy', version: '1.0.0' }));
+    });
+
+    try {
+      await new Promise<void>((resolve) => testServer.listen(0, '127.0.0.1', resolve));
+      const testPort = (testServer.address() as any).port;
+
+      let lookupCount = 0;
+      // Simulate DNS Rebinding: 1st lookup returns 127.0.0.1 (blocked), subsequent lookups return public IP
+      const rebindingDnsLookup = async (hostname: string) => {
+        lookupCount++;
+        if (lookupCount === 1) {
+          return [{ address: '127.0.0.1', family: 4 }];
+        }
+        return [{ address: '93.184.216.34', family: 4 }];
+      };
+
+      const customService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          dnsLookupImpl: rebindingDnsLookup,
+        }
+      );
+
+      // Attempt validation against rebinding host
+      const res = await customService.executeRuntimeValidation(
+        `http://rebinding-victim.example.com:${testPort}`,
+        '/health',
+        true
+      );
+
+      // Must be blocked because initial resolution was 127.0.0.1
+      assert.equal(res.overallStatus, 'BLOCKED_SECURITY');
+      assert.equal(res.securityChecks.ipBlocked, true);
+      assert.equal(res.securityChecks.ssrfValidated, false);
+      assert.ok(res.details.includes('SSRF protection blocked request'));
+    } finally {
+      testServer.close();
+      cleanupFiles();
+    }
+  });
+
+  // 31. Passport Digest and Audit Reference Ordering (Zero Circular Hashing)
+  it('31. verifies non-circular audit anchoring and content digest immutability', async () => {
+    const container = getIsolatedApp();
+    try {
+      const { contractId, milestoneId, clientToken, devToken } = await setupActiveContract(container);
+
+      // Submit valid evidence
+      await sendRequest(container.app, {
+        method: 'POST',
+        path: `/api/v1/milestones/${milestoneId}/evidence`,
+        headers: { Authorization: `Bearer ${devToken}` },
+        body: { demoFixtureKey: 'SUCCESSFUL_SUBMISSION' },
+      });
+
+      // Generate passport
+      const passRes = await sendRequest<{ passport: EvidencePassport }>(container.app, {
+        method: 'GET',
+        path: `/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`,
+        headers: { Authorization: `Bearer ${clientToken}` },
+      });
+      assert.equal(passRes.status, 200);
+      const passport = passRes.body.passport;
+
+      // 1. Verify that passport generation created an audit log
+      const auditRows = container.db.raw
+        .prepare("SELECT * FROM audit_logs WHERE action = 'EVIDENCE_PASSPORT_GENERATED' AND entity_id = ?")
+        .all(passport.id) as any[];
+
+      assert.equal(auditRows.length, 1, 'Exactly one passport audit event must be logged');
+      const auditEntry = auditRows[0];
+      const auditPayload = JSON.parse(auditEntry.payload_json);
+
+      // 2. Verify non-circular relationship:
+      // Audit log payload anchors the passport content digest (before appending audit reference)
+      assert.ok(auditPayload.passportContentDigestSha256, 'Audit payload must commit to passportContentDigestSha256');
+      assert.equal(auditPayload.passportContentDigestSha256.length, 64);
+
+      // Passport trace links the resulting audit event entry_hash
+      assert.ok(
+        passport.settlementAuditTrace.auditEventReferences.includes(auditEntry.entry_hash),
+        'Passport audit trace must link the audit entry hash'
+      );
+
+      // Final passportDigestSha256 commits to the passport with the audit entry hash
+      assert.ok(passport.passportDigestSha256.length === 64);
+      assert.equal(passport.isCryptographicallyValid, true);
+
+      // 3. Re-retrieval from database preserves cryptographic validity
+      const retrievedRes = await sendRequest<{ passport: EvidencePassport }>(container.app, {
+        method: 'GET',
+        path: `/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`,
+        headers: { Authorization: `Bearer ${clientToken}` },
+      });
+      assert.equal(retrievedRes.status, 200);
+      assert.equal(retrievedRes.body.passport.isCryptographicallyValid, true);
+      assert.equal(retrievedRes.body.passport.passportDigestSha256, passport.passportDigestSha256);
+
+      // 4. Modifying graph relationship in SQLite directly breaks integrity check
+      const rawPassport = container.db.raw
+        .prepare('SELECT passport_data_json FROM evidence_passports WHERE id = ?')
+        .get(passport.id) as any;
+      const modifiedPayload = JSON.parse(rawPassport.passport_data_json);
+
+      // Alter an edge target in graph
+      modifiedPayload.graph.edges[0].target = 'modified_fake_target_id';
+      container.db.raw
+        .prepare('UPDATE evidence_passports SET passport_data_json = ? WHERE id = ?')
+        .run(JSON.stringify(modifiedPayload), passport.id);
+
+      // Querying again must catch tampering
+      const tamperedRes = await sendRequest<{ passport: EvidencePassport }>(container.app, {
+        method: 'GET',
+        path: `/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`,
+        headers: { Authorization: `Bearer ${clientToken}` },
+      });
+      assert.equal(tamperedRes.status, 200);
+      assert.equal(tamperedRes.body.passport.isCryptographicallyValid, false);
+      assert.equal(tamperedRes.body.passport.identity.overallStatus, 'FAILED');
+    } finally {
+      cleanupFiles();
+    }
+  });
 });
