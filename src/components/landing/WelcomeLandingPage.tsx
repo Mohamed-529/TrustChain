@@ -1,117 +1,173 @@
-import React from 'react';
+/**
+ * WelcomeLandingPage — Cinematic Entry Experience for TrustChain
+ *
+ * Implements:
+ * - Stage A: Cinematic Opening (Dark background, luminous wave canvas, minimal logo reveal, intro playback)
+ * - Stage B: Product Reveal (Lifecycle animation, headline, CTAs, interactive stage inspector)
+ * - Stage C: Platform Capabilities Showcase (7 modules, sponsor integrations, direct route jumping)
+ * - Interactive 3D Trust Lifecycle (60fps Canvas orbital telemetry)
+ * - First-time vs returning user intelligence with skip/replay controls.
+ */
+
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from '../../router/Router.tsx';
+import { CinematicOpening } from './CinematicOpening.tsx';
+import { LifecycleRevealSection } from './LifecycleRevealSection.tsx';
+import { PlatformCapabilitiesShowcase } from './PlatformCapabilitiesShowcase.tsx';
 import { TrustLifecycle3D } from './TrustLifecycle3D.tsx';
+
+export const STORAGE_KEY_CINEMATIC_VISITED = 'tc_cinematic_visited_v1';
 
 interface WelcomeLandingPageProps {
   onStartTour: () => void;
+  onOpenSignIn?: () => void;
 }
 
-export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
+export function WelcomeLandingPage({ onStartTour, onOpenSignIn }: WelcomeLandingPageProps) {
   const navigate = useNavigate();
+  const [isPlayingIntro, setIsPlayingIntro] = useState<boolean>(false);
+  const [showFullExplore, setShowFullExplore] = useState<boolean>(true);
+
+  // Check if returning user
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hasVisited = localStorage.getItem(STORAGE_KEY_CINEMATIC_VISITED);
+      if (!hasVisited) {
+        localStorage.setItem(STORAGE_KEY_CINEMATIC_VISITED, 'true');
+        // First visit: highlight intro
+        setIsPlayingIntro(true);
+      }
+    }
+  }, []);
+
+  const handleExplore = () => {
+    setShowFullExplore(true);
+    setIsPlayingIntro(false);
+    const target = document.getElementById('product-reveal-section');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handlePlayIntro = () => {
+    setIsPlayingIntro(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSkipIntro = () => {
+    setIsPlayingIntro(false);
+    setShowFullExplore(true);
+    const target = document.getElementById('product-reveal-section');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleSignIn = () => {
+    if (onOpenSignIn) {
+      onOpenSignIn();
+    } else {
+      navigate('/settings');
+    }
+  };
 
   return (
-    <div className="space-y-12 py-6 font-sans">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border border-slate-800 p-8 lg:p-14 text-center space-y-6 shadow-2xl">
-        {/* Glow ambient background circles */}
-        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 -left-20 w-72 h-72 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 -right-20 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#02040a] text-slate-100 font-sans selection:bg-sky-500 selection:text-white">
+      {/* STAGE A: Cinematic Opening Sequence */}
+      <CinematicOpening
+        onExplore={handleExplore}
+        onPlayIntro={handlePlayIntro}
+        onSkipIntro={handleSkipIntro}
+        onSignIn={handleSignIn}
+        isPlayingIntro={isPlayingIntro}
+      />
 
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-700/80 text-[11px] font-mono font-bold text-indigo-300">
-          <span>⚡</span> MULTI-AGENT EVIDENCE-TO-SETTLEMENT ORCHESTRATION
+      {/* Replay Intro Floating Controller (always accessible) */}
+      <div className="sticky top-20 z-30 flex justify-end px-6 pointer-events-none">
+        <button
+          onClick={handlePlayIntro}
+          className="pointer-events-auto px-3.5 py-1.5 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-[11px] font-mono text-sky-300 hover:text-white transition shadow-lg backdrop-blur-md flex items-center gap-1.5"
+          title="Replay cinematic opening animation"
+        >
+          <span>✨</span>
+          <span>Replay Cinematic Intro</span>
+        </button>
+      </div>
+
+      {/* STAGE B: Product Reveal & Core 6-Stage Lifecycle Flow */}
+      <div className="border-t border-slate-800/80 bg-gradient-to-b from-[#02040a] via-slate-950 to-slate-950">
+        <LifecycleRevealSection
+          onExplore={() => {
+            const el = document.getElementById('platform-capabilities-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+          onSignIn={handleSignIn}
+        />
+      </div>
+
+      {/* Interactive 3D Trust Lifecycle Orbital Visualizer */}
+      <div className="py-12 border-t border-slate-800/80 bg-slate-950 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
+        <div className="text-center space-y-2 max-w-2xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-mono font-medium text-slate-400">
+            <span>INTERACTIVE 3D TELEMETRY</span>
+          </div>
+          <h3 className="text-2xl sm:text-3xl font-bold text-white">
+            Orbital Trust Graph & Invariant Mesh
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-400">
+            Click any orbital node in the 3D visualizer to inspect runtime schemas, cryptographic gates, and fiduciary boundaries.
+          </p>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl lg:text-6xl font-extrabold text-white tracking-tight max-w-4xl mx-auto leading-tight">
-          From software delivery to <span className="bg-gradient-to-r from-indigo-400 via-sky-300 to-emerald-400 bg-clip-text text-transparent">trusted settlement</span>.
-        </h1>
-
-        <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
-          Verify technical delivery against contractual criteria, evaluate security findings with multi-agent intelligence, and authorize PayPal disbursements through an immutable, audit-replayable decision ledger.
-        </p>
-
-        {/* Hero Actions */}
-        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-          <button
-            onClick={() => navigate('/intelligence')}
-            className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-bold text-white shadow-xl shadow-indigo-600/30 transition transform hover:-translate-y-0.5"
-          >
-            Launch Intelligence Control Room →
-          </button>
-
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-semibold text-slate-200 transition"
-          >
-            Executive Dashboard
-          </button>
-
-          <button
-            onClick={onStartTour}
-            className="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-indigo-700/60 text-sm font-semibold text-indigo-300 transition flex items-center gap-1.5"
-          >
-            <span>✨</span> Interactive Guided Tour
-          </button>
-        </div>
-
-        {/* Sponsor Technology Matrix Strip */}
-        <div className="pt-8 border-t border-slate-800/80 mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono text-slate-400">
-          <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
-            <div className="text-white font-bold">AG Grid Community v36</div>
-            <div className="text-[10px] text-slate-500">Investigation Cockpit</div>
-          </div>
-          <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
-            <div className="text-white font-bold">Bryntum Gantt v7</div>
-            <div className="text-[10px] text-slate-500">Delivery Control Tower</div>
-          </div>
-          <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
-            <div className="text-white font-bold">PayPal Orders API v2</div>
-            <div className="text-[10px] text-slate-500">29-Day Hold & Capture</div>
-          </div>
-          <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
-            <div className="text-white font-bold">APIMatic OpenAPI 3.0</div>
-            <div className="text-[10px] text-slate-500">Validated API Contract</div>
-          </div>
-        </div>
-      </section>
-
-      {/* Interactive 3D Trust Lifecycle Section */}
-      <section className="space-y-4">
         <TrustLifecycle3D />
-      </section>
+      </div>
 
-      {/* Core Architectural Pillars */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-sky-950 border border-sky-800 flex items-center justify-center text-xl">
-            🛡️
-          </div>
-          <h3 className="text-base font-bold text-white">Cryptographic Verifiability</h3>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Every commit, PR, and CI log is cryptographically anchored. Untrusted external payloads cannot overwrite server telemetry or fabricate test results.
-          </p>
-        </div>
+      {/* STAGE C: Platform Capabilities Showcase (7 Modules) */}
+      <div className="border-t border-slate-800/80 bg-[#02040a]">
+        <PlatformCapabilitiesShowcase />
+      </div>
 
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-xl">
-            🤖
+      {/* Sponsor Technology & Regulatory Footer */}
+      <footer className="border-t border-slate-800/80 bg-slate-950/80 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6 text-xs text-slate-500 font-mono">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-sky-400 to-indigo-500 p-0.5">
+              <div className="w-full h-full bg-slate-950 rounded-[6px] flex items-center justify-center font-bold text-white text-[10px]">
+                TC
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-300 font-bold">TrustChain</span> — Multi-Agent Evidence-to-Settlement Orchestration
+            </div>
           </div>
-          <h3 className="text-base font-bold text-white">Strict Advisory AI Boundary</h3>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Three specialized agents synthesize evidence and risk, but AI is strictly non-authoritative. Only an authenticated human fiduciary can authorize fund release.
-          </p>
-        </div>
 
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-800 flex items-center justify-center text-xl">
-            💳
+          <div className="flex flex-wrap items-center gap-4 text-[11px]">
+            <span className="text-slate-400">AG Grid Community v36</span>
+            <span>•</span>
+            <span className="text-slate-400">Bryntum Gantt v7.3</span>
+            <span>•</span>
+            <span className="text-slate-400">PayPal Orders API v2</span>
+            <span>•</span>
+            <span className="text-slate-400">APIMatic OpenAPI</span>
           </div>
-          <h3 className="text-base font-bold text-white">Deterministic PayPal Settlement</h3>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Funds are temporarily held using PayPal Sandbox intent: AUTHORIZE (up to 29 days). Disbursements are mathematically calculated by contract policy.
-          </p>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onStartTour}
+              className="text-sky-400 hover:text-sky-300 transition"
+            >
+              Start Guided Tour 🧭
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => navigate('/settings')}
+              className="hover:text-slate-300 transition"
+            >
+              Audit Trail 🛡️
+            </button>
+          </div>
         </div>
-      </section>
+      </footer>
     </div>
   );
 }
