@@ -18,6 +18,7 @@ import {
   WebhookEventRepository,
 } from './repositories/DomainRepositories.ts';
 import { AuditService } from './services/AuditService.ts';
+import { AuditReplayService } from './services/AuditReplayService.ts';
 import { AuthService, type AuthServiceOptions } from './services/AuthService.ts';
 import { ContractService } from './services/ContractService.ts';
 import { EvidenceService } from './services/EvidenceService.ts';
@@ -302,6 +303,7 @@ export interface ServerContainer {
   webhookEventRepo: WebhookEventRepository;
   githubWebhookRepo: GitHubWebhookEventRepository;
   auditService: AuditService;
+  auditReplayService: AuditReplayService;
   authService: AuthService;
   contractService: ContractService;
   evidenceService: EvidenceService;
@@ -427,10 +429,17 @@ export function createServerApp(options?: {
   );
 
   const authController = new AuthController(authService);
+  const auditReplayService = new AuditReplayService(
+    db.raw,
+    contractRepo,
+    milestoneRepo
+  );
+
   const contractController = new ContractController(
     contractService,
     userRepo,
-    auditService
+    auditService,
+    auditReplayService
   );
   const evidenceController = new EvidenceController(
     evidenceService,
@@ -474,6 +483,7 @@ export function createServerApp(options?: {
     webhookEventRepo,
     githubWebhookRepo,
     auditService,
+    auditReplayService,
     authService,
     contractService,
     evidenceService,

@@ -139,6 +139,16 @@ export function createApiRouter(params: {
     requireRole(['CLIENT']),
     contractController.activateContract
   );
+  router.get(
+    '/contracts/:id/audit/replay',
+    authenticate,
+    contractController.replayContractAudit
+  );
+  router.get(
+    '/contracts/:id/audit/verify',
+    authenticate,
+    contractController.verifyContractAudit
+  );
 
   // Protected Phase 5 Bryntum Gantt Evidence-Aware Software Delivery Control Tower endpoints
   router.get('/contracts/:id/schedule', authenticate, scheduleController.getContractSchedule);
