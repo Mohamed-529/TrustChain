@@ -181,6 +181,120 @@ export interface AuditChainVerificationResult {
 
 /**
  * ============================================================================
+ * AUDIT REPLAY ENGINE — Types & Schemas
+ * ============================================================================
+ */
+
+export type ReplayMode = 'FULL' | 'PARTIAL' | 'VERIFY_ONLY';
+
+export type ReplayStatus =
+  | 'SUCCESS'
+  | 'CRYPTOGRAPHIC_FAILURE'
+  | 'LIFECYCLE_INCONSISTENCY'
+  | 'INCOMPLETE_HISTORY'
+  | 'EMPTY_HISTORY'
+  | 'UNSUPPORTED_EVENTS_DETECTED';
+
+export type ReplayFindingSeverity = 'ERROR' | 'WARNING' | 'INFO';
+
+export type ReplayFindingCategory =
+  | 'CRYPTOGRAPHIC_INTEGRITY'
+  | 'SEQUENCE_INTEGRITY'
+  | 'LIFECYCLE_TRANSITION'
+  | 'EVENT_ORDERING'
+  | 'PREDECESSOR_DEPENDENCY'
+  | 'ENTITY_REFERENCE'
+  | 'UNSUPPORTED_EVENT';
+
+export interface ReplayFinding {
+  category: ReplayFindingCategory;
+  severity: ReplayFindingSeverity;
+  code: string;
+  message: string;
+  seq?: number;
+  entityId?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ReconstructedContractState {
+  id: string;
+  status: ContractStatus;
+  title?: string;
+  totalBudgetCents: number;
+  milestoneCount: number;
+  activeMilestones: number;
+  settledMilestones: number;
+  totalSettledCents: number;
+  activatedAt?: string;
+  completedAt?: string;
+}
+
+export interface ReconstructedMilestoneState {
+  id: string;
+  contractId: string;
+  sequenceOrder: number;
+  title: string;
+  agreedAmountCents: number;
+  status: MilestoneStatus;
+  paymentStatus: PaymentStatus;
+  latestSubmissionId?: string;
+  latestEvaluationId?: string;
+  latestApprovalId?: string;
+  settledAmountCents: number;
+  paypalOrderId?: string;
+  evidenceSubmissionsCount: number;
+  evaluationsCount: number;
+  approvalsCount: number;
+  historyTransitions: Array<{
+    seq: number;
+    action: string;
+    from: string | null;
+    to: string | null;
+    timestamp: string;
+  }>;
+}
+
+export interface ReplayEventOutcome {
+  seq: number;
+  id: string;
+  timestamp: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  applied: boolean;
+  previousState: string | null;
+  newState: string | null;
+  findings: string[];
+}
+
+export interface AuditReplayResult {
+  contractId: string;
+  mode: ReplayMode;
+  status: ReplayStatus;
+  isCryptographicallyValid: boolean;
+  isLogicallyConsistent: boolean;
+  totalEventsProcessed: number;
+  startSeq: number | null;
+  endSeq: number | null;
+  targetSeq?: number;
+  verificationSummary: {
+    eventsInspected: number;
+    chainValid: boolean;
+    hashErrorsCount: number;
+    lifecycleErrorsCount: number;
+    warningsCount: number;
+  };
+  findings: ReplayFinding[];
+  eventOutcomes: ReplayEventOutcome[];
+  reconstructedState?: {
+    contract: ReconstructedContractState;
+    milestones: Record<string, ReconstructedMilestoneState>;
+  };
+  warnings: string[];
+}
+
+/**
+ * ============================================================================
  * PHASE 3 — Evidence Intelligence Engine & Multi-Agent Evaluation Schemas
  * ============================================================================
  */
