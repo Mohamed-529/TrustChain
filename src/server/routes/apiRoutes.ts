@@ -283,6 +283,16 @@ export function createApiRouter(params: {
     authenticate,
     paymentController.listTransactions
   );
+  router.get(
+    '/milestones/:id/paypal/reconcile',
+    authenticate,
+    paymentController.reconcilePayment
+  );
+  router.post(
+    '/milestones/:id/paypal/reconcile',
+    authenticate,
+    paymentController.reconcilePayment
+  );
 
   // Public (signature-verified) PayPal Sandbox & GitHub Webhook Notification endpoints
   router.post('/webhooks/paypal', paymentController.handleWebhook);
