@@ -14,7 +14,7 @@
 
 ## Current Phase
 
-Prompt 2/8 — Audit Replay Engine Implementation (Completed & Verified — 75/75 automated tests passing across all test suites).
+Prompt 2/8 — Evidence Passport Implementation (Completed & Verified — 100/100 automated tests passing across 10 test suites).
 
 ## Overall Progress
 
@@ -29,14 +29,16 @@ Prompt 2/8 — Audit Replay Engine Implementation (Completed & Verified — 75/7
 - Phase 7 — Evidence Provenance & Independent GitHub Verification (Completed & Verified — 6/6 Phase 7 tests passing).
 - Phase 8 — Bryntum Gantt Full Integration, UI Resilience & Comprehensive Project-Wide Audit (Completed & Verified — 9/9 Phase 8 tests passing).
 - Phase 9 (Prompt 1/8) — AI Agent Intelligence, Structured Output Schemas & Adversarial Evaluation (Completed & Verified — 12/12 Phase 9 tests passing).
-- Phase 9 (Prompt 2/8) — Audit Replay Engine, Hash-Chain Verification & Deterministic State Machine Reconstruction (Completed & Verified — 20/20 Audit Replay tests passing).
+- Phase 9 (Prompt 2/8 — Replay Engine) — Audit Replay Engine, Hash-Chain Verification & Deterministic State Machine Reconstruction (Completed & Verified — 20/20 Audit Replay tests passing).
+- Phase 9 (Prompt 2/8 — Evidence Passport) — Traceable Engineering Record, Commit Signatures, CI Telemetry, SLSA Provenance, SSRF-Guarded Runtime Preview, Cryptographic Graph & Milestone Workbench Viewer (Completed & Verified — 25/25 Evidence Passport tests passing).
 
 ---
 
 ## Test Results & Validation Status
 
-- **Automated Test Suite (`npm test` — 11 test files across 9 suites):**
-  - **Status:** **PASSED (`75 / 75` tests passed, `0` failed)**
+- **Automated Test Suite (`npm test` — 12 test files across 10 suites):**
+  - **Status:** **PASSED (`100 / 100` tests passed, `0` failed)**
+  - **Evidence Passport Suite (`25 / 25` passed)**
   - **Audit Replay Suite (`20 / 20` passed)**
   - **Phase 1 Suite (`7 / 7` passed)**
   - **Phase 2 Suite (`3 / 3` passed)**
@@ -52,5 +54,5 @@ Prompt 2/8 — Audit Replay Engine Implementation (Completed & Verified — 75/7
   - **Status:** **PASSED (`0` errors, clean compilation across all server, SDK, types, and UI files)**.
 - **Production Client Build (`npm run build` — `vite build`):**
   - **Status:** **PASSED (Production bundle generated cleanly with 0 errors)**.
-- **Audit Replay Verification:**
-  - **Status:** **COMPLETED (`AUDIT_REPLAY_IMPLEMENTATION_REPORT.md` documented and verified; deterministic read-only state reconstruction and tamper detection verified)**.
+- **Audit Replay & Evidence Passport Verification:**
+  - **Status:** **COMPLETED (`EVIDENCE_PASSPORT_IMPLEMENTATION_REPORT.md` and `EVIDENCE_PASSPORT_SECURITY_REVIEW.md` documented and verified; deterministic read-only state reconstruction, signature semantics, SSRF mitigation, and tamper detection verified)**.
