@@ -7,6 +7,7 @@ import type {
   Contract,
   ContractPolicyRules,
   ContractStatus,
+  DisputeEvidencePack,
   EvaluationRun,
   EvidenceAnalysis,
   EvidenceIntegrityVerification,
@@ -1548,6 +1549,101 @@ export class EvidencePassportRepository {
     }
   }
 }
+
+export class DisputeEvidencePackRepository {
+  private readonly rawDb: DatabaseSync;
+
+  constructor(rawDb: DatabaseSync) {
+    this.rawDb = rawDb;
+  }
+
+  public save(pack: DisputeEvidencePack): void {
+    const now = new Date().toISOString();
+    this.rawDb
+      .prepare(
+        `INSERT OR REPLACE INTO dispute_evidence_packs (
+          id, contract_id, milestone_id, pack_digest,
+          schema_version, dispute_status, pack_data_json,
+          generated_by, generated_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        pack.id,
+        pack.contractId,
+        pack.milestoneId,
+        pack.integrity.packDigestSha256,
+        pack.schemaVersion,
+        pack.disputeStatus,
+        JSON.stringify(pack),
+        pack.integrity.generatedBy,
+        pack.integrity.generatedAt,
+        now
+      );
+  }
+
+  public findById(id: string): DisputeEvidencePack | null {
+    const row = this.rawDb
+      .prepare('SELECT pack_data_json FROM dispute_evidence_packs WHERE id = ?')
+      .get(id) as { pack_data_json: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.pack_data_json) as DisputeEvidencePack;
+    } catch {
+      return null;
+    }
+  }
+
+  public findWithDigestById(
+    id: string
+  ): { pack: DisputeEvidencePack; storedDigest: string } | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT pack_data_json, pack_digest FROM dispute_evidence_packs WHERE id = ?'
+      )
+      .get(id) as { pack_data_json: string; pack_digest: string } | undefined;
+    if (!row) return null;
+    try {
+      return {
+        pack: JSON.parse(row.pack_data_json) as DisputeEvidencePack,
+        storedDigest: String(row.pack_digest),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  public findLatestByMilestoneId(milestoneId: string): DisputeEvidencePack | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT pack_data_json FROM dispute_evidence_packs WHERE milestone_id = ? ORDER BY generated_at DESC LIMIT 1'
+      )
+      .get(milestoneId) as { pack_data_json: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.pack_data_json) as DisputeEvidencePack;
+    } catch {
+      return null;
+    }
+  }
+
+  public listByContractId(contractId: string): DisputeEvidencePack[] {
+    const rows = this.rawDb
+      .prepare(
+        'SELECT pack_data_json FROM dispute_evidence_packs WHERE contract_id = ? ORDER BY generated_at DESC'
+      )
+      .all(contractId) as Array<{ pack_data_json: string }>;
+    const packs: DisputeEvidencePack[] = [];
+    for (const r of rows) {
+      try {
+        packs.push(JSON.parse(r.pack_data_json) as DisputeEvidencePack);
+      } catch {
+        // Skip unparseable records gracefully
+      }
+    }
+    return packs;
+  }
+}
+
 
 
 

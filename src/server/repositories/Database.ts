@@ -287,6 +287,7 @@ export class AppDatabase {
       .get();
 
     if (applied2) {
+      this.runPhase6WebhookMigrations();
       return;
     }
 
@@ -348,6 +349,7 @@ export class AppDatabase {
       .prepare('SELECT version FROM schema_migrations WHERE version = 3')
       .get() as { version: number } | undefined;
     if (existingV3) {
+      this.runPhase7ProvenanceMigrations();
       return;
     }
 
@@ -500,6 +502,7 @@ export class AppDatabase {
       .prepare('SELECT version FROM schema_migrations WHERE version = 5')
       .get() as { version: number } | undefined;
     if (existingV5) {
+      this.runPhase11DisputePackMigrations();
       return;
     }
 
@@ -526,6 +529,42 @@ export class AppDatabase {
       this.raw
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(5, '005_prompt2_evidence_passport', new Date().toISOString());
+    });
+
+    this.runPhase11DisputePackMigrations();
+  }
+
+  private runPhase11DisputePackMigrations(): void {
+    const existingV6 = this.raw
+      .prepare('SELECT version FROM schema_migrations WHERE version = 6')
+      .get() as { version: number } | undefined;
+    if (existingV6) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      this.raw.exec(`
+        CREATE TABLE IF NOT EXISTS dispute_evidence_packs (
+          id TEXT PRIMARY KEY,
+          contract_id TEXT NOT NULL REFERENCES contracts(id) ON DELETE RESTRICT,
+          milestone_id TEXT NOT NULL REFERENCES milestones(id) ON DELETE RESTRICT,
+          pack_digest TEXT NOT NULL CHECK (length(pack_digest) = 64),
+          schema_version TEXT NOT NULL,
+          dispute_status TEXT NOT NULL,
+          pack_data_json TEXT NOT NULL,
+          generated_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          generated_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_dispute_evidence_packs_contract_id
+          ON dispute_evidence_packs(contract_id);
+        CREATE INDEX IF NOT EXISTS idx_dispute_evidence_packs_milestone_id
+          ON dispute_evidence_packs(milestone_id);
+      `);
+
+      this.raw
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+        .run(6, '006_prompt4_dispute_evidence_pack', new Date().toISOString());
     });
   }
 

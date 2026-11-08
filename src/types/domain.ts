@@ -1185,3 +1185,231 @@ export interface EvidencePassport {
   passportDigestSha256: string;
   isCryptographicallyValid: boolean;
 }
+
+export type DisputePackStatus =
+  | 'INITIALIZED'
+  | 'COMPLETE'
+  | 'INCOMPLETE_EVIDENCE'
+  | 'CORRUPTED_INTEGRITY';
+
+export type DisputeTimelineEventCategory =
+  | 'CONTRACT_MILESTONE'
+  | 'SUBMISSION'
+  | 'VERIFICATION'
+  | 'AI_ADVISORY'
+  | 'SETTLEMENT_POLICY'
+  | 'HUMAN_DECISION'
+  | 'PAYMENT'
+  | 'AUDIT_ANCHOR'
+  | 'DISPUTE';
+
+export interface DisputeTimelineEvent {
+  id: string;
+  seq?: number;
+  timestamp: string;
+  category: DisputeTimelineEventCategory;
+  action: string;
+  actorId: string;
+  actorRole: string;
+  summary: string;
+  referenceId?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface DisputeEvidencePack {
+  id: string;
+  schemaVersion: 'mpai-dispute-pack-v1';
+  contractId: string;
+  milestoneId: string;
+  disputeStatus: DisputePackStatus;
+
+  contractSummary: {
+    title: string;
+    description: string;
+    clientId: string;
+    developerId: string;
+    reviewerId: string;
+    totalBudgetCents: number;
+    currency: string;
+    status: string;
+    version: number;
+  };
+
+  milestoneSummary: {
+    sequenceOrder: number;
+    title: string;
+    description: string;
+    agreedAmountCents: number;
+    deadlineIso: string;
+    status: string;
+    paymentStatus: string;
+    acceptanceCriteria: AcceptanceCriterion[];
+  };
+
+  evidenceSubmissions: {
+    totalSubmissions: number;
+    latestSubmission: EvidenceSubmission | null;
+    submissionHistory: Array<{
+      id: string;
+      attemptNumber: number;
+      submittedAt: string;
+      commitSha: string;
+      branch: string;
+      prUrl: string;
+      prStatus: string;
+      payloadSha256: string;
+      ciStatus: string;
+      securityFindingsCount: number;
+    }>;
+  };
+
+  provenanceAndVerification: {
+    provenanceStatus: string;
+    commitVerified: boolean;
+    commitSigner?: string | null;
+    ciWorkflowValid: boolean;
+    ciRunUrl?: string | null;
+    provenanceRecordId?: string | null;
+  };
+
+  passportSummary: {
+    available: boolean;
+    passportId?: string;
+    overallStatus?: string;
+    passportDigestSha256?: string;
+    isCryptographicallyValid?: boolean;
+    criteriaSummary?: {
+      total: number;
+      verified: number;
+      failed: number;
+      insufficient: number;
+      conflicting: number;
+    };
+    graphNodesCount?: number;
+    graphEdgesCount?: number;
+  };
+
+  auditReplaySummary: {
+    replayed: boolean;
+    isCryptographicallyValid: boolean;
+    isLogicallyConsistent: boolean;
+    totalEventsInspected: number;
+    replayStatus: string;
+    findingsCount: number;
+    findings: Array<{
+      category: string;
+      severity: string;
+      code: string;
+      message: string;
+    }>;
+  };
+
+  aiAdvisoryAssessment: {
+    available: boolean;
+    isAdvisory: true; // MANDATORY INVARIANT: AI recommendations are strictly advisory
+    advisoryDisclaimer: string;
+    evidenceAgentFindings?: {
+      model: string;
+      verifiedCount: number;
+      totalCount: number;
+      missingEvidence: string[];
+    };
+    riskAgentFindings?: {
+      model: string;
+      overallRiskSeverity: string;
+      promptInjectionDetected: boolean;
+      suspiciousSignals: string[];
+    };
+    reviewSynthesizerRecommendation?: {
+      model: string;
+      recommendedOutcome: string;
+      disagreements: string[];
+      reasoning: string;
+    };
+  };
+
+  settlementOutcome: {
+    evaluated: boolean;
+    permittedAmountCents: number;
+    penaltyCents: number;
+    gateBlocked: boolean;
+    blockingReasons: string[];
+    calculationTimestamp?: string;
+  };
+
+  humanApprovalHistory: {
+    recorded: boolean;
+    latestDecision?: string;
+    approvedAmountCents?: number;
+    reviewerId?: string;
+    decidedAt?: string;
+    justification?: string;
+    isOverride?: boolean;
+    allDecisions: Array<{
+      id: string;
+      decision: string;
+      approvedAmountCents: number;
+      reviewerId: string;
+      decidedAt: string;
+      justification: string;
+    }>;
+  };
+
+  paymentLifecycleHistory: {
+    recorded: boolean;
+    latestStatus?: string;
+    transactions: Array<{
+      id: string;
+      paypalOrderId: string | null;
+      paypalAuthorizationId: string | null;
+      paypalCaptureId: string | null;
+      authorizedAmountCents: number;
+      capturedAmountCents: number;
+      currency: string;
+      status: string;
+      executionMode: string;
+      updatedAt: string;
+    }>;
+  };
+
+  timeline: DisputeTimelineEvent[];
+
+  integrity: {
+    packContentDigestSha256: string;
+    auditEventReferences: string[];
+    packDigestSha256: string;
+    isCryptographicallyValid: boolean;
+    generatedAt: string;
+    generatedBy: string;
+  };
+}
+
+export interface DisputePackSummary {
+  id: string;
+  contractId: string;
+  milestoneId: string;
+  schemaVersion: string;
+  disputeStatus: DisputePackStatus;
+  packDigestSha256: string;
+  generatedBy: string;
+  generatedAt: string;
+  timelineEventCount: number;
+  isCryptographicallyValid: boolean;
+}
+
+export interface DisputePackVerificationResult {
+  packId: string;
+  contractId: string;
+  milestoneId: string;
+  schemaVersion: string;
+  disputeStatus: DisputePackStatus;
+  storedDigest: string;
+  computedDigest: string;
+  isDigestValid: boolean;
+  isAuditAnchored: boolean;
+  auditAnchorEntryHash?: string;
+  isPassportValid: boolean;
+  isAuditReplayValid: boolean;
+  verifiedAt: string;
+}
+
