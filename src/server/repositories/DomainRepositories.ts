@@ -1503,6 +1503,25 @@ export class EvidencePassportRepository {
       );
   }
 
+  public findWithDigestByMilestoneId(
+    milestoneId: string
+  ): { passport: EvidencePassport; storedDigest: string } | null {
+    const row = this.rawDb
+      .prepare(
+        'SELECT passport_data_json, passport_digest FROM evidence_passports WHERE milestone_id = ? ORDER BY created_at DESC LIMIT 1'
+      )
+      .get(milestoneId) as { passport_data_json: string; passport_digest: string } | undefined;
+    if (!row) return null;
+    try {
+      return {
+        passport: JSON.parse(row.passport_data_json) as EvidencePassport,
+        storedDigest: String(row.passport_digest),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   public findByMilestoneId(milestoneId: string): EvidencePassport | null {
     const row = this.rawDb
       .prepare(
