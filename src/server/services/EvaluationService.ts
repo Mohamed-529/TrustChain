@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import type {
   AcceptanceCriterion,
+  ConfidenceLevel,
+  HumanReviewRequirement,
   ArbitratorRecommendationCode,
   Contract,
   ContractPolicyRules,
@@ -617,12 +619,59 @@ export class DeterministicMockEvaluator implements MultiAgentEvaluatorProvider {
       ].join(' | ')}`;
     }
 
+    let confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+    let confidenceScore: number;
+    if (recommendedOutcome === 'PASS') {
+      confidenceLevel = 'HIGH';
+      confidenceScore = 0.98;
+    } else if (recommendedOutcome === 'FAIL') {
+      confidenceLevel = 'HIGH';
+      confidenceScore = 0.99;
+    } else {
+      confidenceLevel = 'MEDIUM';
+      confidenceScore = 0.72;
+    }
+
+    const evidenceReferences = Array.from(
+      new Set(evidenceAnalysis.criteriaResults.flatMap((c) => c.evidenceCitations))
+    );
+
+    const missingInformation = [...evidenceAnalysis.missingEvidence];
+    const riskFlags = [
+      ...riskAssessment.suspiciousSignals,
+      ...riskAssessment.contradictions,
+      ...(riskAssessment.promptInjectionDetected
+        ? [`PROMPT_INJECTION_DETECTED: ${riskAssessment.promptInjectionIndicators.join(', ')}`]
+        : []),
+    ];
+
+    const humanReviewRequirement = {
+      required: true as const,
+      reviewType:
+        recommendedOutcome === 'PASS'
+          ? 'FINAL_SETTLEMENT_APPROVAL'
+          : recommendedOutcome === 'FAIL'
+            ? 'REJECTION_VERIFICATION'
+            : 'DISCREPANCY_REVIEW',
+      notes:
+        'Human authorization required under contract policy terms before any state change or fund capture.',
+    };
+
+    const reasoningSummary = rationale.replace(/^\[MOCK\]\s*/i, '');
+
     return {
       agentName: 'ArbitratorAgent',
       model: this.modelName,
       isMock: true,
       recommendedOutcome,
       recommendation,
+      confidenceLevel,
+      confidenceScore,
+      evidenceReferences,
+      reasoningSummary,
+      missingInformation,
+      riskFlags,
+      humanReviewRequirement,
       disagreements,
       rationale,
       advisoryNotice:
@@ -942,6 +991,27 @@ export function validateAndSanitizeEvidenceAnalysis(
   const obj = raw as Record<string, unknown>;
   assertNoProhibitedAuthorityFields(obj, 'EvidenceAnalyst');
 
+  const allowedEvidenceKeys = new Set([
+    'agentName',
+    'model',
+    'isMock',
+    'criteriaResults',
+    'verifiedCount',
+    'totalCount',
+    'missingEvidence',
+    'factualObservations',
+    'evidenceReferences',
+  ]);
+  for (const key of Object.keys(obj)) {
+    if (!allowedEvidenceKeys.has(key)) {
+      throw new AppError(
+        422,
+        'INVALID_AI_OUTPUT_SCHEMA',
+        `EvidenceAnalysis contains unexpected property '${key}' (additionalProperties: false).`
+      );
+    }
+  }
+
   if (!Array.isArray(obj.criteriaResults) || obj.criteriaResults.length === 0) {
     throw new AppError(
       422,
@@ -963,6 +1033,22 @@ export function validateAndSanitizeEvidenceAnalysis(
         );
       }
       const c = item as Record<string, unknown>;
+      const allowedCritKeys = new Set([
+        'criterionId',
+        'status',
+        'confidence',
+        'evidenceCitations',
+        'explanation',
+      ]);
+      for (const key of Object.keys(c)) {
+        if (!allowedCritKeys.has(key)) {
+          throw new AppError(
+            422,
+            'INVALID_AI_OUTPUT_SCHEMA',
+            `criteriaResults[${idx}] contains unexpected property '${key}' (additionalProperties: false).`
+          );
+        }
+      }
       const status = String(c.status ?? '');
       if (!validStatuses.has(status)) {
         throw new AppError(
@@ -1032,6 +1118,33 @@ export function validateAndSanitizeRiskAssessment(
   }
   const obj = raw as Record<string, unknown>;
   assertNoProhibitedAuthorityFields(obj, 'RiskAnalyst');
+
+  const allowedRiskKeys = new Set([
+    'agentName',
+    'model',
+    'isMock',
+    'scannerStatus',
+    'overallRiskSeverity',
+    'criticalVulnCount',
+    'highVulnCount',
+    'ciBuildPassed',
+    'findings',
+    'suspiciousSignals',
+    'contradictions',
+    'missingTestSignals',
+    'promptInjectionDetected',
+    'promptInjectionIndicators',
+    'summary',
+  ]);
+  for (const key of Object.keys(obj)) {
+    if (!allowedRiskKeys.has(key)) {
+      throw new AppError(
+        422,
+        'INVALID_AI_OUTPUT_SCHEMA',
+        `RiskAssessment contains unexpected property '${key}' (additionalProperties: false).`
+      );
+    }
+  }
 
   const validSeverities = new Set(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
   const rawSeverity = String(obj.overallRiskSeverity ?? '');
@@ -1106,6 +1219,34 @@ export function validateAndSanitizeReviewSynthesis(
   const obj = raw as Record<string, unknown>;
   assertNoProhibitedAuthorityFields(obj, 'ReviewSynthesizer');
 
+  const allowedReviewKeys = new Set([
+    'agentName',
+    'model',
+    'isMock',
+    'recommendedOutcome',
+    'recommendation',
+    'confidenceLevel',
+    'confidenceScore',
+    'evidenceReferences',
+    'reasoningSummary',
+    'missingInformation',
+    'riskFlags',
+    'humanReviewRequirement',
+    'disagreements',
+    'rationale',
+    'advisoryNotice',
+    'isAdvisoryOnly',
+  ]);
+  for (const key of Object.keys(obj)) {
+    if (!allowedReviewKeys.has(key)) {
+      throw new AppError(
+        422,
+        'INVALID_AI_OUTPUT_SCHEMA',
+        `ReviewSynthesis contains unexpected property '${key}' (additionalProperties: false).`
+      );
+    }
+  }
+
   const validOutcomes = new Set(['PASS', 'FAIL', 'NEEDS_HUMAN_REVIEW']);
   let recommendedOutcome = String(obj.recommendedOutcome ?? '') as ReviewRecommendedOutcome;
 
@@ -1141,19 +1282,101 @@ export function validateAndSanitizeReviewSynthesis(
     FAIL: 'RECOMMEND_REJECTION',
   };
 
+  // Confidence validation & synthesis
+  let confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  if (typeof obj.confidenceLevel === 'string') {
+    if (obj.confidenceLevel !== 'HIGH' && obj.confidenceLevel !== 'MEDIUM' && obj.confidenceLevel !== 'LOW') {
+      throw new AppError(
+        422,
+        'INVALID_AI_OUTPUT_SCHEMA',
+        `ReviewSynthesis.confidenceLevel '${String(obj.confidenceLevel)}' must be HIGH, MEDIUM, or LOW.`
+      );
+    }
+    confidenceLevel = obj.confidenceLevel;
+  } else {
+    confidenceLevel = recommendedOutcome === 'PASS' || recommendedOutcome === 'FAIL' ? 'HIGH' : 'MEDIUM';
+  }
+
+  let confidenceScore: number;
+  if (obj.confidenceScore !== undefined) {
+    const rawScore = Number(obj.confidenceScore);
+    if (Number.isNaN(rawScore) || rawScore < 0 || rawScore > 1) {
+      throw new AppError(
+        422,
+        'INVALID_AI_OUTPUT_SCHEMA',
+        `ReviewSynthesis.confidenceScore must be a number between 0.0 and 1.0.`
+      );
+    }
+    confidenceScore = rawScore;
+  } else {
+    confidenceScore = recommendedOutcome === 'PASS' ? 0.98 : recommendedOutcome === 'FAIL' ? 0.99 : 0.72;
+  }
+
+  const rawRefs = Array.isArray(obj.evidenceReferences) ? obj.evidenceReferences.map((r) => String(r)) : [];
+  const reasoningSummary =
+    typeof obj.reasoningSummary === 'string' && obj.reasoningSummary.trim().length > 0
+      ? obj.reasoningSummary.trim()
+      : String(obj.rationale ?? 'Advisory synthesis completed based on submitted evidence.').replace(/^\[MOCK\]\s*/i, '');
+
+  const missingInformation = Array.isArray(obj.missingInformation)
+    ? obj.missingInformation.map((m) => String(m))
+    : [];
+
+  const riskFlags = Array.isArray(obj.riskFlags)
+    ? obj.riskFlags.map((r) => String(r))
+    : [
+        ...riskAssessment.suspiciousSignals,
+        ...riskAssessment.contradictions,
+        ...(riskAssessment.promptInjectionDetected
+          ? [`PROMPT_INJECTION_DETECTED: ${riskAssessment.promptInjectionIndicators.join(', ')}`]
+          : []),
+      ];
+
+  let humanReviewRequirement: HumanReviewRequirement;
+  if (obj.humanReviewRequirement && typeof obj.humanReviewRequirement === 'object') {
+    const h = obj.humanReviewRequirement as Record<string, unknown>;
+    humanReviewRequirement = {
+      required: true,
+      reviewType: typeof h.reviewType === 'string' ? h.reviewType : (recommendedOutcome === 'PASS' ? 'FINAL_SETTLEMENT_APPROVAL' : 'DISCREPANCY_REVIEW'),
+      notes: typeof h.notes === 'string' ? h.notes : 'Human authorization required under contract policy terms before any state change.',
+    };
+  } else {
+    humanReviewRequirement = {
+      required: true,
+      reviewType:
+        recommendedOutcome === 'PASS'
+          ? 'FINAL_SETTLEMENT_APPROVAL'
+          : recommendedOutcome === 'FAIL'
+            ? 'REJECTION_VERIFICATION'
+            : 'DISCREPANCY_REVIEW',
+      notes:
+        'Human authorization required under contract policy terms before any state change or fund capture.',
+    };
+  }
+
+  const advisoryNotice =
+    typeof obj.advisoryNotice === 'string' && obj.advisoryNotice.includes('ADVISORY ONLY')
+      ? obj.advisoryNotice
+      : 'ADVISORY ONLY: AI evaluation never approves milestones, never sets final payable amounts, and never triggers PayPal operations. Deterministic Settlement Policy Engine and Human Reviewer remain authoritative.';
+
   return {
     agentName: 'ArbitratorAgent',
     model: typeof obj.model === 'string' && obj.model ? obj.model : defaultModel,
     isMock,
     recommendedOutcome,
     recommendation: outcomeToRecommendation[recommendedOutcome],
+    confidenceLevel,
+    confidenceScore,
+    evidenceReferences: rawRefs,
+    reasoningSummary,
+    missingInformation,
+    riskFlags,
+    humanReviewRequirement,
     disagreements: Array.isArray(obj.disagreements)
       ? obj.disagreements.map((d) => String(d))
       : [],
     rationale: String(obj.rationale ?? ''),
-    advisoryNotice:
-      String(obj.advisoryNotice ?? '') ||
-      'ADVISORY ONLY: AI evaluation never approves milestones, never sets final payable amounts, and never triggers PayPal operations.',
+    advisoryNotice,
     isAdvisoryOnly: true,
   };
 }
