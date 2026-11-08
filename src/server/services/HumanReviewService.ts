@@ -591,6 +591,8 @@ export class HumanReviewService {
           contractTitle: contract.title,
           milestoneTitle: milestone.title,
           sequenceOrder: milestone.sequenceOrder,
+          developerId: contract.developerId,
+          deadlineIso: milestone.deadlineIso ?? null,
           milestoneStatus: milestone.status,
           stateMachineStatus: this.toStateMachineStatus(milestone.status),
           submissionId: latestSubmission?.id ?? null,

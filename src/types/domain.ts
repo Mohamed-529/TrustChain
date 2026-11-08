@@ -533,6 +533,8 @@ export interface FinancialLedgerRow {
   contractTitle: string;
   milestoneTitle: string;
   sequenceOrder: number;
+  developerId?: string | null;
+  deadlineIso?: string | null;
   milestoneStatus: MilestoneStatus;
   stateMachineStatus: MilestoneStatus | 'NEEDS_CHANGES';
   submissionId: string | null;
