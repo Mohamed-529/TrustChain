@@ -64,10 +64,48 @@ export interface GeneratePassportOptions {
 }
 
 /**
+ * Parses IPv4-mapped or IPv4-compatible IPv6 addresses in either dotted-quad
+ * (e.g. ::ffff:127.0.0.1) or hex word notation (e.g. ::ffff:7f00:1) into
+ * standard dotted-quad IPv4 strings. Returns null if not an IPv4-mapped IPv6 address.
+ */
+function parseIpv4MappedIpv6(trimmed: string): string | null {
+  const lower = trimmed.toLowerCase();
+  const mappedMatch = lower.match(/(?:^::ffff:|^0:0:0:0:0:ffff:)(.+)$/);
+  const suffix = mappedMatch
+    ? mappedMatch[1]
+    : lower.startsWith('::') && !lower.startsWith('::ffff:')
+      ? lower.slice(2)
+      : null;
+
+  if (!suffix) return null;
+
+  if (suffix.includes('.')) {
+    return suffix; // Standard dotted-quad notation
+  }
+
+  // Hex format: e.g. "7f00:1" (127.0.0.1), "a00:1" (10.0.0.1), "c0a8:101" (192.168.1.1)
+  const hexParts = suffix.split(':');
+  if (hexParts.length === 2) {
+    const high = parseInt(hexParts[0], 16);
+    const low = parseInt(hexParts[1], 16);
+    if (!isNaN(high) && !isNaN(low) && high >= 0 && high <= 0xffff && low >= 0 && low <= 0xffff) {
+      const o1 = (high >> 8) & 0xff;
+      const o2 = high & 0xff;
+      const o3 = (low >> 8) & 0xff;
+      const o4 = low & 0xff;
+      return `${o1}.${o2}.${o3}.${o4}`;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Checks whether an IPv4 or IPv6 address or sensitive internal hostname
  * belongs to private, loopback, link-local, multicast, or cloud-metadata address spaces.
  */
 export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
+  if (!ipOrHost) return true;
   const trimmed = ipOrHost.trim().toLowerCase();
 
   // Hostname checks for sensitive local/cloud identifiers
@@ -102,10 +140,10 @@ export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
     if (trimmed.startsWith('fc00:') || trimmed.startsWith('fd')) {
       return true; // Unique local fc00::/7
     }
-    if (trimmed.startsWith('::ffff:')) {
-      // IPv4-mapped IPv6
-      const ipv4Part = trimmed.slice(7);
-      return isPrivateOrBlockedIp(ipv4Part);
+
+    const mappedIpv4 = parseIpv4MappedIpv6(trimmed);
+    if (mappedIpv4) {
+      return isPrivateOrBlockedIp(mappedIpv4);
     }
     return false;
   }
@@ -173,10 +211,15 @@ async function executeSafePinnedHttpRequest(
   const isHttps = targetUrl.protocol === 'https:';
   const httpModule = isHttps ? https : http;
   const agent = isHttps
-    ? new https.Agent({ lookup: createPinnedLookup(pinnedIp) })
-    : new http.Agent({ lookup: createPinnedLookup(pinnedIp) });
+    ? new https.Agent({ lookup: createPinnedLookup(pinnedIp), keepAlive: false })
+    : new http.Agent({ lookup: createPinnedLookup(pinnedIp), keepAlive: false });
 
   return new Promise<SafePinnedHttpResponse>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      agent.destroy();
+    };
+
     const req = httpModule.request(
       targetUrl,
       {
@@ -202,19 +245,44 @@ async function executeSafePinnedHttpRequest(
             headers.set(key, Array.isArray(val) ? val.join(', ') : val);
           }
         }
-        res.resume(); // Safely discard body stream without memory buffering
-        resolve({
-          status: res.statusCode ?? 0,
-          headers,
+        res.on('end', () => {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            resolve({
+              status: res.statusCode ?? 0,
+              headers,
+            });
+          }
         });
+        res.on('error', (err) => {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            reject(err);
+          }
+        });
+        res.resume(); // Safely discard body stream without memory buffering
       }
     );
 
     req.on('timeout', () => {
-      req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+      if (!settled) {
+        settled = true;
+        req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+        cleanup();
+        reject(new Error(`Request timed out after ${timeoutMs}ms`));
+      }
     });
 
-    req.on('error', (err) => reject(err));
+    req.on('error', (err) => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        reject(err);
+      }
+    });
+
     req.end();
   });
 }
@@ -1016,6 +1084,35 @@ export class EvidencePassportService {
         ipAddresses = lookups.map((l) => l.address);
       }
 
+      if (ipAddresses.length === 0) {
+        smokeChecks.push({
+          name: 'DNS_RESOLUTION_CHECK',
+          targetUrl: fullCheckUrl,
+          expectedStatus: 200,
+          actualStatus: null,
+          status: 'FAILED',
+          responseTimeMs: null,
+          details: `DNS lookup returned no IP addresses for hostname '${parsedUrl.hostname}'.`,
+        });
+
+        return {
+          runtimeValidationEnabled: true,
+          previewUrl: targetUrl,
+          healthEndpoint: targetEndpoint,
+          overallStatus: 'FAILED',
+          smokeChecks,
+          securityChecks: {
+            ssrfValidated: true,
+            ipBlocked: false,
+            redirectsRestricted: true,
+            dnsResolvedIps: [],
+          },
+          validatedAt: new Date().toISOString(),
+          details: 'Hostname could not be resolved by DNS (no addresses returned).',
+          limitationsNotice,
+        };
+      }
+
       resolvedIps.push(...ipAddresses);
 
       // Check if any resolved IP address belongs to private/loopback/cloud metadata
@@ -1111,7 +1208,65 @@ export class EvidencePassportService {
       if (res.status >= 300 && res.status < 400) {
         const location = res.headers.get('location');
         if (location) {
-          const redirectUrl = new URL(location, parsedUrl);
+          let redirectUrl: URL;
+          try {
+            redirectUrl = new URL(location, parsedUrl);
+          } catch {
+            smokeChecks.push({
+              name: 'HTTP_REDIRECT_SECURITY_FILTER',
+              targetUrl: location,
+              expectedStatus: 200,
+              actualStatus: res.status,
+              status: 'BLOCKED_SSRF',
+              responseTimeMs,
+              details: `Blocked SSRF redirect: malformed redirect URL '${location}'.`,
+            });
+            return {
+              runtimeValidationEnabled: true,
+              previewUrl: targetUrl,
+              healthEndpoint: targetEndpoint,
+              overallStatus: 'BLOCKED_SECURITY',
+              smokeChecks,
+              securityChecks: {
+                ssrfValidated: false,
+                ipBlocked: true,
+                redirectsRestricted: true,
+                dnsResolvedIps: resolvedIps,
+              },
+              validatedAt: new Date().toISOString(),
+              details: 'SSRF protection blocked malformed redirect destination.',
+              limitationsNotice,
+            };
+          }
+
+          // Scheme restriction: only http: and https: are allowed
+          if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+            smokeChecks.push({
+              name: 'HTTP_REDIRECT_SECURITY_FILTER',
+              targetUrl: redirectUrl.toString(),
+              expectedStatus: 200,
+              actualStatus: res.status,
+              status: 'BLOCKED_SSRF',
+              responseTimeMs,
+              details: `Blocked SSRF redirect to non-HTTP/HTTPS protocol '${redirectUrl.protocol}'.`,
+            });
+            return {
+              runtimeValidationEnabled: true,
+              previewUrl: targetUrl,
+              healthEndpoint: targetEndpoint,
+              overallStatus: 'BLOCKED_SECURITY',
+              smokeChecks,
+              securityChecks: {
+                ssrfValidated: false,
+                ipBlocked: true,
+                redirectsRestricted: true,
+                dnsResolvedIps: resolvedIps,
+              },
+              validatedAt: new Date().toISOString(),
+              details: 'SSRF protection blocked redirect to non-web protocol.',
+              limitationsNotice,
+            };
+          }
 
           let redirectIps: string[] = [];
           try {
