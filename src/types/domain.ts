@@ -727,7 +727,8 @@ export type PayPalReconciliationOutcome =
   | 'IN_SYNC'
   | 'RECONCILED_LOCAL_UPDATED'
   | 'MANUAL_INTERVENTION_REQUIRED'
-  | 'REMOTE_RECORD_NOT_FOUND';
+  | 'REMOTE_RECORD_NOT_FOUND'
+  | 'REQUIRES_RECONCILIATION';
 
 export interface PayPalReconciliationReport {
   milestoneId: string;
