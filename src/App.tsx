@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type {
   ContractScheduleResponse,
+  EvidencePassport,
   EvidenceProvenanceVerificationRecord,
   FinancialLedgerRow,
   MilestoneReviewDetails,
@@ -14,6 +15,7 @@ import type {
   User,
 } from './types/domain';
 import { BryntumGanttViewer } from './components/BryntumGanttViewer';
+import { EvidencePassportViewer } from './components/EvidencePassportViewer';
 
 function formatUsdCents(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return '—';
@@ -34,6 +36,7 @@ export default function App() {
     latestProvenance: EvidenceProvenanceVerificationRecord | null;
     provenanceHistory: EvidenceProvenanceVerificationRecord[];
   } | null>(null);
+  const [passport, setPassport] = useState<EvidencePassport | null>(null);
   const [paypalTransactions, setPaypalTransactions] = useState<PayPalTransactionRecord[]>([]);
   const [ledgerRows, setLedgerRows] = useState<FinancialLedgerRow[]>([]);
   const [approvedAmountCentsInput, setApprovedAmountCentsInput] = useState<number>(0);
@@ -78,7 +81,7 @@ export default function App() {
       if (!activeToken) return;
       setLoading(true);
       try {
-        const [schedRes, revRes, provRes, ppRes, ledgerRes] = await Promise.all([
+        const [schedRes, revRes, provRes, ppRes, ledgerRes, passRes] = await Promise.all([
           fetch(`/api/v1/contracts/${contractId}/schedule`, {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
@@ -92,6 +95,9 @@ export default function App() {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
           fetch('/api/v1/ledger', {
+            headers: { Authorization: `Bearer ${activeToken}` },
+          }),
+          fetch(`/api/v1/contracts/${contractId}/milestones/${milestoneId}/evidence-passport`, {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
         ]);
@@ -119,6 +125,10 @@ export default function App() {
         if (ledgerRes.ok) {
           const ledgerData = (await ledgerRes.json()) as { rows: FinancialLedgerRow[] };
           setLedgerRows(ledgerData.rows);
+        }
+        if (passRes.ok) {
+          const passData = (await passRes.json()) as { passport: EvidencePassport };
+          setPassport(passData.passport);
         }
       } catch (err) {
         setStatusBanner({
@@ -336,6 +346,40 @@ export default function App() {
       setStatusBanner({
         type: 'error',
         message: err instanceof Error ? err.message : 'GitHub provenance verification error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleValidateRuntime = async (previewUrl: string, healthEndpoint?: string) => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/v1/contracts/${selectedContractId}/milestones/${selectedMilestoneId}/evidence-passport/runtime-validate`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ previewUrl, healthEndpoint }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? 'Runtime smoke validation failed');
+      }
+      setStatusBanner({
+        type: data.runtimeValidation.overallStatus === 'PASSED' ? 'success' : 'error',
+        message: `Runtime Validation (${data.runtimeValidation.overallStatus}): ${data.runtimeValidation.details}`,
+      });
+      await refreshAllData(token, selectedMilestoneId, selectedContractId);
+    } catch (err) {
+      setStatusBanner({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Runtime validation error',
       });
     } finally {
       setLoading(false);
@@ -931,6 +975,16 @@ export default function App() {
               </div>
             </section>
           </div>
+        )}
+
+        {/* PROMPT 2/8: Evidence Passport — Traceable Engineering Evidence Record */}
+        {reviewDetails && (
+          <EvidencePassportViewer
+            passport={passport}
+            loading={loading}
+            onRefresh={() => void refreshAllData(token, selectedMilestoneId, selectedContractId)}
+            onValidateRuntime={handleValidateRuntime}
+          />
         )}
 
         {/* Phase 7: Evidence Provenance & Independent GitHub Verification Panel */}
