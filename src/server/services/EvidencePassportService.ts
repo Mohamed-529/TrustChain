@@ -53,6 +53,7 @@ export interface EvidencePassportServiceOptions {
   githubApiBaseUrl?: string;
   runtimeValidationTimeoutMs?: number;
   maxResponseSizeBytes?: number;
+  allowLoopbackForTesting?: boolean;
 }
 
 export interface GeneratePassportOptions {
@@ -103,14 +104,17 @@ function parseIpv4MappedIpv6(trimmed: string): string | null {
 /**
  * Checks whether an IPv4 or IPv6 address or sensitive internal hostname
  * belongs to private, loopback, link-local, multicast, or cloud-metadata address spaces.
+ * An optional allowLoopback flag permits 127.0.0.1/::1 specifically for local test harnesses.
  */
-export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
+export function isPrivateOrBlockedIp(ipOrHost: string, allowLoopback: boolean = false): boolean {
   if (!ipOrHost) return true;
   const trimmed = ipOrHost.trim().toLowerCase();
 
   // Hostname checks for sensitive local/cloud identifiers
+  if (trimmed === 'localhost') {
+    return !allowLoopback;
+  }
   if (
-    trimmed === 'localhost' ||
     trimmed === 'metadata.google.internal' ||
     trimmed.endsWith('.local') ||
     trimmed.endsWith('.internal')
@@ -127,7 +131,7 @@ export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
   // IPv6 checks
   if (ipType === 6) {
     if (trimmed === '::1' || trimmed === '::' || trimmed === '0:0:0:0:0:0:0:1') {
-      return true; // Loopback
+      return !allowLoopback; // Loopback
     }
     if (
       trimmed.startsWith('fe80:') ||
@@ -143,7 +147,7 @@ export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
 
     const mappedIpv4 = parseIpv4MappedIpv6(trimmed);
     if (mappedIpv4) {
-      return isPrivateOrBlockedIp(mappedIpv4);
+      return isPrivateOrBlockedIp(mappedIpv4, allowLoopback);
     }
     return false;
   }
@@ -157,13 +161,13 @@ export function isPrivateOrBlockedIp(ipOrHost: string): boolean {
   const [a, b] = parts;
 
   // 0.0.0.0/8 (Current network)
-  if (a === 0) return true;
+  if (a === 0) return !allowLoopback;
 
   // 10.0.0.0/8 (Private)
   if (a === 10) return true;
 
   // 127.0.0.0/8 (Loopback)
-  if (a === 127) return true;
+  if (a === 127) return !allowLoopback;
 
   // 169.254.0.0/16 (Link-local & AWS/GCP/Azure Cloud Metadata 169.254.169.254)
   if (a === 169 && b === 254) return true;
@@ -206,7 +210,8 @@ interface SafePinnedHttpResponse {
 async function executeSafePinnedHttpRequest(
   targetUrl: URL,
   pinnedIp: string,
-  timeoutMs: number
+  timeoutMs: number,
+  maxResponseSizeBytes: number = 1024 * 1024
 ): Promise<SafePinnedHttpResponse> {
   const isHttps = targetUrl.protocol === 'https:';
   const httpModule = isHttps ? https : http;
@@ -245,6 +250,20 @@ async function executeSafePinnedHttpRequest(
             headers.set(key, Array.isArray(val) ? val.join(', ') : val);
           }
         }
+
+        let bytesReceived = 0;
+        res.on('data', (chunk: Buffer) => {
+          bytesReceived += chunk.length;
+          if (bytesReceived > maxResponseSizeBytes) {
+            if (!settled) {
+              settled = true;
+              req.destroy(new Error(`Response size limit exceeded (max ${maxResponseSizeBytes} bytes)`));
+              cleanup();
+              reject(new Error(`Response size limit exceeded (max ${maxResponseSizeBytes} bytes)`));
+            }
+          }
+        });
+
         res.on('end', () => {
           if (!settled) {
             settled = true;
@@ -262,7 +281,6 @@ async function executeSafePinnedHttpRequest(
             reject(err);
           }
         });
-        res.resume(); // Safely discard body stream without memory buffering
       }
     );
 
@@ -1071,64 +1089,24 @@ export class EvidencePassportService {
       };
     }
 
-    // SSRF DNS Resolution and Private IP Range Verification
-    try {
-      const hostname = parsedUrl.hostname;
-      let ipAddresses: string[] = [];
+    const maxRedirects = 3;
+    let redirectCount = 0;
+    const visitedUrls = new Set<string>();
+    let currentUrl = parsedUrl;
+    let totalResponseTimeMs = 0;
+    const allowLoopback = !!this.options?.allowLoopbackForTesting;
 
-      if (this.options?.dnsLookupImpl) {
-        const res = await this.options.dnsLookupImpl(hostname);
-        ipAddresses = res.map((r) => r.address);
-      } else {
-        const lookups = await dns.promises.lookup(hostname, { all: true });
-        ipAddresses = lookups.map((l) => l.address);
-      }
-
-      if (ipAddresses.length === 0) {
+    while (true) {
+      if (visitedUrls.has(currentUrl.href)) {
         smokeChecks.push({
-          name: 'DNS_RESOLUTION_CHECK',
-          targetUrl: fullCheckUrl,
+          name: 'HTTP_REDIRECT_SECURITY_FILTER',
+          targetUrl: currentUrl.href,
           expectedStatus: 200,
-          actualStatus: null,
-          status: 'FAILED',
-          responseTimeMs: null,
-          details: `DNS lookup returned no IP addresses for hostname '${parsedUrl.hostname}'.`,
-        });
-
-        return {
-          runtimeValidationEnabled: true,
-          previewUrl: targetUrl,
-          healthEndpoint: targetEndpoint,
-          overallStatus: 'FAILED',
-          smokeChecks,
-          securityChecks: {
-            ssrfValidated: true,
-            ipBlocked: false,
-            redirectsRestricted: true,
-            dnsResolvedIps: [],
-          },
-          validatedAt: new Date().toISOString(),
-          details: 'Hostname could not be resolved by DNS (no addresses returned).',
-          limitationsNotice,
-        };
-      }
-
-      resolvedIps.push(...ipAddresses);
-
-      // Check if any resolved IP address belongs to private/loopback/cloud metadata
-      const hasBlockedIp = ipAddresses.some(isPrivateOrBlockedIp);
-
-      if (hasBlockedIp || isPrivateOrBlockedIp(hostname)) {
-        smokeChecks.push({
-          name: 'SSRF_IP_RANGE_FILTER',
-          targetUrl: fullCheckUrl,
-          expectedStatus: 200,
-          actualStatus: null,
+          actualStatus: 302,
           status: 'BLOCKED_SSRF',
-          responseTimeMs: null,
-          details: `Blocked SSRF attempt: host '${hostname}' resolved to restricted IP range (${ipAddresses.join(', ')}).`,
+          responseTimeMs: totalResponseTimeMs,
+          details: `Blocked SSRF redirect loop: '${currentUrl.href}' was already visited.`,
         });
-
         return {
           runtimeValidationEnabled: true,
           previewUrl: targetUrl,
@@ -1139,189 +1117,302 @@ export class EvidencePassportService {
             ssrfValidated: false,
             ipBlocked: true,
             redirectsRestricted: true,
-            dnsResolvedIps: ipAddresses,
+            dnsResolvedIps: resolvedIps,
           },
           validatedAt: new Date().toISOString(),
-          details: 'SSRF protection blocked request to internal/private network destination.',
+          details: 'SSRF protection blocked redirect loop.',
           limitationsNotice,
         };
       }
-    } catch (dnsErr) {
-      smokeChecks.push({
-        name: 'DNS_RESOLUTION_CHECK',
-        targetUrl: fullCheckUrl,
-        expectedStatus: 200,
-        actualStatus: null,
-        status: 'FAILED',
-        responseTimeMs: null,
-        details: `DNS lookup failed for hostname '${parsedUrl.hostname}': ${dnsErr instanceof Error ? dnsErr.message : String(dnsErr)}`,
-      });
+      visitedUrls.add(currentUrl.href);
 
-      return {
-        runtimeValidationEnabled: true,
-        previewUrl: targetUrl,
-        healthEndpoint: targetEndpoint,
-        overallStatus: 'FAILED',
-        smokeChecks,
-        securityChecks: {
-          ssrfValidated: true,
-          ipBlocked: false,
-          redirectsRestricted: true,
-          dnsResolvedIps: [],
-        },
-        validatedAt: new Date().toISOString(),
-        details: 'Hostname could not be resolved by DNS.',
-        limitationsNotice,
-      };
-    }
-
-    // Execute Safe HTTP Request with IP-Pinning (TOCTOU / DNS Rebinding Protection)
-    const pinnedIp = resolvedIps[0] || parsedUrl.hostname;
-    const startTime = Date.now();
-    try {
-      const timeoutMs = this.options?.runtimeValidationTimeoutMs ?? 3000;
-      let res: { status: number; headers: Headers };
-
-      if (this.options?.fetchImpl) {
-        // Use injected mock fetch for testing
-        const fetchRes = await this.options.fetchImpl(fullCheckUrl, {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json, text/plain, */*',
-            'User-Agent': 'MilestoneProof-EvidencePassport-Validator/1.0',
-          },
-          redirect: 'manual',
-          signal: AbortSignal.timeout(timeoutMs),
+      // 1. URL Scheme Whitelist
+      if (currentUrl.protocol !== 'http:' && currentUrl.protocol !== 'https:') {
+        smokeChecks.push({
+          name: redirectCount === 0 ? 'PROTOCOL_VALIDATION' : 'HTTP_REDIRECT_SECURITY_FILTER',
+          targetUrl: currentUrl.href,
+          expectedStatus: 200,
+          actualStatus: null,
+          status: 'BLOCKED_SSRF',
+          responseTimeMs: null,
+          details: `Blocked SSRF redirect to non-HTTP/HTTPS protocol '${currentUrl.protocol}'.`,
         });
-        res = {
-          status: fetchRes.status,
-          headers: fetchRes.headers,
+        return {
+          runtimeValidationEnabled: true,
+          previewUrl: targetUrl,
+          healthEndpoint: targetEndpoint,
+          overallStatus: 'BLOCKED_SECURITY',
+          smokeChecks,
+          securityChecks: {
+            ssrfValidated: false,
+            ipBlocked: true,
+            redirectsRestricted: true,
+            dnsResolvedIps: resolvedIps,
+          },
+          validatedAt: new Date().toISOString(),
+          details: 'SSRF protection blocked redirect to non-web protocol.',
+          limitationsNotice,
         };
-      } else {
-        // Safe IP-pinned HTTP request eliminating DNS rebinding / TOCTOU
-        res = await executeSafePinnedHttpRequest(parsedUrl, pinnedIp, timeoutMs);
       }
 
-      const responseTimeMs = Date.now() - startTime;
+      // 2. DNS Resolution & SSRF Range Filtering for this hop
+      const rawHostname = currentUrl.hostname;
+      const hopHostname = rawHostname.replace(/^\[|\]$/g, '');
+      let hopIps: string[] = [];
 
-      // Handle redirect status codes explicitly with destination re-verification and DNS check
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get('location');
-        if (location) {
-          let redirectUrl: URL;
-          try {
-            redirectUrl = new URL(location, parsedUrl);
-          } catch {
-            smokeChecks.push({
-              name: 'HTTP_REDIRECT_SECURITY_FILTER',
-              targetUrl: location,
-              expectedStatus: 200,
-              actualStatus: res.status,
-              status: 'BLOCKED_SSRF',
-              responseTimeMs,
-              details: `Blocked SSRF redirect: malformed redirect URL '${location}'.`,
-            });
-            return {
-              runtimeValidationEnabled: true,
-              previewUrl: targetUrl,
-              healthEndpoint: targetEndpoint,
-              overallStatus: 'BLOCKED_SECURITY',
-              smokeChecks,
-              securityChecks: {
-                ssrfValidated: false,
-                ipBlocked: true,
-                redirectsRestricted: true,
-                dnsResolvedIps: resolvedIps,
-              },
-              validatedAt: new Date().toISOString(),
-              details: 'SSRF protection blocked malformed redirect destination.',
-              limitationsNotice,
-            };
+      const ipLiteralType = net.isIP(hopHostname);
+      if (ipLiteralType !== 0) {
+        hopIps = [hopHostname];
+      } else {
+        try {
+          if (this.options?.dnsLookupImpl) {
+            const res = await this.options.dnsLookupImpl(hopHostname);
+            hopIps = res.map((r) => r.address);
+          } else {
+            const lookups = await dns.promises.lookup(hopHostname, { all: true });
+            hopIps = lookups.map((l) => l.address);
           }
-
-          // Scheme restriction: only http: and https: are allowed
-          if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
-            smokeChecks.push({
-              name: 'HTTP_REDIRECT_SECURITY_FILTER',
-              targetUrl: redirectUrl.toString(),
-              expectedStatus: 200,
-              actualStatus: res.status,
-              status: 'BLOCKED_SSRF',
-              responseTimeMs,
-              details: `Blocked SSRF redirect to non-HTTP/HTTPS protocol '${redirectUrl.protocol}'.`,
-            });
-            return {
-              runtimeValidationEnabled: true,
-              previewUrl: targetUrl,
-              healthEndpoint: targetEndpoint,
-              overallStatus: 'BLOCKED_SECURITY',
-              smokeChecks,
-              securityChecks: {
-                ssrfValidated: false,
-                ipBlocked: true,
-                redirectsRestricted: true,
-                dnsResolvedIps: resolvedIps,
-              },
-              validatedAt: new Date().toISOString(),
-              details: 'SSRF protection blocked redirect to non-web protocol.',
-              limitationsNotice,
-            };
-          }
-
-          let redirectIps: string[] = [];
-          try {
-            if (this.options?.dnsLookupImpl) {
-              const resLookup = await this.options.dnsLookupImpl(redirectUrl.hostname);
-              redirectIps = resLookup.map((r) => r.address);
-            } else {
-              const lookups = await dns.promises.lookup(redirectUrl.hostname, { all: true });
-              redirectIps = lookups.map((l) => l.address);
-            }
-          } catch {
-            // DNS resolution for redirect target failed or host is an IP literal
-          }
-
-          const hasBlockedRedirectIp = redirectIps.some(isPrivateOrBlockedIp);
-          if (hasBlockedRedirectIp || isPrivateOrBlockedIp(redirectUrl.hostname)) {
-            smokeChecks.push({
-              name: 'HTTP_REDIRECT_SECURITY_FILTER',
-              targetUrl: redirectUrl.toString(),
-              expectedStatus: 200,
-              actualStatus: res.status,
-              status: 'BLOCKED_SSRF',
-              responseTimeMs,
-              details: `Blocked SSRF redirect to restricted destination '${redirectUrl.hostname}' (${redirectIps.length > 0 ? redirectIps.join(', ') : 'blocked host'}).`,
-            });
-            return {
-              runtimeValidationEnabled: true,
-              previewUrl: targetUrl,
-              healthEndpoint: targetEndpoint,
-              overallStatus: 'BLOCKED_SECURITY',
-              smokeChecks,
-              securityChecks: {
-                ssrfValidated: false,
-                ipBlocked: true,
-                redirectsRestricted: true,
-                dnsResolvedIps: [...resolvedIps, ...redirectIps],
-              },
-              validatedAt: new Date().toISOString(),
-              details: 'SSRF protection blocked redirect to internal IP address or restricted host.',
-              limitationsNotice,
-            };
-          }
+        } catch (dnsErr) {
+          smokeChecks.push({
+            name: 'DNS_RESOLUTION_CHECK',
+            targetUrl: currentUrl.href,
+            expectedStatus: 200,
+            actualStatus: null,
+            status: 'FAILED',
+            responseTimeMs: null,
+            details: `DNS lookup failed for hostname '${hopHostname}': ${dnsErr instanceof Error ? dnsErr.message : String(dnsErr)}`,
+          });
+          return {
+            runtimeValidationEnabled: true,
+            previewUrl: targetUrl,
+            healthEndpoint: targetEndpoint,
+            overallStatus: 'FAILED',
+            smokeChecks,
+            securityChecks: {
+              ssrfValidated: true,
+              ipBlocked: false,
+              redirectsRestricted: true,
+              dnsResolvedIps: resolvedIps,
+            },
+            validatedAt: new Date().toISOString(),
+            details: 'Hostname could not be resolved by DNS.',
+            limitationsNotice,
+          };
         }
       }
 
+      if (hopIps.length === 0) {
+        smokeChecks.push({
+          name: 'DNS_RESOLUTION_CHECK',
+          targetUrl: currentUrl.href,
+          expectedStatus: 200,
+          actualStatus: null,
+          status: 'FAILED',
+          responseTimeMs: null,
+          details: `DNS lookup returned no IP addresses for hostname '${hopHostname}'.`,
+        });
+        return {
+          runtimeValidationEnabled: true,
+          previewUrl: targetUrl,
+          healthEndpoint: targetEndpoint,
+          overallStatus: 'FAILED',
+          smokeChecks,
+          securityChecks: {
+            ssrfValidated: true,
+            ipBlocked: false,
+            redirectsRestricted: true,
+            dnsResolvedIps: resolvedIps,
+          },
+          validatedAt: new Date().toISOString(),
+          details: 'Hostname could not be resolved by DNS (no addresses returned).',
+          limitationsNotice,
+        };
+      }
+
+      resolvedIps.push(...hopIps);
+
+      const hasBlockedIp = hopIps.some((ip) => isPrivateOrBlockedIp(ip, allowLoopback));
+      if (hasBlockedIp || isPrivateOrBlockedIp(hopHostname, allowLoopback)) {
+        smokeChecks.push({
+          name: redirectCount === 0 ? 'SSRF_IP_RANGE_FILTER' : 'HTTP_REDIRECT_SECURITY_FILTER',
+          targetUrl: currentUrl.href,
+          expectedStatus: 200,
+          actualStatus: null,
+          status: 'BLOCKED_SSRF',
+          responseTimeMs: null,
+          details:
+            redirectCount > 0
+              ? `Blocked SSRF redirect to restricted destination '${hopHostname}' (${hopIps.length > 0 ? hopIps.join(', ') : 'blocked host'}).`
+              : `Blocked SSRF attempt: host '${hopHostname}' resolved to restricted IP range (${hopIps.join(', ')}).`,
+        });
+        return {
+          runtimeValidationEnabled: true,
+          previewUrl: targetUrl,
+          healthEndpoint: targetEndpoint,
+          overallStatus: 'BLOCKED_SECURITY',
+          smokeChecks,
+          securityChecks: {
+            ssrfValidated: false,
+            ipBlocked: true,
+            redirectsRestricted: true,
+            dnsResolvedIps: resolvedIps,
+          },
+          validatedAt: new Date().toISOString(),
+          details:
+            redirectCount > 0
+              ? 'SSRF protection blocked redirect to internal IP address or restricted host.'
+              : 'SSRF protection blocked request to internal/private network destination.',
+          limitationsNotice,
+        };
+      }
+
+      // 3. Execute Safe IP-Pinned Request
+      const pinnedIp = hopIps[0] || hopHostname;
+      const hopStartTime = Date.now();
+      const timeoutMs = this.options?.runtimeValidationTimeoutMs ?? 3000;
+      const maxResponseBytes = this.options?.maxResponseSizeBytes ?? 1024 * 1024;
+      let res: { status: number; headers: Headers };
+
+      try {
+        if (this.options?.fetchImpl) {
+          const fetchRes = await this.options.fetchImpl(currentUrl.href, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json, text/plain, */*',
+              'User-Agent': 'MilestoneProof-EvidencePassport-Validator/1.0',
+            },
+            redirect: 'manual',
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          res = {
+            status: fetchRes.status,
+            headers: fetchRes.headers,
+          };
+        } else {
+          res = await executeSafePinnedHttpRequest(currentUrl, pinnedIp, timeoutMs, maxResponseBytes);
+        }
+      } catch (fetchErr) {
+        const hopDuration = Date.now() - hopStartTime;
+        totalResponseTimeMs += hopDuration;
+        const isTimeout =
+          fetchErr instanceof Error &&
+          (fetchErr.name === 'TimeoutError' ||
+            fetchErr.message.includes('timeout') ||
+            fetchErr.message.includes('timed out'));
+
+        smokeChecks.push({
+          name: 'PREVIEW_HEALTH_SMOKE_TEST',
+          targetUrl: currentUrl.href,
+          expectedStatus: 200,
+          actualStatus: null,
+          status: isTimeout ? 'TIMEOUT' : 'FAILED',
+          responseTimeMs: totalResponseTimeMs,
+          details: `Connection error: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`,
+        });
+        return {
+          runtimeValidationEnabled: true,
+          previewUrl: targetUrl,
+          healthEndpoint: targetEndpoint,
+          overallStatus: 'FAILED',
+          smokeChecks,
+          securityChecks: {
+            ssrfValidated: true,
+            ipBlocked: false,
+            redirectsRestricted: true,
+            dnsResolvedIps: resolvedIps,
+          },
+          validatedAt: new Date().toISOString(),
+          details: isTimeout ? 'Preview smoke check timed out.' : 'Failed to reach preview endpoint.',
+          limitationsNotice,
+        };
+      }
+
+      const hopDuration = Date.now() - hopStartTime;
+      totalResponseTimeMs += hopDuration;
+
+      // 4. Handle 3xx Redirects
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get('location');
+        if (!location) {
+          // 3xx without Location header - report as non-200 failure
+          break;
+        }
+
+        redirectCount++;
+        if (redirectCount > maxRedirects) {
+          smokeChecks.push({
+            name: 'HTTP_REDIRECT_SECURITY_FILTER',
+            targetUrl: location,
+            expectedStatus: 200,
+            actualStatus: res.status,
+            status: 'BLOCKED_SSRF',
+            responseTimeMs: totalResponseTimeMs,
+            details: `Blocked SSRF redirect: maximum redirect limit (${maxRedirects}) exceeded.`,
+          });
+          return {
+            runtimeValidationEnabled: true,
+            previewUrl: targetUrl,
+            healthEndpoint: targetEndpoint,
+            overallStatus: 'BLOCKED_SECURITY',
+            smokeChecks,
+            securityChecks: {
+              ssrfValidated: false,
+              ipBlocked: true,
+              redirectsRestricted: true,
+              dnsResolvedIps: resolvedIps,
+            },
+            validatedAt: new Date().toISOString(),
+            details: 'SSRF protection blocked redirect chain exceeding maximum depth.',
+            limitationsNotice,
+          };
+        }
+
+        let nextUrl: URL;
+        try {
+          nextUrl = new URL(location, currentUrl);
+        } catch {
+          smokeChecks.push({
+            name: 'HTTP_REDIRECT_SECURITY_FILTER',
+            targetUrl: location,
+            expectedStatus: 200,
+            actualStatus: res.status,
+            status: 'BLOCKED_SSRF',
+            responseTimeMs: totalResponseTimeMs,
+            details: `Blocked SSRF redirect: malformed redirect URL '${location}'.`,
+          });
+          return {
+            runtimeValidationEnabled: true,
+            previewUrl: targetUrl,
+            healthEndpoint: targetEndpoint,
+            overallStatus: 'BLOCKED_SECURITY',
+            smokeChecks,
+            securityChecks: {
+              ssrfValidated: false,
+              ipBlocked: true,
+              redirectsRestricted: true,
+              dnsResolvedIps: resolvedIps,
+            },
+            validatedAt: new Date().toISOString(),
+            details: 'SSRF protection blocked malformed redirect destination.',
+            limitationsNotice,
+          };
+        }
+
+        currentUrl = nextUrl;
+        continue;
+      }
+
+      // 5. Final Response Evaluated
       const passed = res.status >= 200 && res.status < 300;
       smokeChecks.push({
         name: 'PREVIEW_HEALTH_SMOKE_TEST',
-        targetUrl: fullCheckUrl,
+        targetUrl: currentUrl.href,
         expectedStatus: 200,
         actualStatus: res.status,
         status: passed ? 'PASSED' : 'FAILED',
-        responseTimeMs,
+        responseTimeMs: totalResponseTimeMs,
         details: passed
-          ? `HTTP ${res.status} OK received in ${responseTimeMs}ms.`
+          ? `HTTP ${res.status} OK received in ${totalResponseTimeMs}ms.`
           : `HTTP error ${res.status} returned by preview endpoint.`,
       });
 
@@ -1343,39 +1434,34 @@ export class EvidencePassportService {
           : `Runtime smoke test failed with status HTTP ${res.status}.`,
         limitationsNotice,
       };
-    } catch (fetchErr) {
-      const responseTimeMs = Date.now() - startTime;
-      const isTimeout =
-        fetchErr instanceof Error &&
-        (fetchErr.name === 'TimeoutError' || fetchErr.message.includes('timeout'));
-
-      smokeChecks.push({
-        name: 'PREVIEW_HEALTH_SMOKE_TEST',
-        targetUrl: fullCheckUrl,
-        expectedStatus: 200,
-        actualStatus: null,
-        status: isTimeout ? 'TIMEOUT' : 'FAILED',
-        responseTimeMs,
-        details: `Connection error: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`,
-      });
-
-      return {
-        runtimeValidationEnabled: true,
-        previewUrl: targetUrl,
-        healthEndpoint: targetEndpoint,
-        overallStatus: 'FAILED',
-        smokeChecks,
-        securityChecks: {
-          ssrfValidated: true,
-          ipBlocked: false,
-          redirectsRestricted: true,
-          dnsResolvedIps: resolvedIps,
-        },
-        validatedAt: new Date().toISOString(),
-        details: isTimeout ? 'Preview smoke check timed out.' : 'Failed to reach preview endpoint.',
-        limitationsNotice,
-      };
     }
+
+    // Fallback if 3xx had no Location header
+    smokeChecks.push({
+      name: 'PREVIEW_HEALTH_SMOKE_TEST',
+      targetUrl: currentUrl.href,
+      expectedStatus: 200,
+      actualStatus: 300,
+      status: 'FAILED',
+      responseTimeMs: totalResponseTimeMs,
+      details: 'HTTP redirect status received without Location header.',
+    });
+    return {
+      runtimeValidationEnabled: true,
+      previewUrl: targetUrl,
+      healthEndpoint: targetEndpoint,
+      overallStatus: 'FAILED',
+      smokeChecks,
+      securityChecks: {
+        ssrfValidated: true,
+        ipBlocked: false,
+        redirectsRestricted: true,
+        dnsResolvedIps: resolvedIps,
+      },
+      validatedAt: new Date().toISOString(),
+      details: 'HTTP redirect status received without Location header.',
+      limitationsNotice,
+    };
   }
 
   /**
