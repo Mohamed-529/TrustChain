@@ -297,12 +297,27 @@ export type ArbitratorRecommendationCode =
   | 'RECOMMEND_HOLD'
   | 'RECOMMEND_REJECTION';
 
+export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface HumanReviewRequirement {
+  required: true;
+  reviewType: string;
+  notes: string;
+}
+
 export interface ReviewSynthesis {
   agentName: 'ArbitratorAgent';
   model: string;
   isMock: boolean;
   recommendedOutcome: ReviewRecommendedOutcome;
   recommendation: ArbitratorRecommendationCode;
+  confidenceLevel: ConfidenceLevel;
+  confidenceScore: number;
+  evidenceReferences: string[];
+  reasoningSummary: string;
+  missingInformation: string[];
+  riskFlags: string[];
+  humanReviewRequirement: HumanReviewRequirement;
   disagreements: string[];
   rationale: string;
   advisoryNotice: string;
