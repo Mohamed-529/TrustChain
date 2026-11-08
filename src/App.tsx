@@ -19,6 +19,9 @@ import type {
 import { BryntumGanttViewer } from './components/BryntumGanttViewer';
 import { EvidencePassportViewer } from './components/EvidencePassportViewer';
 import { DisputeEvidencePackViewer } from './components/DisputeEvidencePackViewer';
+import { MilestoneIntelligenceGrid } from './components/ag-grid/MilestoneIntelligenceGrid';
+import { IntelligenceControlRoomDashboard } from './components/dashboard/IntelligenceControlRoomDashboard';
+import { AiDecisionInspectorModal } from './components/dashboard/AiDecisionInspectorModal';
 
 function formatUsdCents(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return '—';
@@ -54,6 +57,8 @@ export default function App() {
     message: string;
   } | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [quickFilterType, setQuickFilterType] = useState<string>('ALL');
+  const [showAiInspector, setShowAiInspector] = useState<boolean>(false);
 
   const switchPersona = useCallback(async (userId: string) => {
     try {
@@ -590,6 +595,21 @@ export default function App() {
   const policy = reviewDetails?.policyCalculation;
   const latestTx = paypalTransactions[0] ?? null;
 
+  const handleOpenPassport = (mId: string) => {
+    setSelectedMilestoneId(mId);
+    document.getElementById('evidence-passport-section')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleOpenDisputePack = (mId: string) => {
+    setSelectedMilestoneId(mId);
+    document.getElementById('dispute-pack-section')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleOpenAiInspector = (mId: string) => {
+    setSelectedMilestoneId(mId);
+    setShowAiInspector(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -640,6 +660,13 @@ export default function App() {
             {statusBanner.message}
           </div>
         )}
+
+        {/* EXECUTIVE CONTROL ROOM DASHBOARD */}
+        <IntelligenceControlRoomDashboard
+          ledgerRows={ledgerRows}
+          scheduleData={scheduleData}
+          onSelectQuickFilter={(qf) => setQuickFilterType(qf)}
+        />
 
         {/* PRIMARY SPONSOR INTEGRATION A: BRYNTUM GANTT SOFTWARE DELIVERY CONTROL TOWER */}
         <section className="bg-slate-900 border border-indigo-900/80 rounded-lg p-5 space-y-4">
@@ -1366,60 +1393,26 @@ export default function App() {
           </div>
         )}
 
-        {/* Read-Only Financial Decision Ledger */}
-        <section className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-white">
-            5. Financial Decision Intelligence Ledger (Audit-Traceable)
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
-                  <th className="py-2 pr-3">Milestone</th>
-                  <th className="py-2 px-3">State</th>
-                  <th className="py-2 px-3">Payment Status</th>
-                  <th className="py-2 px-3">AI Advisory</th>
-                  <th className="py-2 px-3">Budget</th>
-                  <th className="py-2 px-3">Permitted Cap</th>
-                  <th className="py-2 px-3">Approved</th>
-                  <th className="py-2 px-3">Eligible</th>
-                  <th className="py-2 pl-3">Audit Events</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono">
-                {ledgerRows.map((row) => (
-                  <tr key={row.milestoneId} className="hover:bg-slate-800/40">
-                    <td className="py-2.5 pr-3 font-sans font-medium text-white">
-                      {row.milestoneTitle}
-                    </td>
-                    <td className="py-2.5 px-3">{row.stateMachineStatus}</td>
-                    <td className="py-2.5 px-3 text-indigo-300">
-                      {row.paymentStatus}
-                      {row.paymentExecutionMode && row.paymentExecutionMode !== 'NONE' && (
-                        <span className="ml-1.5 text-[10px] text-slate-400">
-                          [{row.paymentExecutionMode}]
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3">{row.aiRecommendation}</td>
-                    <td className="py-2.5 px-3">{formatUsdCents(row.agreedAmountCents)}</td>
-                    <td className="py-2.5 px-3">{formatUsdCents(row.permittedAmountCents)}</td>
-                    <td className="py-2.5 px-3 text-emerald-400">
-                      {formatUsdCents(row.approvedAmountCents)}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      {row.paymentEligible ? 'ELIGIBLE' : 'BLOCKED'}
-                    </td>
-                    <td className="py-2.5 pl-3 text-slate-400">
-                      {row.auditEventCount} events ({row.latestAuditEntryHash?.slice(0, 10) ?? '—'}
-                      …)
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        {/* PRIMARY AG GRID MILESTONE INTELLIGENCE CONTROL ROOM */}
+        <MilestoneIntelligenceGrid
+          ledgerRows={ledgerRows}
+          token={token}
+          selectedMilestoneId={selectedMilestoneId}
+          onSelectMilestone={(mId) => setSelectedMilestoneId(mId)}
+          onOpenPassport={handleOpenPassport}
+          onOpenDisputePack={handleOpenDisputePack}
+          onOpenAiInspector={handleOpenAiInspector}
+          quickFilterType={quickFilterType}
+        />
+
+        {/* AI Decision Inspector Modal */}
+        <AiDecisionInspectorModal
+          isOpen={showAiInspector}
+          onClose={() => setShowAiInspector(false)}
+          reviewDetails={reviewDetails}
+          onOpenPassport={() => handleOpenPassport(selectedMilestoneId)}
+          onOpenDisputePack={() => handleOpenDisputePack(selectedMilestoneId)}
+        />
       </div>
     </div>
   );
