@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { AppDatabase } from './repositories/Database.ts';
 import {
   ContractRepository,
+  DisputeEvidencePackRepository,
   EvaluationRepository,
   EvidenceProvenanceRepository,
   EvidencePassportRepository,
@@ -45,6 +46,8 @@ import { EvidenceController } from './controllers/EvidenceController.ts';
 import { ReviewController } from './controllers/ReviewController.ts';
 import { ScheduleController } from './controllers/ScheduleController.ts';
 import { PaymentController } from './controllers/PaymentController.ts';
+import { DisputeController } from './controllers/DisputeController.ts';
+import { DisputeEvidencePackService } from './services/DisputeEvidencePackService.ts';
 import { createApiRouter, type RouteDefinition } from './routes/apiRoutes.ts';
 import {
   AppError,
@@ -320,6 +323,9 @@ export interface ServerContainer {
   paypalService: PayPalService;
   passportRepo: EvidencePassportRepository;
   evidencePassportService: EvidencePassportService;
+  disputePackRepo: DisputeEvidencePackRepository;
+  disputeEvidencePackService: DisputeEvidencePackService;
+  disputeController: DisputeController;
 }
 
 export function createServerApp(options?: {
@@ -344,6 +350,7 @@ export function createServerApp(options?: {
   const webhookEventRepo = new WebhookEventRepository(db.raw);
   const githubWebhookRepo = new GitHubWebhookEventRepository(db.raw);
   const passportRepo = new EvidencePassportRepository(db.raw);
+  const disputePackRepo = new DisputeEvidencePackRepository(db.raw);
   const auditService = new AuditService(db.raw);
 
   const authService = new AuthService(
@@ -481,6 +488,27 @@ export function createServerApp(options?: {
   );
   const paymentController = new PaymentController(paypalService);
 
+  const disputeEvidencePackService = new DisputeEvidencePackService(
+    db,
+    contractRepo,
+    milestoneRepo,
+    evidenceRepo,
+    provenanceRepo,
+    evidencePassportService,
+    passportRepo,
+    evaluationRepo,
+    approvalRepo,
+    paymentRepo,
+    auditService,
+    auditReplayService,
+    disputePackRepo
+  );
+  const disputeController = new DisputeController(
+    disputeEvidencePackService,
+    contractRepo,
+    milestoneRepo
+  );
+
   const apiRouter = createApiRouter({
     authService,
     authController,
@@ -489,6 +517,7 @@ export function createServerApp(options?: {
     reviewController,
     scheduleController,
     paymentController,
+    disputeController,
   });
 
   const app = createMountedHttpApp('/api/v1', apiRouter.routes);
@@ -521,6 +550,9 @@ export function createServerApp(options?: {
     paypalService,
     passportRepo,
     evidencePassportService,
+    disputePackRepo,
+    disputeEvidencePackService,
+    disputeController,
   };
 }
 

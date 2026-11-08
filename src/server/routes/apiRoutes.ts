@@ -7,6 +7,7 @@ import type { EvidenceController } from '../controllers/EvidenceController.ts';
 import type { ReviewController } from '../controllers/ReviewController.ts';
 import type { ScheduleController } from '../controllers/ScheduleController.ts';
 import type { PaymentController } from '../controllers/PaymentController.ts';
+import type { DisputeController } from '../controllers/DisputeController.ts';
 import { createAuthMiddleware, requireRole } from '../middleware/authMiddleware.ts';
 import { OPENAPI_REQUEST_SCHEMAS, validateRequestSchema } from '../middleware/validateRequest.ts';
 import type { RequestHandler } from '../middleware/errorHandler.ts';
@@ -37,6 +38,7 @@ export function createApiRouter(params: {
   reviewController: ReviewController;
   scheduleController: ScheduleController;
   paymentController: PaymentController;
+  disputeController: DisputeController;
 }): ApiRouter {
   const router = new ApiRouter();
   const {
@@ -47,6 +49,7 @@ export function createApiRouter(params: {
     reviewController,
     scheduleController,
     paymentController,
+    disputeController,
   } = params;
   const authenticate = createAuthMiddleware(authService);
 
@@ -215,6 +218,28 @@ export function createApiRouter(params: {
     '/milestones/:milestoneId/evidence-passport/runtime-validate',
     authenticate,
     evidenceController.validateRuntime
+  );
+
+  // Protected Dispute Evidence Pack endpoints
+  router.post(
+    '/contracts/:contractId/milestones/:milestoneId/dispute-pack',
+    authenticate,
+    disputeController.generateDisputePack
+  );
+  router.get(
+    '/contracts/:contractId/dispute-packs/:packId',
+    authenticate,
+    disputeController.getDisputePack
+  );
+  router.get(
+    '/contracts/:contractId/dispute-packs/:packId/verify',
+    authenticate,
+    disputeController.verifyDisputePack
+  );
+  router.get(
+    '/contracts/:contractId/dispute-packs/:packId/export',
+    authenticate,
+    disputeController.exportDisputePack
   );
 
   // Protected Phase 4 Human Review Workflow & Financial Decision Ledger endpoints
