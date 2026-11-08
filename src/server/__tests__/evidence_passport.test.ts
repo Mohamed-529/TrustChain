@@ -1289,4 +1289,212 @@ describe('Prompt 2/8 — Evidence Passport: Verifiable Engineering Evidence Reco
       cleanupFiles();
     }
   });
+
+  // 32. Hex-Encoded IPv4-Mapped IPv6 SSRF Filter
+  it('32. strictly blocks hex-encoded IPv4-mapped and IPv4-compatible IPv6 addresses', async () => {
+    // Standard dotted-quad mapped
+    assert.equal(isPrivateOrBlockedIp('::ffff:127.0.0.1'), true, '::ffff:127.0.0.1 must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::ffff:10.0.0.1'), true, '::ffff:10.0.0.1 must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::ffff:169.254.169.254'), true, '::ffff:169.254.169.254 must be blocked');
+
+    // Hex-encoded mapped
+    assert.equal(isPrivateOrBlockedIp('::ffff:7f00:1'), true, '::ffff:7f00:1 (127.0.0.1) must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::ffff:7f00:0001'), true, '::ffff:7f00:0001 must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::ffff:a00:1'), true, '::ffff:a00:1 (10.0.0.1) must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::ffff:a9fe:a9fe'), true, '::ffff:a9fe:a9fe (169.254.169.254) must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::ffff:c0a8:101'), true, '::ffff:c0a8:101 (192.168.1.1) must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::ffff:ac10:1'), true, '::ffff:ac10:1 (172.16.0.1) must be blocked');
+
+    // Deprecated IPv4-compatible
+    assert.equal(isPrivateOrBlockedIp('::127.0.0.1'), true, '::127.0.0.1 must be blocked');
+    assert.equal(isPrivateOrBlockedIp('::7f00:1'), true, '::7f00:1 must be blocked');
+
+    // Valid public IPv4-mapped IPv6 must be permitted
+    assert.equal(isPrivateOrBlockedIp('::ffff:8.8.8.8'), false, '::ffff:8.8.8.8 (public DNS) must be permitted');
+    assert.equal(isPrivateOrBlockedIp('::ffff:5db8:d822'), false, '::ffff:93.184.216.34 (public example.com) must be permitted');
+
+    const container = getIsolatedApp();
+    try {
+      const hexMappedService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          dnsLookupImpl: async () => [{ address: '::ffff:7f00:1', family: 6 }],
+        }
+      );
+
+      const res = await hexMappedService.executeRuntimeValidation(
+        'https://attacker-hex-ipv6.example.com',
+        '/api/health',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'BLOCKED_SECURITY');
+      assert.equal(res.securityChecks.ipBlocked, true);
+      assert.equal(res.smokeChecks[0].status, 'BLOCKED_SSRF');
+      assert.ok(res.smokeChecks[0].details.includes('::ffff:7f00:1'));
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // 33. Mixed Public and Private DNS Answers
+  it('33. blocks requests when DNS returns mixed public and private IP addresses', async () => {
+    const container = getIsolatedApp();
+    try {
+      const mixedDnsService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          // DNS returns a public IP first, but includes a private RFC 1918 IP as secondary
+          dnsLookupImpl: async () => [
+            { address: '93.184.216.34', family: 4 },
+            { address: '10.0.0.1', family: 4 },
+          ],
+        }
+      );
+
+      const res = await mixedDnsService.executeRuntimeValidation(
+        'https://dual-homed-target.example.com',
+        '/health',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'BLOCKED_SECURITY');
+      assert.equal(res.securityChecks.ipBlocked, true);
+      assert.equal(res.smokeChecks[0].status, 'BLOCKED_SSRF');
+      assert.ok(res.details.includes('SSRF protection blocked request'));
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // 34. Empty DNS Resolution Answer Guard
+  it('34. fails gracefully without unhandled crash when DNS lookup returns zero addresses', async () => {
+    const container = getIsolatedApp();
+    try {
+      const emptyDnsService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          dnsLookupImpl: async () => [],
+        }
+      );
+
+      const res = await emptyDnsService.executeRuntimeValidation(
+        'https://empty-dns-records.example.com',
+        '/health',
+        true
+      );
+
+      assert.equal(res.overallStatus, 'FAILED');
+      assert.equal(res.smokeChecks[0].name, 'DNS_RESOLUTION_CHECK');
+      assert.equal(res.smokeChecks[0].status, 'FAILED');
+      assert.ok(res.smokeChecks[0].details.includes('no IP addresses'));
+    } finally {
+      cleanupFiles();
+    }
+  });
+
+  // 35. Redirect Scheme Restriction and Malformed Redirect Defense
+  it('35. strictly blocks redirect attempts to non-HTTP protocols and malformed locations', async () => {
+    const container = getIsolatedApp();
+    try {
+      // 1. Redirect to file:///etc/passwd
+      const mockFetchFile = async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: 'file:///etc/passwd' },
+        });
+
+      const fileRedirectService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          fetchImpl: mockFetchFile as any,
+          dnsLookupImpl: async () => [{ address: '93.184.216.34', family: 4 }],
+        }
+      );
+
+      const fileRes = await fileRedirectService.executeRuntimeValidation(
+        'https://safe-domain.example.com',
+        '/redirect-to-file',
+        true
+      );
+
+      assert.equal(fileRes.overallStatus, 'BLOCKED_SECURITY');
+      assert.equal(fileRes.smokeChecks.some((c) => c.status === 'BLOCKED_SSRF'), true);
+      assert.ok(
+        fileRes.smokeChecks.some((c) => c.details.includes('non-HTTP/HTTPS protocol')),
+        'Must report protocol block'
+      );
+
+      // 2. Redirect to gopher://
+      const mockFetchGopher = async () =>
+        new Response(null, {
+          status: 301,
+          headers: { location: 'gopher://127.0.0.1:70/' },
+        });
+
+      const gopherRedirectService = new EvidencePassportService(
+        container.db,
+        container.contractRepo,
+        container.milestoneRepo,
+        container.evidenceRepo,
+        container.provenanceRepo,
+        container.evaluationRepo,
+        container.approvalRepo,
+        container.passportRepo,
+        container.auditService,
+        undefined,
+        {
+          fetchImpl: mockFetchGopher as any,
+          dnsLookupImpl: async () => [{ address: '93.184.216.34', family: 4 }],
+        }
+      );
+
+      const gopherRes = await gopherRedirectService.executeRuntimeValidation(
+        'https://safe-domain.example.com',
+        '/redirect-to-gopher',
+        true
+      );
+
+      assert.equal(gopherRes.overallStatus, 'BLOCKED_SECURITY');
+      assert.equal(gopherRes.smokeChecks.some((c) => c.status === 'BLOCKED_SSRF'), true);
+    } finally {
+      cleanupFiles();
+    }
+  });
 });
