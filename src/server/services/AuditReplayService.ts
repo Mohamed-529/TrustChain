@@ -39,6 +39,7 @@ const SUPPORTED_AUDIT_ACTIONS = new Set<string>([
   'EVALUATION_STARTED',
   'EVALUATION_COMPLETED',
   'EVALUATION_FAILED',
+  'EVALUATION_FALLBACK_TRIGGERED',
   'HUMAN_REVIEW_APPROVED',
   'HUMAN_REVIEW_REJECTED',
   'HUMAN_REVIEW_CHANGES_REQUESTED',
@@ -776,6 +777,15 @@ export class AuditReplayService {
             to: 'SUBMITTED',
             timestamp,
           });
+          break;
+        }
+
+        case 'EVALUATION_FALLBACK_TRIGGERED': {
+          if (!milestoneId || !reconstructedMilestones.has(milestoneId)) {
+            break;
+          }
+          applied = true;
+          // State remains EVALUATING during fallback transition to DETERMINISTIC_FALLBACK
           break;
         }
 

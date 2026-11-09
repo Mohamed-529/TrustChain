@@ -61,6 +61,92 @@ const PROMPT_INJECTION_PATTERNS: Array<{ label: string; regex: RegExp }> = [
   },
 ];
 
+
+export const EVIDENCE_ANALYSIS_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    criteriaResults: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          criterionId: { type: 'STRING' },
+          status: { type: 'STRING', enum: ['VERIFIED', 'PARTIAL', 'UNVERIFIED', 'CONTRADICTED'] },
+          confidence: { type: 'NUMBER' },
+          evidenceCitations: { type: 'ARRAY', items: { type: 'STRING' } },
+          explanation: { type: 'STRING' },
+        },
+        required: ['criterionId', 'status', 'confidence', 'evidenceCitations', 'explanation'],
+      },
+    },
+    missingEvidence: { type: 'ARRAY', items: { type: 'STRING' } },
+    factualObservations: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['criteriaResults', 'missingEvidence', 'factualObservations'],
+};
+
+export const RISK_ASSESSMENT_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    overallRiskSeverity: { type: 'STRING', enum: ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
+    criticalVulnCount: { type: 'INTEGER' },
+    highVulnCount: { type: 'INTEGER' },
+    ciBuildPassed: { type: 'BOOLEAN' },
+    suspiciousSignals: { type: 'ARRAY', items: { type: 'STRING' } },
+    contradictions: { type: 'ARRAY', items: { type: 'STRING' } },
+    missingTestSignals: { type: 'ARRAY', items: { type: 'STRING' } },
+    promptInjectionDetected: { type: 'BOOLEAN' },
+    summary: { type: 'STRING' },
+  },
+  required: [
+    'overallRiskSeverity',
+    'criticalVulnCount',
+    'highVulnCount',
+    'ciBuildPassed',
+    'suspiciousSignals',
+    'contradictions',
+    'missingTestSignals',
+    'promptInjectionDetected',
+    'summary',
+  ],
+};
+
+export const REVIEW_SYNTHESIS_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    recommendedOutcome: { type: 'STRING', enum: ['PASS', 'FAIL', 'NEEDS_HUMAN_REVIEW'] },
+    recommendation: { type: 'STRING', enum: ['RECOMMEND_APPROVAL', 'RECOMMEND_HOLD', 'RECOMMEND_REJECTION'] },
+    confidenceLevel: { type: 'STRING', enum: ['HIGH', 'MEDIUM', 'LOW'] },
+    confidenceScore: { type: 'NUMBER' },
+    evidenceReferences: { type: 'ARRAY', items: { type: 'STRING' } },
+    reasoningSummary: { type: 'STRING' },
+    missingInformation: { type: 'ARRAY', items: { type: 'STRING' } },
+    riskFlags: { type: 'ARRAY', items: { type: 'STRING' } },
+    humanReviewRequirement: {
+      type: 'OBJECT',
+      properties: {
+        required: { type: 'BOOLEAN' },
+        reviewType: { type: 'STRING' },
+        notes: { type: 'STRING' },
+      },
+      required: ['required', 'reviewType', 'notes'],
+    },
+    rationale: { type: 'STRING' },
+    advisoryNotice: { type: 'STRING' },
+  },
+  required: [
+    'recommendedOutcome',
+    'confidenceLevel',
+    'confidenceScore',
+    'evidenceReferences',
+    'reasoningSummary',
+    'missingInformation',
+    'riskFlags',
+    'humanReviewRequirement',
+    'rationale',
+  ],
+};
+
 const PROHIBITED_AI_AUTHORITY_KEYS = [
   'approvedAmountCents',
   'finalPayableAmountCents',
@@ -693,11 +779,11 @@ export class GeminiHttpEvaluator implements MultiAgentEvaluatorProvider {
 
   constructor(options: { apiKey: string; modelName?: string; timeoutMs?: number }) {
     this.apiKey = options.apiKey;
-    this.modelName = options.modelName ?? 'gemini-2.5-flash';
-    this.timeoutMs = options.timeoutMs ?? 15000;
+    this.modelName = options.modelName ?? process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite';
+    this.timeoutMs = options.timeoutMs ?? 25000;
   }
 
-  private async callGeminiJson(systemInstruction: string, userPrompt: string): Promise<unknown> {
+  private async callGeminiJson(systemInstruction: string, userPrompt: string, responseSchema?: Record<string, unknown>): Promise<unknown> {
     if (!this.apiKey || this.apiKey === 'MY_GEMINI_API_KEY') {
       throw new AppError(
         503,
@@ -722,6 +808,7 @@ export class GeminiHttpEvaluator implements MultiAgentEvaluatorProvider {
           generationConfig: {
             temperature: 0.1,
             responseMimeType: 'application/json',
+            ...(responseSchema ? { responseSchema } : {}),
           },
         }),
       });
@@ -749,6 +836,33 @@ export class GeminiHttpEvaluator implements MultiAgentEvaluatorProvider {
         'Gemini API rate limit or quota exceeded (credentials redacted).'
       );
     }
+
+    if (response.status === 400 || response.status === 401 || response.status === 403) {
+      let errorDetail = '';
+      try {
+        const errJson = (await response.json()) as { error?: { message?: string } };
+        errorDetail = errJson.error?.message ?? '';
+      } catch {
+        // Ignore JSON error
+      }
+      if (
+        errorDetail.includes('API key not valid') ||
+        errorDetail.includes('INVALID_ARGUMENT') ||
+        errorDetail.includes('PERMISSION_DENIED')
+      ) {
+        throw new AppError(
+          401,
+          'INVALID_GEMINI_API_KEY',
+          'Gemini API key is invalid or unauthorized.'
+        );
+      }
+      throw new AppError(
+        502,
+        'GEMINI_MODEL_ERROR',
+        `Gemini API returned HTTP ${response.status} (credentials redacted).`
+      );
+    }
+
     if (!response.ok) {
       const code = response.status >= 500 ? 'GEMINI_UNAVAILABLE' : 'GEMINI_MODEL_ERROR';
       const status = response.status >= 500 ? 503 : 502;
@@ -760,9 +874,12 @@ export class GeminiHttpEvaluator implements MultiAgentEvaluatorProvider {
     }
 
     const payload = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
     };
-    const rawText = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+    const textPart =
+      payload.candidates?.[0]?.content?.parts?.find((p) => p.text && !p.thought) ??
+      payload.candidates?.[0]?.content?.parts?.find((p) => p.text);
+    const rawText = textPart?.text;
     if (!rawText || typeof rawText !== 'string') {
       throw new AppError(
         422,
@@ -829,7 +946,7 @@ export class GeminiHttpEvaluator implements MultiAgentEvaluatorProvider {
       '</evaluation_request>',
     ].join('\n');
 
-    return this.callGeminiJson(systemPrompt, userPrompt);
+    return this.callGeminiJson(systemPrompt, userPrompt, EVIDENCE_ANALYSIS_SCHEMA);
   }
 
   public async runRiskAnalyst(params: {
@@ -889,7 +1006,7 @@ export class GeminiHttpEvaluator implements MultiAgentEvaluatorProvider {
       '</risk_analysis_request>',
     ].join('\n');
 
-    return this.callGeminiJson(systemPrompt, userPrompt);
+    return this.callGeminiJson(systemPrompt, userPrompt, RISK_ASSESSMENT_SCHEMA);
   }
 
   public async runReviewSynthesizer(params: {
@@ -934,7 +1051,7 @@ export class GeminiHttpEvaluator implements MultiAgentEvaluatorProvider {
       '</synthesis_request>',
     ].join('\n');
 
-    return this.callGeminiJson(systemPrompt, userPrompt);
+    return this.callGeminiJson(systemPrompt, userPrompt, REVIEW_SYNTHESIS_SCHEMA);
   }
 }
 
@@ -1467,6 +1584,7 @@ export class EvaluationService {
   private evaluatorProvider: MultiAgentEvaluatorProvider;
   private githubVerificationService?: GitHubVerificationService;
   private readonly runningMilestones = new Set<string>();
+  private enableFallback: boolean;
 
   constructor(
     db: AppDatabase,
@@ -1476,7 +1594,8 @@ export class EvaluationService {
     evaluationRepo: EvaluationRepository,
     auditService: AuditService,
     evaluatorProvider?: MultiAgentEvaluatorProvider,
-    githubVerificationService?: GitHubVerificationService
+    githubVerificationService?: GitHubVerificationService,
+    options?: { enableFallback?: boolean }
   ) {
     this.db = db;
     this.contractRepo = contractRepo;
@@ -1488,22 +1607,33 @@ export class EvaluationService {
 
     if (evaluatorProvider) {
       this.evaluatorProvider = evaluatorProvider;
+      this.enableFallback = options?.enableFallback ?? false;
     } else {
       const apiKey = process.env.GEMINI_API_KEY;
       if (apiKey && apiKey.trim().length > 0 && apiKey !== 'MY_GEMINI_API_KEY') {
         this.evaluatorProvider = new GeminiHttpEvaluator({ apiKey: apiKey.trim() });
+        this.enableFallback = options?.enableFallback ?? true;
       } else {
         this.evaluatorProvider = new DeterministicMockEvaluator();
+        this.enableFallback = false;
       }
     }
+  }
+
+  public setEnableFallback(enabled: boolean): void {
+    this.enableFallback = enabled;
   }
 
   public setGitHubVerificationService(service: GitHubVerificationService): void {
     this.githubVerificationService = service;
   }
 
-  public setEvaluatorProvider(provider: MultiAgentEvaluatorProvider): void {
+  public setEvaluatorProvider(
+    provider: MultiAgentEvaluatorProvider,
+    options?: { enableFallback?: boolean }
+  ): void {
     this.evaluatorProvider = provider;
+    this.enableFallback = options?.enableFallback ?? false;
   }
 
   public getEvaluatorProvider(): MultiAgentEvaluatorProvider {
@@ -1550,6 +1680,8 @@ export class EvaluationService {
     const previousMilestoneStatus = milestone.status;
 
     this.runningMilestones.add(milestoneId);
+    let effectiveMode: EvaluationRun['evaluationMode'] = this.evaluatorProvider.mode;
+    let isMock = effectiveMode === 'DETERMINISTIC_MOCK';
 
     // Record EVALUATION_STARTED in the hash-chained audit trail
     this.db.withTransaction(() => {
@@ -1567,7 +1699,7 @@ export class EvaluationService {
         payload: {
           submissionId: latestSubmission.id,
           attemptNumber: latestSubmission.attemptNumber,
-          evaluationMode: this.evaluatorProvider.mode,
+          evaluationMode: effectiveMode,
           model: this.evaluatorProvider.modelName,
         },
         timestamp: startNow,
@@ -1620,38 +1752,120 @@ export class EvaluationService {
         latestSubmission.canonicalReferences ??
         buildCanonicalEvidenceReferences(latestSubmission);
       const isolatedUntrusted = inspectAndIsolateUntrustedEvidence(latestSubmission);
-      const isMock = this.evaluatorProvider.mode === 'DETERMINISTIC_MOCK';
+      isMock = effectiveMode === 'DETERMINISTIC_MOCK';
 
-      // Stage A: Evidence Analyst
-      const rawEvidenceAnalysis = await this.evaluatorProvider.runEvidenceAnalyst({
-        milestone,
-        submission: latestSubmission,
-        canonicalRefs,
-        isolatedUntrusted,
-      });
-      const evidenceAnalysis = validateAndSanitizeEvidenceAnalysis(
-        rawEvidenceAnalysis,
-        milestone,
-        canonicalRefs,
-        this.evaluatorProvider.modelName,
-        isMock
-      );
+      let activeEvaluator = this.evaluatorProvider;
+      let evidenceAnalysis: EvidenceAnalysis;
+      let riskAnalysis: RiskAssessment;
+      let arbitratorRecommendation: ReviewSynthesis;
 
-      // Stage B: Risk Analyst
-      const rawRiskAssessment = await this.evaluatorProvider.runRiskAnalyst({
-        contract,
-        milestone,
-        submission: latestSubmission,
-        canonicalRefs,
-        isolatedUntrusted,
-      });
-      const riskAnalysis = validateAndSanitizeRiskAssessment(
-        rawRiskAssessment,
-        latestSubmission,
-        isolatedUntrusted,
-        this.evaluatorProvider.modelName,
-        isMock
-      );
+      const executeAgentPipeline = async (evaluator: MultiAgentEvaluatorProvider) => {
+        const currentIsMock = evaluator.mode === 'DETERMINISTIC_MOCK';
+        const rawEv = await evaluator.runEvidenceAnalyst({
+          milestone,
+          submission: latestSubmission,
+          canonicalRefs,
+          isolatedUntrusted,
+        });
+        const ev = validateAndSanitizeEvidenceAnalysis(
+          rawEv,
+          milestone,
+          canonicalRefs,
+          evaluator.modelName,
+          currentIsMock
+        );
+
+        const rawRisk = await evaluator.runRiskAnalyst({
+          contract,
+          milestone,
+          submission: latestSubmission,
+          canonicalRefs,
+          isolatedUntrusted,
+        });
+        const risk = validateAndSanitizeRiskAssessment(
+          rawRisk,
+          latestSubmission,
+          isolatedUntrusted,
+          evaluator.modelName,
+          currentIsMock
+        );
+
+        const rawReview = await evaluator.runReviewSynthesizer({
+          milestone,
+          submission: latestSubmission,
+          evidenceAnalysis: ev,
+          riskAssessment: risk,
+        });
+        const review = validateAndSanitizeReviewSynthesis(
+          rawReview,
+          risk,
+          evaluator.modelName,
+          currentIsMock
+        );
+
+        return { ev, risk, review };
+      };
+
+      try {
+        const pipelineOutput = await executeAgentPipeline(activeEvaluator);
+        evidenceAnalysis = pipelineOutput.ev;
+        riskAnalysis = pipelineOutput.risk;
+        arbitratorRecommendation = pipelineOutput.review;
+      } catch (pipelineErr) {
+        if (pipelineErr instanceof AppError && pipelineErr.code === 'AI_FINANCIAL_BOUNDARY_VIOLATION') {
+          throw pipelineErr;
+        }
+        if (pipelineErr instanceof AppError && pipelineErr.code === 'INVALID_GEMINI_API_KEY') {
+          throw pipelineErr;
+        }
+
+        const isTransientAiFailure =
+          pipelineErr instanceof AppError &&
+          (pipelineErr.code === 'GEMINI_RATE_LIMITED' ||
+            pipelineErr.code === 'AI_EVALUATION_TIMEOUT' ||
+            pipelineErr.code === 'GEMINI_UNAVAILABLE' ||
+            pipelineErr.code === 'GEMINI_MODEL_ERROR' ||
+            pipelineErr.code === 'MALFORMED_AI_JSON' ||
+            pipelineErr.code === 'INVALID_AI_OUTPUT_SCHEMA');
+
+        if (this.enableFallback && activeEvaluator.mode === 'LIVE_GEMINI' && isTransientAiFailure) {
+          effectiveMode = 'DETERMINISTIC_FALLBACK';
+          isMock = true;
+          const fallbackEvaluator = new DeterministicMockEvaluator();
+          const fallbackOutput = await executeAgentPipeline(fallbackEvaluator);
+          evidenceAnalysis = fallbackOutput.ev;
+          riskAnalysis = fallbackOutput.risk;
+          arbitratorRecommendation = fallbackOutput.review;
+
+          const fallbackNotice = `[FALLBACK ACTIVATED: Live Gemini evaluation encountered ${pipelineErr.code}. Switched to DETERMINISTIC_FALLBACK.]`;
+          evidenceAnalysis.factualObservations.unshift(fallbackNotice);
+          arbitratorRecommendation.rationale = `${fallbackNotice} ${arbitratorRecommendation.rationale}`;
+
+          this.db.withTransaction(() => {
+            this.auditService.appendWithinTx({
+              actorId: actor.id,
+              actorRole: actor.role,
+              action: 'EVALUATION_FALLBACK_TRIGGERED',
+              entityType: 'EVALUATION',
+              entityId: evalId,
+              contractId: contract.id,
+              milestoneId: milestone.id,
+              previousState: 'EVALUATING',
+              newState: 'EVALUATING',
+              payload: {
+                submissionId: latestSubmission.id,
+                originalMode: 'LIVE_GEMINI',
+                fallbackMode: 'DETERMINISTIC_FALLBACK',
+                errorCode: pipelineErr.code,
+                errorMessage: pipelineErr.message,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          });
+        } else {
+          throw pipelineErr;
+        }
+      }
 
       if (provenanceMismatchBlocked) {
         const provenanceDetails =
@@ -1695,19 +1909,7 @@ export class EvaluationService {
         riskAnalysis.summary = `${riskAnalysis.summary} [${unavailMsg}]`;
       }
 
-      // Stage C: Review Synthesizer (Advisory Only)
-      const rawReviewSynthesis = await this.evaluatorProvider.runReviewSynthesizer({
-        milestone,
-        submission: latestSubmission,
-        evidenceAnalysis,
-        riskAssessment: riskAnalysis,
-      });
-      const arbitratorRecommendation = validateAndSanitizeReviewSynthesis(
-        rawReviewSynthesis,
-        riskAnalysis,
-        this.evaluatorProvider.modelName,
-        isMock
-      );
+// Stage C synthesized in executeAgentPipeline
 
       if (provenanceMismatchBlocked) {
         arbitratorRecommendation.recommendedOutcome = 'FAIL';
@@ -1768,7 +1970,7 @@ export class EvaluationService {
         milestoneId: milestone.id,
         submissionId: latestSubmission.id,
         status: 'COMPLETED',
-        evaluationMode: this.evaluatorProvider.mode,
+        evaluationMode: effectiveMode,
         isMockEvaluation: isMock,
         evidenceAnalysis,
         riskAnalysis,
@@ -1835,7 +2037,7 @@ export class EvaluationService {
           newState: 'SUBMITTED',
           payload: {
             submissionId: latestSubmission.id,
-            evaluationMode: this.evaluatorProvider.mode,
+            evaluationMode: effectiveMode,
             errorCode: safeErrorCode,
             errorMessage: safeErrorMessage,
           },

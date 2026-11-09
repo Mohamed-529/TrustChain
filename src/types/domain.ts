@@ -466,7 +466,7 @@ export interface EvaluationRun {
   milestoneId: string;
   submissionId: string;
   status: 'RUNNING' | 'COMPLETED' | 'FAILED';
-  evaluationMode: 'LIVE_GEMINI' | 'DETERMINISTIC_MOCK';
+  evaluationMode: 'LIVE_GEMINI' | 'DETERMINISTIC_MOCK' | 'DETERMINISTIC_FALLBACK';
   isMockEvaluation: boolean;
   evidenceAnalysis: EvidenceAnalysis;
   riskAnalysis: RiskAssessment;
