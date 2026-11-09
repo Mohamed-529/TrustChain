@@ -1,4 +1,5 @@
 import React from 'react';
+import { AiDecisionInspectorModal } from '../components/dashboard/AiDecisionInspectorModal.tsx';
 import type {
   MilestoneReviewDetails,
   PayPalTransactionRecord,
@@ -62,6 +63,7 @@ export function ReviewsPage({
   onOpenPassport,
   onOpenDisputePack,
 }: ReviewsPageProps) {
+  const [isInspectorOpen, setIsInspectorOpen] = React.useState(false);
   const latestSub = reviewDetails?.latestSubmission;
   const latestEval = reviewDetails?.latestEvaluation;
   const policy = reviewDetails?.policyCalculation;
@@ -215,10 +217,29 @@ export function ReviewsPage({
 
             {latestEval ? (
               <div className="space-y-2.5">
-                <div>
-                  <div className="text-zinc-500 text-[11px]">Arbitrator Recommendation:</div>
-                  <div className="text-amber-400 font-bold text-sm pt-0.5">
-                    {latestEval.arbitratorRecommendation.recommendedOutcome}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-zinc-500 text-[11px]">Arbitrator Recommendation:</div>
+                    <div className="text-amber-400 font-bold text-sm pt-0.5">
+                      {latestEval.arbitratorRecommendation.recommendedOutcome}
+                    </div>
+                  </div>
+                  <div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                        latestEval.evaluationMode === 'LIVE_GEMINI'
+                          ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700'
+                          : latestEval.evaluationMode === 'DETERMINISTIC_FALLBACK'
+                          ? 'bg-amber-950/90 text-amber-300 border-amber-700'
+                          : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                      }`}
+                    >
+                      {latestEval.evaluationMode === 'LIVE_GEMINI'
+                        ? '⚡ LIVE GEMINI'
+                        : latestEval.evaluationMode === 'DETERMINISTIC_FALLBACK'
+                        ? '🔄 FALLBACK'
+                        : '⚙️ MOCK'}
+                    </span>
                   </div>
                 </div>
 
@@ -258,7 +279,10 @@ export function ReviewsPage({
 
           <div className="pt-3 border-t border-zinc-800">
             <button
-              onClick={onOpenAiInspector}
+              onClick={() => {
+                setIsInspectorOpen(true);
+                onOpenAiInspector();
+              }}
               className="w-full px-3 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-amber-400 text-xs font-semibold transition"
             >
               Open AI Inspector →
@@ -442,6 +466,14 @@ export function ReviewsPage({
           </div>
         </div>
       </div>
+
+      <AiDecisionInspectorModal
+        isOpen={isInspectorOpen}
+        onClose={() => setIsInspectorOpen(false)}
+        reviewDetails={reviewDetails}
+        onOpenPassport={onOpenPassport}
+        onOpenDisputePack={onOpenDisputePack}
+      />
     </div>
   );
 }

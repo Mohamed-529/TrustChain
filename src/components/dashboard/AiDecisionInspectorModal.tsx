@@ -38,9 +38,26 @@ export function AiDecisionInspectorModal({
           <div className="flex items-center gap-2">
             <span className="text-xl">🤖</span>
             <div>
-              <h2 className="text-base font-bold text-white">
-                AI Decision Inspector — Multi-Agent Advisory Synthesis
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white">
+                  AI Decision Inspector — Multi-Agent Advisory Synthesis
+                </h2>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                    evalRun?.evaluationMode === 'LIVE_GEMINI'
+                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700'
+                      : evalRun?.evaluationMode === 'DETERMINISTIC_FALLBACK'
+                      ? 'bg-amber-950/90 text-amber-300 border-amber-700'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                  }`}
+                >
+                  {evalRun?.evaluationMode === 'LIVE_GEMINI'
+                    ? '⚡ LIVE GEMINI'
+                    : evalRun?.evaluationMode === 'DETERMINISTIC_FALLBACK'
+                    ? '🔄 DETERMINISTIC FALLBACK'
+                    : '⚙️ DETERMINISTIC MOCK'}
+                </span>
+              </div>
               <p className="text-xs text-slate-400">
                 Milestone: <span className="text-white font-mono">{milestone.title}</span> (
                 {milestone.id})
