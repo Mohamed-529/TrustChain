@@ -332,6 +332,7 @@ export class MilestoneProofClient {
     label: string | null;
     baselineCapturedAt: string;
     auditEntryHash: string;
+    baselineMilestoneCount: number;
     updatedMilestonesCount: number;
   }> {
     return this.request({

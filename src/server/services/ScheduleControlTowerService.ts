@@ -1110,8 +1110,12 @@ export class ScheduleControlTowerService {
     contractId: string,
     label = 'Approved Contract Baseline'
   ): {
+    status: string;
     contractId: string;
+    label: string | null;
+    baselineCapturedAt: string;
     baselineMilestoneCount: number;
+    updatedMilestonesCount: number;
     capturedAtIso: string;
     auditEntryHash: string;
   } {
@@ -1166,8 +1170,12 @@ export class ScheduleControlTowerService {
     });
 
     return {
+      status: 'CAPTURED',
       contractId,
+      label: label ?? null,
+      baselineCapturedAt: capturedAtIso,
       baselineMilestoneCount: milestones.length,
+      updatedMilestonesCount: milestones.length,
       capturedAtIso,
       auditEntryHash,
     };
