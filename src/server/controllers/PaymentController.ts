@@ -107,7 +107,8 @@ export class PaymentController {
     next: NextFunction
   ): Promise<void> => {
     try {
-      const result = await this.paypalService.handleWebhook(req.headers, req.body);
+      const payload = req.rawBody ?? req.body;
+      const result = await this.paypalService.handleWebhook(req.headers, payload);
       res.status(200).json(result);
     } catch (err) {
       next(err);

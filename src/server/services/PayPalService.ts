@@ -1335,11 +1335,23 @@ export class PayPalService {
     const certUrl = getHeader('paypal-cert-url').trim();
     const authAlgo = getHeader('paypal-auth-algo').trim();
 
-    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+    let bodyObj: Record<string, unknown>;
+    if (typeof rawBody === 'string') {
+      try {
+        const parsed = JSON.parse(rawBody);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('Not an object');
+        }
+        bodyObj = parsed as Record<string, unknown>;
+      } catch {
+        throw new AppError(400, 'INVALID_WEBHOOK_PAYLOAD', 'Webhook body must be a valid JSON object.');
+      }
+    } else if (rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)) {
+      bodyObj = rawBody as Record<string, unknown>;
+    } else {
       throw new AppError(400, 'INVALID_WEBHOOK_PAYLOAD', 'Webhook body must be a JSON object.');
     }
 
-    const bodyObj = rawBody as Record<string, unknown>;
     const eventId = String(bodyObj.id ?? '').trim();
     const eventType = String(bodyObj.event_type ?? '').trim();
     const resource =
@@ -1666,7 +1678,27 @@ export class PayPalService {
                 this.paymentRepo.update(matchedTx);
                 this.milestoneRepo.updatePaymentStatus(matchedTx.milestoneId, 'CAPTURED', 'SETTLED', nowIso);
                 reconciledStatus = 'RECONCILED_CAPTURED_SETTLED';
+              } else if (matchedTx.status === 'AUTHORIZED' || matchedTx.status === 'SIMULATED_AUTHORIZED') {
+                // An external capture occurred for an authorization hold that TrustChain never initiated capture for.
+                // Do NOT mark milestone SETTLED; quarantine as REQUIRES_RECONCILIATION.
+                reconciledStatus = 'UNSOLICITED_REMOTE_CAPTURE_FLAGGED';
+                matchedTx = {
+                  ...matchedTx,
+                  status: 'REQUIRES_RECONCILIATION',
+                  updatedAt: nowIso,
+                };
+                this.paymentRepo.update(matchedTx);
               }
+            } else if (
+              eventType === 'CHECKOUT.ORDER.APPROVED' &&
+              (matchedTx.status === 'ORDER_CREATED' || matchedTx.status === 'SIMULATED_ORDER_CREATED')
+            ) {
+              matchedTx = {
+                ...matchedTx,
+                updatedAt: nowIso,
+              };
+              this.paymentRepo.update(matchedTx);
+              reconciledStatus = 'RECONCILED_ORDER_APPROVED';
             } else if (
               eventType.startsWith('UNKNOWN') ||
               (!eventType.startsWith('PAYMENT.') && !eventType.startsWith('CHECKOUT.'))
