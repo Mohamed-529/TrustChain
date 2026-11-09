@@ -886,6 +886,648 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
+  /ready:
+    get:
+      operationId: getReadinessStatus
+      tags: [System]
+      summary: Deep operational readiness probe inspecting SQLite, schema version, and memory
+      security: []
+      responses:
+        '200':
+          description: Operational readiness status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Service unready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+
+  /contracts/{id}/audit/replay:
+    get:
+      operationId: replayContractAudit
+      tags: [Audit]
+      summary: Replay immutable audit trail to deterministically reconstruct contract state
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: maxSeq
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Reconstructed contract lifecycle state from cryptographic audit replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditReplayResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{id}/audit/verify:
+    get:
+      operationId: verifyContractAudit
+      tags: [Audit]
+      summary: Verify cryptographic SHA-256 hash chain for a specific contract
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Contract audit hash chain verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditChainVerificationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{id}/schedule/baseline:
+    post:
+      operationId: captureScheduleBaseline
+      tags: [Contracts]
+      summary: Freeze contract schedule baseline snapshot into hash-chained audit log
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaptureBaselineRequest'
+      responses:
+        '200':
+          description: Baseline frozen and cryptographically anchored into audit log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleBaselineResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{id}/schedule/impact:
+    get:
+      operationId: getScheduleDownstreamImpact
+      tags: [Contracts]
+      summary: Calculate downstream delay cascade impact using BFS dependency traversal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: delayedMilestoneId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: delayDays
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Downstream cascade analysis and contract breach impact
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleDownstreamImpactResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{id}/schedule/validate-dependencies:
+    post:
+      operationId: validateScheduleDependencies
+      tags: [Contracts]
+      summary: Validate dependency graph for circular dependencies using Kahn's algorithm
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateDependenciesRequest'
+      responses:
+        '200':
+          description: Dependency validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateDependenciesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/milestones/{milestoneId}/evidence-passport:
+    get:
+      operationId: getContractMilestoneEvidencePassport
+      tags: [Evidence]
+      summary: Retrieve cryptographic Evidence Passport for contract milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cryptographic Evidence Passport
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidencePassportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{milestoneId}/evidence-passport:
+    get:
+      operationId: getMilestoneEvidencePassport
+      tags: [Evidence]
+      summary: Retrieve cryptographic Evidence Passport directly by milestone ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cryptographic Evidence Passport
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidencePassportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/milestones/{milestoneId}/evidence-passport/runtime-validate:
+    post:
+      operationId: validateContractMilestoneRuntime
+      tags: [Evidence]
+      summary: Perform SSRF-guarded runtime preview validation of deployed application
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeValidateRequest'
+      responses:
+        '200':
+          description: Runtime validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeValidateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{milestoneId}/evidence-passport/runtime-validate:
+    post:
+      operationId: validateMilestoneRuntime
+      tags: [Evidence]
+      summary: Perform SSRF-guarded runtime preview validation directly by milestone ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeValidateRequest'
+      responses:
+        '200':
+          description: Runtime validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeValidateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/milestones/{milestoneId}/dispute-pack:
+    post:
+      operationId: generateDisputePack
+      tags: [Approvals]
+      summary: Generate tamper-evident Dispute Evidence Pack with two-stage non-circular digest anchoring
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateDisputePackRequest'
+      responses:
+        '200':
+          description: Dispute Evidence Pack generated and persisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputePackResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/dispute-packs/{packId}:
+    get:
+      operationId: getDisputePack
+      tags: [Approvals]
+      summary: Retrieve Dispute Evidence Pack by contract ID and pack ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: packId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dispute Evidence Pack details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputePackResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/dispute-packs/{packId}/verify:
+    get:
+      operationId: verifyDisputePack
+      tags: [Approvals]
+      summary: Cryptographically verify Dispute Evidence Pack digest and chronological integrity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: packId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dispute Evidence Pack verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputePackVerificationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/dispute-packs/{packId}/export:
+    get:
+      operationId: exportDisputePack
+      tags: [Approvals]
+      summary: Export portable sanitized JSON representation of Dispute Evidence Pack
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: packId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Portable sanitized dispute pack JSON export
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputePackExportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/review:
+    get:
+      operationId: getMilestoneReviewDetails
+      tags: [Approvals]
+      summary: Retrieve milestone review details, AI advisory summary, and policy recommendation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Milestone review details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDetailsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/review/approve:
+    post:
+      operationId: approveMilestoneReview
+      tags: [Approvals]
+      summary: Fiduciary human reviewer approval gate for milestone settlement
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecisionRequest'
+      responses:
+        '200':
+          description: Milestone approved by human reviewer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDecisionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/review/reject:
+    post:
+      operationId: rejectMilestoneReview
+      tags: [Approvals]
+      summary: Human reviewer rejection of milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecisionRequest'
+      responses:
+        '200':
+          description: Milestone rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDecisionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/review/request-changes:
+    post:
+      operationId: requestMilestoneReviewChanges
+      tags: [Approvals]
+      summary: Human reviewer change request on milestone deliverable
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecisionRequest'
+      responses:
+        '200':
+          description: Changes requested on milestone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDecisionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/paypal/order-details:
+    get:
+      operationId: getPayPalOrderDetails
+      tags: [Payments]
+      summary: Retrieve PayPal order details directly from PayPal Orders API v2
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: PayPal order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPalOrderDetailsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/paypal/reconcile:
+    get:
+      operationId: getPayPalReconciliation
+      tags: [Payments]
+      summary: Inspect payment reconciliation status between internal transaction and PayPal order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment reconciliation report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPalReconcileResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    post:
+      operationId: triggerPayPalReconciliation
+      tags: [Payments]
+      summary: Trigger authoritative payment reconciliation against PayPal Orders API v2
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authoritative payment reconciliation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayPalReconcileResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2494,4 +3136,320 @@ components:
             - ENTRY_HASH_MISMATCH
             - INVALID_PAYLOAD_JSON
         details:
+          type: string
+
+    ReadinessResponse:
+      type: object
+      required: [status, service, ready, uptimeSeconds, database, memory, timestamp]
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+        ready:
+          type: boolean
+        uptimeSeconds:
+          type: integer
+        database:
+          type: object
+          properties:
+            engine:
+              type: string
+            pingLatencyMs:
+              type: number
+            migrationVersion:
+              type: integer
+            healthy:
+              type: boolean
+        memory:
+          type: object
+          properties:
+            rssMb:
+              type: number
+            heapUsedMb:
+              type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    AuditReplayResponse:
+      type: object
+      required: [status, contractId, replayThroughSeq, totalEventsReplayed, chainIntegrityValid, reconstructedState]
+      properties:
+        status:
+          type: string
+        contractId:
+          type: string
+        replayThroughSeq:
+          type: integer
+        totalEventsReplayed:
+          type: integer
+        chainIntegrityValid:
+          type: boolean
+        reconstructedState:
+          type: object
+          additionalProperties: true
+
+    CaptureBaselineRequest:
+      type: object
+      properties:
+        label:
+          type: string
+
+    ScheduleBaselineResponse:
+      type: object
+      required: [status, contractId, baselineCapturedAt, auditEntryHash, updatedMilestonesCount]
+      properties:
+        status:
+          type: string
+        contractId:
+          type: string
+        label:
+          type: string
+          nullable: true
+        baselineCapturedAt:
+          type: string
+          format: date-time
+        auditEntryHash:
+          type: string
+        updatedMilestonesCount:
+          type: integer
+
+    ScheduleDownstreamImpactResponse:
+      type: object
+      required: [status, contractId, delayedMilestoneId, delayDays, directlyAffectedCount, downstreamAffectedCount, impactedMilestones, newContractEndDate, deadlineBreached]
+      properties:
+        status:
+          type: string
+        contractId:
+          type: string
+        delayedMilestoneId:
+          type: string
+        delayDays:
+          type: integer
+        directlyAffectedCount:
+          type: integer
+        downstreamAffectedCount:
+          type: integer
+        impactedMilestones:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        newContractEndDate:
+          type: string
+          format: date-time
+        deadlineBreached:
+          type: boolean
+
+    ValidateDependenciesRequest:
+      type: object
+      required: [dependencies]
+      properties:
+        dependencies:
+          type: array
+          items:
+            type: object
+            required: [fromMilestoneId, toMilestoneId]
+            properties:
+              fromMilestoneId:
+                type: string
+              toMilestoneId:
+                type: string
+              type:
+                type: integer
+              lagDays:
+                type: integer
+
+    ValidateDependenciesResponse:
+      type: object
+      required: [status, valid, cyclic, validatedCount]
+      properties:
+        status:
+          type: string
+        valid:
+          type: boolean
+        cyclic:
+          type: boolean
+        cyclePath:
+          type: array
+          items:
+            type: string
+        validatedCount:
+          type: integer
+
+    EvidencePassportResponse:
+      type: object
+      required: [passport]
+      properties:
+        passport:
+          type: object
+          additionalProperties: true
+        verificationSummary:
+          type: object
+          additionalProperties: true
+
+    RuntimeValidateRequest:
+      type: object
+      required: [previewUrl]
+      properties:
+        previewUrl:
+          type: string
+          format: uri
+        expectedStatus:
+          type: integer
+        timeoutMs:
+          type: integer
+
+    RuntimeValidateResponse:
+      type: object
+      required: [status, milestoneId, previewUrl, httpStatus, responseTimeMs, sslValid, finalIp, passed]
+      properties:
+        status:
+          type: string
+        milestoneId:
+          type: string
+        previewUrl:
+          type: string
+        httpStatus:
+          type: integer
+        responseTimeMs:
+          type: number
+        sslValid:
+          type: boolean
+        finalIp:
+          type: string
+        passed:
+          type: boolean
+
+    GenerateDisputePackRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+        notes:
+          type: string
+
+    DisputePackResponse:
+      type: object
+      required: [status, pack]
+      properties:
+        status:
+          type: string
+        pack:
+          type: object
+          additionalProperties: true
+
+    DisputePackVerificationResponse:
+      type: object
+      required: [status, valid, packId, contractId, milestoneId, packDigest, computedDigest, timelineItemsCount]
+      properties:
+        status:
+          type: string
+        valid:
+          type: boolean
+        packId:
+          type: string
+        contractId:
+          type: string
+        milestoneId:
+          type: string
+        packDigest:
+          type: string
+        computedDigest:
+          type: string
+        timelineItemsCount:
+          type: integer
+        mismatchField:
+          type: string
+
+    DisputePackExportResponse:
+      type: object
+      required: [status, export, exportedAt]
+      properties:
+        status:
+          type: string
+        export:
+          type: object
+          additionalProperties: true
+        exportedAt:
+          type: string
+          format: date-time
+
+    ReviewDetailsResponse:
+      type: object
+      required: [milestone, evaluations, policyCalculation]
+      properties:
+        milestone:
+          type: object
+          additionalProperties: true
+        evaluations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        policyCalculation:
+          type: object
+          additionalProperties: true
+        latestApproval:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    ReviewDecisionRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    ReviewDecisionResponse:
+      type: object
+      required: [status, approval, milestone]
+      properties:
+        status:
+          type: string
+        approval:
+          type: object
+          additionalProperties: true
+        milestone:
+          type: object
+          additionalProperties: true
+
+    PayPalOrderDetailsResponse:
+      type: object
+      required: [status, milestoneId, order]
+      properties:
+        status:
+          type: string
+        milestoneId:
+          type: string
+        order:
+          type: object
+          additionalProperties: true
+
+    PayPalReconcileResponse:
+      type: object
+      required: [status, milestoneId, paymentStatus, driftDetected, actionTaken]
+      properties:
+        status:
+          type: string
+        milestoneId:
+          type: string
+        transactionId:
+          type: string
+          nullable: true
+        paymentStatus:
+          type: string
+        paypalOrderId:
+          type: string
+          nullable: true
+        authorizationId:
+          type: string
+          nullable: true
+        captureId:
+          type: string
+          nullable: true
+        driftDetected:
+          type: boolean
+        actionTaken:
           type: string

@@ -233,6 +233,57 @@ export const OPENAPI_REQUEST_SCHEMAS: Record<string, OpenApiObjectSchema> = {
       submittedAtIso: { type: 'string', required: false, minLength: 10 },
     },
   },
+  CaptureBaselineRequest: {
+    schemaName: 'CaptureBaselineRequest',
+    additionalProperties: false,
+    properties: {
+      label: { type: 'string', required: false, maxLength: 200 },
+    },
+  },
+  ValidateDependenciesRequest: {
+    schemaName: 'ValidateDependenciesRequest',
+    additionalProperties: false,
+    properties: {
+      dependencies: {
+        type: 'array',
+        required: true,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            fromMilestoneId: { type: 'string', required: true, minLength: 1 },
+            toMilestoneId: { type: 'string', required: true, minLength: 1 },
+            type: { type: 'integer', required: false },
+            lagDays: { type: 'integer', required: false },
+          },
+        },
+      },
+    },
+  },
+  RuntimeValidateRequest: {
+    schemaName: 'RuntimeValidateRequest',
+    additionalProperties: false,
+    properties: {
+      previewUrl: { type: 'string', required: true, minLength: 8, pattern: /^https?:\/\/.+/ },
+      expectedStatus: { type: 'integer', required: false, minimum: 100, maximum: 599 },
+      timeoutMs: { type: 'integer', required: false, minimum: 100, maximum: 30000 },
+    },
+  },
+  GenerateDisputePackRequest: {
+    schemaName: 'GenerateDisputePackRequest',
+    additionalProperties: false,
+    properties: {
+      reason: { type: 'string', required: false, maxLength: 500 },
+      notes: { type: 'string', required: false, maxLength: 2000 },
+    },
+  },
+  ReviewDecisionRequest: {
+    schemaName: 'ReviewDecisionRequest',
+    additionalProperties: false,
+    properties: {
+      notes: { type: 'string', required: false, maxLength: 2000 },
+    },
+  },
 };
 
 export function validateValueAgainstRule(
