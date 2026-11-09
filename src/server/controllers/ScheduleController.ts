@@ -132,4 +132,77 @@ export class ScheduleController {
       next(err);
     }
   };
+
+  public captureBaseline = (
+    req: ApiRequest,
+    res: ApiResponse,
+    next: NextFunction
+  ): void => {
+    try {
+      if (!req.actor) {
+        throw new AppError(401, 'AUTH_TOKEN_REQUIRED', 'Authentication required.');
+      }
+      const body =
+        req.body && typeof req.body === 'object'
+          ? (req.body as Record<string, unknown>)
+          : {};
+      const label = typeof body.label === 'string' ? body.label : undefined;
+      const result = this.scheduleService.captureScheduleBaseline(
+        req.actor,
+        req.params.id,
+        label
+      );
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  public getDownstreamImpact = (
+    req: ApiRequest,
+    res: ApiResponse,
+    next: NextFunction
+  ): void => {
+    try {
+      const milestoneId = String(req.query.milestoneId || req.query.delayedMilestoneId || '');
+      const delayDays = parseInt(String(req.query.delayDays || '7'), 10);
+      if (!milestoneId) {
+        throw new AppError(400, 'PARAM_REQUIRED', 'Query parameter milestoneId is required.');
+      }
+      const result = this.scheduleService.analyzeDownstreamDelayImpact(
+        req.params.id,
+        milestoneId,
+        Number.isNaN(delayDays) ? 7 : delayDays
+      );
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  public validateDependencies = (
+    req: ApiRequest,
+    res: ApiResponse,
+    next: NextFunction
+  ): void => {
+    try {
+      const body =
+        req.body && typeof req.body === 'object'
+          ? (req.body as Record<string, unknown>)
+          : {};
+      const dependencies = Array.isArray(body.dependencies) ? body.dependencies : [];
+      const schedule = this.scheduleService.getContractSchedule(req.params.id);
+      const milestones = schedule.tasks.map((t) => ({
+        id: t.milestoneId,
+        title: t.name,
+      })) as any;
+      const result = this.scheduleService.validateDependencies(milestones, dependencies);
+      if (!result.valid) {
+        throw new AppError(400, 'CIRCULAR_DEPENDENCY_DETECTED', result.error || 'Invalid dependencies.');
+      }
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
 }

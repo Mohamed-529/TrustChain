@@ -230,6 +230,21 @@ export function createApiRouter(params: {
     authenticate,
     scheduleController.loadDemoScenario
   );
+  router.post(
+    '/contracts/:id/schedule/baseline',
+    authenticate,
+    scheduleController.captureBaseline
+  );
+  router.get(
+    '/contracts/:id/schedule/impact',
+    authenticate,
+    scheduleController.getDownstreamImpact
+  );
+  router.post(
+    '/contracts/:id/schedule/validate-dependencies',
+    authenticate,
+    scheduleController.validateDependencies
+  );
 
   // Protected Phase 3 Evidence Ingestion & Multi-Agent AI Evaluation endpoints
   router.post(

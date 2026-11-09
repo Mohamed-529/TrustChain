@@ -285,6 +285,31 @@ export class MilestoneRepository {
       )
       .run(startDateIso, deadlineIso, updatedAt, milestoneId);
   }
+
+  public updateDependencies(
+    milestoneId: string,
+    dependencyMilestoneIds: string[],
+    updatedAt: string
+  ): void {
+    this.rawDb
+      .prepare(
+        'UPDATE milestones SET dependency_milestone_ids_json = ?, updated_at = ? WHERE id = ?'
+      )
+      .run(JSON.stringify(dependencyMilestoneIds), updatedAt, milestoneId);
+  }
+
+  public updateBaselines(
+    milestoneId: string,
+    baselineStartIso: string,
+    baselineEndIso: string,
+    updatedAt: string
+  ): void {
+    this.rawDb
+      .prepare(
+        'UPDATE milestones SET baseline_start_iso = ?, baseline_end_iso = ?, updated_at = ? WHERE id = ?'
+      )
+      .run(baselineStartIso, baselineEndIso, updatedAt, milestoneId);
+  }
 }
 
 export class ContractRepository {

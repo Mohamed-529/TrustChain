@@ -386,6 +386,61 @@ export class ScheduleControlTowerService {
         });
       }
 
+      // Feature A: Decompose milestone into child execution tasks from acceptance criteria
+      const childTasks: ContractScheduleTask[] = (m.acceptanceCriteria || []).map((crit, cIdx) => {
+        const critResult = latestEval?.evidenceAnalysis.criteriaResults.find(
+          (cr) => cr.criterionId === crit.id
+        );
+        const critDone = isComplete || Boolean(critResult && critResult.status === 'VERIFIED');
+        return {
+          id: `${m.id}_task_${crit.id}`,
+          milestoneId: m.id,
+          parentId: m.id,
+          sequenceOrder: cIdx + 1,
+          name: `${crit.title} [${crit.requiredProofType}]`,
+          startDate,
+          endDate,
+          duration,
+          durationUnit: 'day',
+          percentDone: critDone ? 100 : 0,
+          baselineStartDate,
+          baselineEndDate,
+          baselines: [
+            {
+              startDate: baselineStartDate,
+              endDate: baselineEndDate,
+              label: 'Criteria Execution Baseline',
+            },
+          ],
+          actualSubmittedAt: latestSub?.submittedAt ?? null,
+          status: m.status,
+          paymentStatus: m.paymentStatus,
+          scheduleHealth: critDone ? 'COMPLETED' : scheduleHealth,
+          critical: criticalIds.has(m.id),
+          isOverdue,
+          isAtRisk,
+          isBlockedByDependency,
+          blockingMilestoneIds,
+          lateDays,
+          baselineVarianceDays,
+          agreedAmountCents: 0,
+          permittedAmountCents: null,
+          approvedAmountCents: null,
+          assignedDeveloperId: developer?.id ?? contract.developerId,
+          assignedDeveloperName: developer?.name ?? contract.developerId,
+          evidenceStatus: critDone ? 'VERIFIED' : 'NONE',
+          ciStatus: 'NONE',
+          evaluationStatus: 'NONE',
+          riskSeverity: 'NONE',
+          evidenceReferences: critResult?.evidenceCitations ?? [],
+          riskExplanation: crit.description,
+          acceptanceCriterionId: crit.id,
+          requiredProofType: crit.requiredProofType,
+          leaf: true,
+          expanded: false,
+        };
+      });
+
       return {
         id: m.id,
         milestoneId: m.id,
@@ -430,6 +485,9 @@ export class ScheduleControlTowerService {
         riskSeverity,
         evidenceReferences,
         riskExplanation: explanationParts.join(' '),
+        leaf: childTasks.length === 0,
+        expanded: childTasks.length > 0,
+        children: childTasks.length > 0 ? childTasks : undefined,
       };
     });
 
@@ -890,5 +948,228 @@ export class ScheduleControlTowerService {
       referenceTimeIso: '2026-11-23T12:00:00.000Z',
       recoveryDays: 7,
     });
+  }
+
+  /**
+   * Feature B: Validates dependencies against circular references, self-references, and missing task IDs.
+   */
+  public validateDependencies(
+    milestones: Milestone[],
+    dependencies: ContractScheduleDependency[]
+  ): { valid: boolean; circularChain?: string[]; error?: string } {
+    const validIds = new Set(milestones.map((m) => m.id));
+
+    // 1. Check for missing IDs or self-dependencies
+    for (const dep of dependencies) {
+      if (!validIds.has(dep.fromTask)) {
+        return {
+          valid: false,
+          error: `Dependency references non-existent predecessor '${dep.fromTask}'.`,
+        };
+      }
+      if (!validIds.has(dep.toTask)) {
+        return {
+          valid: false,
+          error: `Dependency references non-existent successor '${dep.toTask}'.`,
+        };
+      }
+      if (dep.fromTask === dep.toTask) {
+        return {
+          valid: false,
+          circularChain: [dep.fromTask, dep.toTask],
+          error: `Self-referential dependency detected on milestone '${dep.fromTask}'.`,
+        };
+      }
+    }
+
+    // 2. Cycle detection via Kahn's algorithm
+    const adj = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
+    for (const m of milestones) {
+      adj.set(m.id, []);
+      inDegree.set(m.id, 0);
+    }
+
+    for (const dep of dependencies) {
+      adj.get(dep.fromTask)!.push(dep.toTask);
+      inDegree.set(dep.toTask, (inDegree.get(dep.toTask) ?? 0) + 1);
+    }
+
+    const queue: string[] = [];
+    for (const [id, deg] of inDegree.entries()) {
+      if (deg === 0) queue.push(id);
+    }
+
+    let visitedCount = 0;
+    while (queue.length > 0) {
+      const u = queue.shift()!;
+      visitedCount++;
+      for (const v of adj.get(u)!) {
+        const nextDeg = inDegree.get(v)! - 1;
+        inDegree.set(v, nextDeg);
+        if (nextDeg === 0) queue.push(v);
+      }
+    }
+
+    if (visitedCount < milestones.length) {
+      const cyclicNodes = milestones
+        .filter((m) => (inDegree.get(m.id) ?? 0) > 0)
+        .map((m) => m.id);
+      return {
+        valid: false,
+        circularChain: cyclicNodes,
+        error: `Circular dependency detected involving milestones: [${cyclicNodes.join(' -> ')}].`,
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Feature B & E: Calculates cascading downstream delay impact across the Finish-to-Start graph.
+   */
+  public analyzeDownstreamDelayImpact(
+    contractId: string,
+    delayedMilestoneId: string,
+    delayDays: number
+  ): {
+    delayedMilestoneId: string;
+    delayDays: number;
+    impactedMilestones: {
+      milestoneId: string;
+      title: string;
+      originalDeadline: string;
+      newProjectedDeadline: string;
+      daysShifted: number;
+    }[];
+    criticalPathAffected: boolean;
+    contractDeadlineExceeded: boolean;
+  } {
+    const contract = this.contractRepo.findById(contractId);
+    if (!contract) {
+      throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${contractId}' not found.`);
+    }
+    const milestones = this.milestoneRepo.listByContractId(contractId);
+    const byId = new Map(milestones.map((m) => [m.id, m]));
+    const target = byId.get(delayedMilestoneId);
+    if (!target) {
+      throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${delayedMilestoneId}' not found.`);
+    }
+
+    const criticalIds = this.computeCriticalPathIds(milestones);
+    const criticalPathAffected = criticalIds.has(delayedMilestoneId);
+
+    // BFS to find all downstream dependent milestones
+    const impactedMilestones: {
+      milestoneId: string;
+      title: string;
+      originalDeadline: string;
+      newProjectedDeadline: string;
+      daysShifted: number;
+    }[] = [];
+
+    const queue: string[] = [delayedMilestoneId];
+    const visited = new Set<string>([delayedMilestoneId]);
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      for (const m of milestones) {
+        if (m.dependencyMilestoneIds.includes(currentId) && !visited.has(m.id)) {
+          visited.add(m.id);
+          queue.push(m.id);
+          impactedMilestones.push({
+            milestoneId: m.id,
+            title: m.title,
+            originalDeadline: m.deadlineIso,
+            newProjectedDeadline: addDaysIso(m.deadlineIso, delayDays),
+            daysShifted: delayDays,
+          });
+        }
+      }
+    }
+
+    const lastMilestone = milestones[milestones.length - 1];
+    const contractDeadlineExceeded = Boolean(
+      impactedMilestones.some((im) => im.milestoneId === lastMilestone?.id)
+    );
+
+    return {
+      delayedMilestoneId,
+      delayDays,
+      impactedMilestones,
+      criticalPathAffected,
+      contractDeadlineExceeded,
+    };
+  }
+
+  /**
+   * Feature C: Captures an authoritative baseline snapshot in SQLite and records it in the hash-chained audit log.
+   */
+  public captureScheduleBaseline(
+    actor: User,
+    contractId: string,
+    label = 'Approved Contract Baseline'
+  ): {
+    contractId: string;
+    baselineMilestoneCount: number;
+    capturedAtIso: string;
+    auditEntryHash: string;
+  } {
+    if (actor.role !== 'CLIENT' && actor.role !== 'REVIEWER') {
+      throw new AppError(
+        403,
+        'FORBIDDEN_BASELINE_CAPTURE',
+        `Role '${actor.role}' is not authorized to freeze or capture schedule baselines. Required: CLIENT or REVIEWER.`
+      );
+    }
+
+    const contract = this.contractRepo.findById(contractId);
+    if (!contract) {
+      throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${contractId}' not found.`);
+    }
+
+    const milestones = this.milestoneRepo.listByContractId(contractId);
+    const capturedAtIso = new Date().toISOString();
+
+    let auditEntryHash = '';
+
+    this.db.withTransaction(() => {
+      for (const m of milestones) {
+        const start = m.startDateIso ?? contract.createdAt;
+        const end = m.deadlineIso;
+        this.milestoneRepo.updateBaselines(m.id, m.baselineStartIso ?? start, m.baselineEndIso ?? end, capturedAtIso);
+      }
+
+      const auditEntry = this.auditService.appendWithinTx({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'SCHEDULE_BASELINE_SNAPSHOT',
+        entityType: 'CONTRACT',
+        entityId: contractId,
+        contractId,
+        previousState: null,
+        newState: 'BASELINE_FROZEN',
+        payload: {
+          label,
+          milestoneCount: milestones.length,
+          capturedAtIso,
+          baselineSnapshots: milestones.map((m) => ({
+            milestoneId: m.id,
+            sequenceOrder: m.sequenceOrder,
+            baselineStart: m.baselineStartIso ?? m.startDateIso ?? contract.createdAt,
+            baselineEnd: m.baselineEndIso ?? m.deadlineIso,
+          })),
+        },
+      });
+
+      auditEntryHash = auditEntry.entryHash;
+    });
+
+    return {
+      contractId,
+      baselineMilestoneCount: milestones.length,
+      capturedAtIso,
+      auditEntryHash,
+    };
   }
 }
