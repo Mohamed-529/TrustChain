@@ -698,6 +698,10 @@ function AppContent() {
             onReviewProposal={handleReviewScheduleProposal}
             scheduleDecisionReason={scheduleDecisionReason}
             setScheduleDecisionReason={setScheduleDecisionReason}
+            token={token}
+            onNavigateToReviews={() => navigate('/reviews')}
+            onNavigateToDisputes={() => navigate('/disputes')}
+            onNavigateToIntelligence={() => navigate('/intelligence')}
           />
         );
 

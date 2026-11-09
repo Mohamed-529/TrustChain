@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import { BryntumGantt } from '@bryntum/gantt-react';
 import type { GridColumnConfig } from '@bryntum/gantt';
 import type {
@@ -18,6 +18,7 @@ export interface BryntumGanttViewerProps {
   onRetry?: () => void;
   readOnly?: boolean;
   height?: number | string;
+  onSelectMilestone?: (milestoneId: string) => void;
 }
 
 /**
@@ -66,6 +67,84 @@ export const DEFAULT_BRYNTUM_TASKS: ContractScheduleTask[] = [
     riskSeverity: 'LOW',
     evidenceReferences: ['ev_commit_01', 'ev_pr_01'],
     riskExplanation: 'Verified against canonical repository commits and clean CI artifacts.',
+    children: [
+      {
+        id: 'ms_demo_01_task_crit_1',
+        milestoneId: 'ms_demo_01',
+        parentId: 'ms_demo_01',
+        sequenceOrder: 1,
+        name: 'Task 1.1: OpenAPI 3.0.3 Spec & Schemas [CODE_COMMIT]',
+        startDate: '2026-11-01',
+        endDate: '2026-11-04',
+        duration: 3,
+        durationUnit: 'day',
+        percentDone: 100,
+        baselineStartDate: '2026-11-01',
+        baselineEndDate: '2026-11-04',
+        baselines: [{ startDate: '2026-11-01', endDate: '2026-11-04', label: 'Spec Baseline' }],
+        actualSubmittedAt: '2026-11-03T18:00:00Z',
+        status: 'APPROVED',
+        paymentStatus: 'AUTHORIZED',
+        scheduleHealth: 'COMPLETED',
+        critical: true,
+        isOverdue: false,
+        isAtRisk: false,
+        isBlockedByDependency: false,
+        blockingMilestoneIds: [],
+        lateDays: 0,
+        baselineVarianceDays: 0,
+        agreedAmountCents: 0,
+        permittedAmountCents: null,
+        approvedAmountCents: null,
+        assignedDeveloperId: 'usr_dev_01',
+        assignedDeveloperName: 'Lead Engineer',
+        evidenceStatus: 'VERIFIED',
+        ciStatus: 'NONE',
+        evaluationStatus: 'NONE',
+        riskSeverity: 'NONE',
+        evidenceReferences: ['ev_commit_01'],
+        riskExplanation: 'API spec committed and verified.',
+        leaf: true,
+      },
+      {
+        id: 'ms_demo_01_task_crit_2',
+        milestoneId: 'ms_demo_01',
+        parentId: 'ms_demo_01',
+        sequenceOrder: 2,
+        name: 'Task 1.2: Architecture Documentation & Tests [CI_TESTS]',
+        startDate: '2026-11-04',
+        endDate: '2026-11-08',
+        duration: 4,
+        durationUnit: 'day',
+        percentDone: 100,
+        baselineStartDate: '2026-11-04',
+        baselineEndDate: '2026-11-08',
+        baselines: [{ startDate: '2026-11-04', endDate: '2026-11-08', label: 'CI Baseline' }],
+        actualSubmittedAt: '2026-11-07T12:00:00Z',
+        status: 'APPROVED',
+        paymentStatus: 'AUTHORIZED',
+        scheduleHealth: 'COMPLETED',
+        critical: true,
+        isOverdue: false,
+        isAtRisk: false,
+        isBlockedByDependency: false,
+        blockingMilestoneIds: [],
+        lateDays: 0,
+        baselineVarianceDays: 0,
+        agreedAmountCents: 0,
+        permittedAmountCents: null,
+        approvedAmountCents: null,
+        assignedDeveloperId: 'usr_dev_01',
+        assignedDeveloperName: 'Lead Engineer',
+        evidenceStatus: 'VERIFIED',
+        ciStatus: 'SUCCESS',
+        evaluationStatus: 'NONE',
+        riskSeverity: 'NONE',
+        evidenceReferences: ['ev_pr_01'],
+        riskExplanation: 'CI passed with 100% test assertions.',
+        leaf: true,
+      },
+    ],
   },
   {
     id: 'ms_demo_02',
@@ -108,6 +187,84 @@ export const DEFAULT_BRYNTUM_TASKS: ContractScheduleTask[] = [
     riskSeverity: 'HIGH',
     evidenceReferences: ['ev_commit_02', 'ev_ci_fail_02'],
     riskExplanation: 'Unit tests failed; late penalty applies; AI Recovery Proposal generated.',
+    children: [
+      {
+        id: 'ms_demo_02_task_crit_1',
+        milestoneId: 'ms_demo_02',
+        parentId: 'ms_demo_02',
+        sequenceOrder: 1,
+        name: 'Task 2.1: SQLite Hash Chain Service [CODE_COMMIT]',
+        startDate: '2026-11-08',
+        endDate: '2026-11-13',
+        duration: 5,
+        durationUnit: 'day',
+        percentDone: 80,
+        baselineStartDate: '2026-11-08',
+        baselineEndDate: '2026-11-13',
+        baselines: [{ startDate: '2026-11-08', endDate: '2026-11-13', label: 'DB Baseline' }],
+        actualSubmittedAt: '2026-11-13T10:00:00Z',
+        status: 'SUBMITTED',
+        paymentStatus: 'AUTHORIZED',
+        scheduleHealth: 'ON_TRACK',
+        critical: true,
+        isOverdue: false,
+        isAtRisk: false,
+        isBlockedByDependency: false,
+        blockingMilestoneIds: [],
+        lateDays: 0,
+        baselineVarianceDays: 0,
+        agreedAmountCents: 0,
+        permittedAmountCents: null,
+        approvedAmountCents: null,
+        assignedDeveloperId: 'usr_dev_01',
+        assignedDeveloperName: 'Lead Engineer',
+        evidenceStatus: 'SUBMITTED',
+        ciStatus: 'NONE',
+        evaluationStatus: 'NONE',
+        riskSeverity: 'NONE',
+        evidenceReferences: ['ev_commit_02'],
+        riskExplanation: 'Hash chain implemented.',
+        leaf: true,
+      },
+      {
+        id: 'ms_demo_02_task_crit_2',
+        milestoneId: 'ms_demo_02',
+        parentId: 'ms_demo_02',
+        sequenceOrder: 2,
+        name: 'Task 2.2: Settlement Policy & CI Integration [CI_TESTS]',
+        startDate: '2026-11-13',
+        endDate: '2026-11-18',
+        duration: 5,
+        durationUnit: 'day',
+        percentDone: 0,
+        baselineStartDate: '2026-11-13',
+        baselineEndDate: '2026-11-15',
+        baselines: [{ startDate: '2026-11-13', endDate: '2026-11-15', label: 'CI Baseline' }],
+        actualSubmittedAt: null,
+        status: 'SUBMITTED',
+        paymentStatus: 'AUTHORIZED',
+        scheduleHealth: 'OVERDUE',
+        critical: true,
+        isOverdue: true,
+        isAtRisk: true,
+        isBlockedByDependency: false,
+        blockingMilestoneIds: [],
+        lateDays: 3,
+        baselineVarianceDays: 3,
+        agreedAmountCents: 0,
+        permittedAmountCents: null,
+        approvedAmountCents: null,
+        assignedDeveloperId: 'usr_dev_01',
+        assignedDeveloperName: 'Lead Engineer',
+        evidenceStatus: 'CONTRADICTED_OR_INCOMPLETE',
+        ciStatus: 'FAILURE',
+        evaluationStatus: 'COMPLETED',
+        riskSeverity: 'HIGH',
+        evidenceReferences: ['ev_ci_fail_02'],
+        riskExplanation: 'CI pipeline failed.',
+        leaf: true,
+      },
+    ],
   },
   {
     id: 'ms_demo_03',
@@ -150,6 +307,84 @@ export const DEFAULT_BRYNTUM_TASKS: ContractScheduleTask[] = [
     riskSeverity: 'NONE',
     evidenceReferences: [],
     riskExplanation: 'Blocked by Finish-to-Start dependency on Milestone 2 completion.',
+    children: [
+      {
+        id: 'ms_demo_03_task_crit_1',
+        milestoneId: 'ms_demo_03',
+        parentId: 'ms_demo_03',
+        sequenceOrder: 1,
+        name: 'Task 3.1: Bryntum Timeline & Gantt Tree [CI_TESTS]',
+        startDate: '2026-11-18',
+        endDate: '2026-11-23',
+        duration: 5,
+        durationUnit: 'day',
+        percentDone: 0,
+        baselineStartDate: '2026-11-15',
+        baselineEndDate: '2026-11-20',
+        baselines: [{ startDate: '2026-11-15', endDate: '2026-11-20', label: 'Gantt Baseline' }],
+        actualSubmittedAt: null,
+        status: 'ACTIVE',
+        paymentStatus: 'NOT_READY',
+        scheduleHealth: 'BLOCKED_BY_DEPENDENCY',
+        critical: true,
+        isOverdue: false,
+        isAtRisk: true,
+        isBlockedByDependency: true,
+        blockingMilestoneIds: ['ms_demo_02'],
+        lateDays: 0,
+        baselineVarianceDays: 3,
+        agreedAmountCents: 0,
+        permittedAmountCents: null,
+        approvedAmountCents: null,
+        assignedDeveloperId: 'usr_dev_01',
+        assignedDeveloperName: 'Lead Engineer',
+        evidenceStatus: 'NONE',
+        ciStatus: 'NONE',
+        evaluationStatus: 'NONE',
+        riskSeverity: 'NONE',
+        evidenceReferences: [],
+        riskExplanation: 'Awaiting upstream completion.',
+        leaf: true,
+      },
+      {
+        id: 'ms_demo_03_task_crit_2',
+        milestoneId: 'ms_demo_03',
+        parentId: 'ms_demo_03',
+        sequenceOrder: 2,
+        name: 'Task 3.2: PayPal Orders API v2 & Webhook Engine [SECURITY_SCAN]',
+        startDate: '2026-11-23',
+        endDate: '2026-11-28',
+        duration: 5,
+        durationUnit: 'day',
+        percentDone: 0,
+        baselineStartDate: '2026-11-20',
+        baselineEndDate: '2026-11-25',
+        baselines: [{ startDate: '2026-11-20', endDate: '2026-11-25', label: 'PayPal Baseline' }],
+        actualSubmittedAt: null,
+        status: 'ACTIVE',
+        paymentStatus: 'NOT_READY',
+        scheduleHealth: 'BLOCKED_BY_DEPENDENCY',
+        critical: true,
+        isOverdue: false,
+        isAtRisk: true,
+        isBlockedByDependency: true,
+        blockingMilestoneIds: ['ms_demo_02'],
+        lateDays: 0,
+        baselineVarianceDays: 3,
+        agreedAmountCents: 0,
+        permittedAmountCents: null,
+        approvedAmountCents: null,
+        assignedDeveloperId: 'usr_dev_01',
+        assignedDeveloperName: 'Lead Engineer',
+        evidenceStatus: 'NONE',
+        ciStatus: 'NONE',
+        evaluationStatus: 'NONE',
+        riskSeverity: 'NONE',
+        evidenceReferences: [],
+        riskExplanation: 'Awaiting upstream completion.',
+        leaf: true,
+      },
+    ],
   },
 ];
 
@@ -197,7 +432,7 @@ function normalizeDateStr(isoStr: string | null | undefined): string {
 }
 
 const GANTT_COLUMNS: GridColumnConfig[] = [
-  { type: 'name', field: 'name', text: 'Milestone / Task', width: 260 },
+  { type: 'name', field: 'name', text: 'Milestone / Execution Task', width: 280 },
   { type: 'startdate', field: 'startDate', text: 'Start Date', width: 105 },
   { type: 'enddate', field: 'endDate', text: 'Deadline', width: 105 },
   { type: 'duration', field: 'duration', text: 'Duration', width: 80 },
@@ -205,10 +440,13 @@ const GANTT_COLUMNS: GridColumnConfig[] = [
   {
     text: 'Health',
     field: 'scheduleHealth',
-    width: 130,
+    width: 125,
     renderer: (renderData: any) => {
       const record = renderData?.record;
-      const h = record?.scheduleHealth ?? (record?.get ? record.get('scheduleHealth') : 'ON_TRACK') ?? 'ON_TRACK';
+      const h =
+        record?.scheduleHealth ??
+        (record?.get ? record.get('scheduleHealth') : 'ON_TRACK') ??
+        'ON_TRACK';
       const color =
         h === 'COMPLETED'
           ? '#10b981'
@@ -219,26 +457,61 @@ const GANTT_COLUMNS: GridColumnConfig[] = [
               : h === 'BLOCKED_BY_DEPENDENCY'
                 ? '#a855f7'
                 : '#3b82f6';
-      return `<span style="font-weight:700;color:${color};text-transform:uppercase;font-size:11px;">${h}</span>`;
+      return `<span style="font-weight:700;color:${color};text-transform:uppercase;font-size:10px;">${h}</span>`;
     },
   },
   {
-    text: 'Agreed Budget',
-    field: 'agreedAmountCents',
-    width: 110,
+    text: 'Payment Status',
+    field: 'paymentStatus',
+    width: 130,
     renderer: (renderData: any) => {
       const record = renderData?.record;
-      const cents = record?.agreedAmountCents ?? (record?.get ? record.get('agreedAmountCents') : 0);
+      const ps =
+        record?.paymentStatus ??
+        (record?.get ? record.get('paymentStatus') : 'NOT_READY') ??
+        'NOT_READY';
+      let color = '#94a3b8';
+      let bg = '#1e293b';
+      if (ps === 'CAPTURED' || ps === 'SIMULATED_CAPTURED') {
+        color = '#34d399';
+        bg = '#064e3b';
+      } else if (ps === 'AUTHORIZED' || ps === 'SIMULATED_AUTHORIZED') {
+        color = '#fbbf24';
+        bg = '#78350f';
+      } else if (ps === 'ORDER_CREATED') {
+        color = '#38bdf8';
+        bg = '#0c4a6e';
+      } else if (ps === 'REQUIRES_RECONCILIATION') {
+        color = '#f87171';
+        bg = '#7f1d1d';
+      }
+      return `<span style="font-family:monospace;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;color:${color};background:${bg};border:1px solid ${color}40;">${ps}</span>`;
+    },
+  },
+  {
+    text: 'Budget',
+    field: 'agreedAmountCents',
+    width: 100,
+    renderer: (renderData: any) => {
+      const record = renderData?.record;
+      const cents =
+        record?.agreedAmountCents ??
+        (record?.get ? record.get('agreedAmountCents') : 0) ??
+        0;
+      if (cents === 0) return `<span style="color:#64748b;font-family:monospace;">—</span>`;
       return `<span style="font-family:monospace;font-weight:600;color:#e2e8f0;">${formatUsdCents(cents)}</span>`;
     },
   },
   {
     text: 'Variance',
     field: 'baselineVarianceDays',
-    width: 85,
+    width: 80,
     renderer: (renderData: any) => {
       const record = renderData?.record;
-      const v = record?.baselineVarianceDays ?? (record?.get ? record.get('baselineVarianceDays') : 0) ?? 0;
+      const v =
+        record?.baselineVarianceDays ??
+        (record?.get ? record.get('baselineVarianceDays') : 0) ??
+        0;
       if (v > 0) {
         return `<span style="color:#f43f5e;font-weight:700;font-family:monospace;">+${v}d</span>`;
       }
@@ -260,8 +533,11 @@ export const BryntumGanttViewer: React.FC<BryntumGanttViewerProps> = ({
   error = null,
   onRetry,
   readOnly = true,
-  height = '480px',
+  height = '500px',
+  onSelectMilestone,
 }) => {
+  const ganttRef = useRef<any>(null);
+
   const activeTasks = useMemo(() => {
     const rawList =
       tasks && tasks.length > 0
@@ -270,7 +546,7 @@ export const BryntumGanttViewer: React.FC<BryntumGanttViewerProps> = ({
           ? schedule.tasks
           : DEFAULT_BRYNTUM_TASKS;
 
-    return rawList.map((t) => {
+    const mapTask = (t: ContractScheduleTask): any => {
       const startDate = normalizeDateStr(t.startDate);
       const endDate = normalizeDateStr(t.endDate);
       const baselineStart = normalizeDateStr(t.baselineStartDate ?? t.startDate);
@@ -301,13 +577,20 @@ export const BryntumGanttViewer: React.FC<BryntumGanttViewerProps> = ({
         durationUnit: 'day',
         percentDone: Math.min(100, Math.max(0, t.percentDone ?? 0)),
         baselines,
+        status: t.status,
+        paymentStatus: t.paymentStatus ?? 'NOT_READY',
         scheduleHealth: t.scheduleHealth ?? 'ON_TRACK',
         agreedAmountCents: t.agreedAmountCents ?? 0,
         baselineVarianceDays: t.baselineVarianceDays ?? 0,
         critical: Boolean(t.critical),
         cls: `health-${(t.scheduleHealth ?? 'on_track').toLowerCase()}`,
+        leaf: Boolean(t.leaf ?? (!t.children || t.children.length === 0)),
+        expanded: Boolean(t.expanded ?? (t.children && t.children.length > 0)),
+        children: t.children && t.children.length > 0 ? t.children.map(mapTask) : undefined,
       };
-    });
+    };
+
+    return rawList.map(mapTask);
   }, [schedule, tasks]);
 
   const activeDependencies = useMemo(() => {
@@ -327,6 +610,27 @@ export const BryntumGanttViewer: React.FC<BryntumGanttViewerProps> = ({
       lagUnit: 'day',
     }));
   }, [schedule, dependencies]);
+
+  // Zoom controls using Bryntum Gantt API
+  const handleZoomIn = useCallback(() => {
+    ganttRef.current?.instance?.zoomIn?.();
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    ganttRef.current?.instance?.zoomOut?.();
+  }, []);
+
+  const handleZoomToFit = useCallback(() => {
+    ganttRef.current?.instance?.zoomToFit?.();
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    ganttRef.current?.instance?.expandAll?.();
+  }, []);
+
+  const handleCollapseAll = useCallback(() => {
+    ganttRef.current?.instance?.collapseAll?.();
+  }, []);
 
   if (isLoading) {
     return (
@@ -380,23 +684,90 @@ export const BryntumGanttViewer: React.FC<BryntumGanttViewerProps> = ({
   }
 
   return (
-    <div
-      className="bryntum-gantt-root rounded-lg border border-slate-800 overflow-hidden bg-slate-950 shadow-2xl"
-      style={{ height, width: '100%' }}
-    >
-      <BryntumGantt
-        tasks={activeTasks}
-        dependencies={activeDependencies}
-        columns={GANTT_COLUMNS}
-        viewPreset="weekAndDayLetter"
-        barMargin={6}
-        rowHeight={44}
-        readOnly={readOnly}
-        baselinesFeature={{ disabled: false }}
-        dependenciesFeature={{ disabled: false }}
-        criticalPathsFeature={{ disabled: false }}
-        taskTooltipFeature={{ disabled: false }}
-      />
+    <div className="space-y-2">
+      {/* Gantt Viewport Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <span className="font-mono text-[11px] text-slate-300">Timeline Controls:</span>
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-[11px] font-mono transition"
+            title="Zoom In Timeline"
+          >
+            Zoom +
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-[11px] font-mono transition"
+            title="Zoom Out Timeline"
+          >
+            Zoom -
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomToFit}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-[11px] font-mono transition"
+            title="Fit Entire Timeline to Width"
+          >
+            Fit Timeline
+          </button>
+          <span className="text-slate-600">|</span>
+          <button
+            type="button"
+            onClick={handleExpandAll}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-[11px] font-mono transition"
+            title="Expand All Milestone Execution Tasks"
+          >
+            Expand Tasks
+          </button>
+          <button
+            type="button"
+            onClick={handleCollapseAll}
+            className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-[11px] font-mono transition"
+            title="Collapse Execution Tasks to Milestone Level"
+          >
+            Collapse
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Completed
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> At Risk
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> Overdue
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" /> Blocked
+          </span>
+        </div>
+      </div>
+
+      {/* Main Bryntum Gantt Root */}
+      <div
+        className="bryntum-gantt-root rounded-lg border border-slate-800 overflow-hidden bg-slate-950 shadow-2xl"
+        style={{ height, width: '100%' }}
+      >
+        <BryntumGantt
+          ref={ganttRef}
+          tasks={activeTasks}
+          dependencies={activeDependencies}
+          columns={GANTT_COLUMNS}
+          viewPreset="weekAndDayLetter"
+          barMargin={6}
+          rowHeight={42}
+          readOnly={readOnly}
+          baselinesFeature={{ disabled: false }}
+          dependenciesFeature={{ disabled: false }}
+          criticalPathsFeature={{ disabled: false }}
+          taskTooltipFeature={{ disabled: false }}
+        />
+      </div>
     </div>
   );
 };
