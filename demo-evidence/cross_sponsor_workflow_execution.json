@@ -1,0 +1,73 @@
+{
+  "startedAt": "2026-11-09T09:46:45.168Z",
+  "steps": [
+    {
+      "step": 1,
+      "name": "Client Authentication",
+      "role": "CLIENT",
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 2,
+      "name": "Bryntum Schedule Inspection",
+      "taskCount": 2,
+      "criticalPathTasks": 2,
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 3,
+      "name": "Bryntum Baseline Snapshot Freeze",
+      "auditHash": "8ae5ae2bb732e2a4a1f6a93197823f4b61db3587caa6e4f213f61039b04ac820",
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 4,
+      "name": "Evidence Submission & Provenance Ingestion",
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 5,
+      "name": "Provenance Cryptographic Verification",
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 6,
+      "name": "AI Advisory Multi-Agent Evaluation",
+      "recommendation": "RECOMMEND_APPROVAL",
+      "policyPermittedCents": 250000,
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 7,
+      "name": "AG Grid Ledger Data Synchronization",
+      "milestoneStatus": "PENDING_REVIEW",
+      "riskSeverity": "NONE",
+      "evidenceType": "CI_TESTS",
+      "submittedAtIso": "2026-11-08T15:06:44.955Z",
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 8,
+      "name": "Explicit Human Review Approval Gate",
+      "decision": "APPROVE",
+      "approvedAmountCents": 250000,
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 9,
+      "name": "PayPal Sandbox Authorization & Settlement Capture",
+      "paymentStatus": "CAPTURED",
+      "status": "VERIFIED_IN_BROWSER"
+    },
+    {
+      "step": 10,
+      "name": "Tamper-Evident Artifacts & Audit Replay Hash Chain",
+      "auditChainValid": true,
+      "status": "VERIFIED_IN_BROWSER"
+    }
+  ],
+  "paypalRemoteState": null,
+  "geminiStatus": "MOCKED_HEURISTIC_FALLBACK (No GEMINI_API_KEY provided)",
+  "finalVerdict": "SUCCESS",
+  "completedAt": "2026-11-09T09:46:45.609Z"
+}

@@ -1,0 +1,100 @@
+{
+  "timestamp": "2026-11-09T09:45:06.506Z",
+  "routesChecked": {
+    "/developers": {
+      "title": "MilestoneProof AI - Evidence-to-Settlement Orchestrator",
+      "heading": "Developer Ecosystem & API Control Tower",
+      "textSnippet": "TC\nTrustChain\nFINANCIAL AI\n✦\nOverview\n▦\nDashboard\n⚡\nAG Grid\nv36\n◷\nTimeline\nGantt\n◈\nReview & Pay\nPayPal\n🛡\nPassport\n⚖\nDisputes\n⚡\nAPI & SDK\nAPIMatic\n⚙\nSettings\n✨\nTour\nClient\nDeveloper\nReviewer\nTrustChain\n/\n⚡ API & SDK\nRole: REVIEWER\n•\nActive User: Sophia Sterling (Fiduciary Controller)\nAuthenticated as Sophia Sterling (Fiduciary Controller) (REVIEWER)\nESC to dismiss\n⚡\nOpenAPI 3.0.3 Specification\nAPIMatic CodeGen Ready\n54 Operations\nDeveloper Ecosystem & API Control Tower\n\nStandardized, type-safe A",
+      "openApiOpsCount": 241,
+      "hasParityBadge": true
+    },
+    "/timeline": {
+      "heading": "Intelligent Contract Execution Timeline",
+      "hasGanttCanvas": true,
+      "taskRowsCount": 12,
+      "hasMilestoneSeed1": false,
+      "hasBaselineBadge": true
+    },
+    "/intelligence": {
+      "heading": "Milestone Intelligence Control Room",
+      "gridRowsCount": 2,
+      "hasNlpInput": true,
+      "hasEvidenceTypeCol": false
+    },
+    "/ledger": {
+      "heading": "Milestone Intelligence Control Room",
+      "gridRowsCount": 2
+    },
+    "/reviews": {
+      "heading": "Milestone Review & Settlement Workbench",
+      "hasApproveBtn": false,
+      "hasPayPalSection": true,
+      "hasPolicyCalculation": false
+    },
+    "/trust": {
+      "heading": "Cryptographic Evidence Passport & Audit Replay",
+      "hasPassportData": true
+    },
+    "/disputes": {
+      "heading": "Dispute Evidence Pack & Arbitration Suite",
+      "hasDisputePack": true
+    },
+    "/dashboard": {
+      "heading": "Executive Dashboard",
+      "hasMetrics": false
+    }
+  },
+  "consoleErrors": [
+    "AG Grid: error #239 Visit https://www.ag-grid.com/react-data-grid/errors/239?_version_=36.3.0 \n  Alternatively register the ValidationModule to see the full message in the console.",
+    "AG Grid: error #239 Visit https://www.ag-grid.com/react-data-grid/errors/239?_version_=36.3.0 \n  Alternatively register the ValidationModule to see the full message in the console."
+  ],
+  "networkFailures": [],
+  "screenshots": [
+    {
+      "filename": "01_developers_apimatic_portal.png",
+      "label": "APIMatic Developer Portal & Live OpenAPI 3.0.3 Spec",
+      "bytes": 267888
+    },
+    {
+      "filename": "02_timeline_bryntum_gantt.png",
+      "label": "Bryntum Gantt Contract Schedule Control Tower & Critical Path",
+      "bytes": 189340
+    },
+    {
+      "filename": "03_intelligence_ag_grid_cockpit.png",
+      "label": "AG Grid v36 Financial Decision Intelligence Ledger",
+      "bytes": 150712
+    },
+    {
+      "filename": "04_intelligence_nlp_date_filter.png",
+      "label": "AG Grid Natural-Language Date Filter Applied (Calendar Week)",
+      "bytes": 147604
+    },
+    {
+      "filename": "05_ledger_financial_decisions.png",
+      "label": "Direct /ledger Route Mounting AG Grid Financial Decision Intelligence",
+      "bytes": 151488
+    },
+    {
+      "filename": "06_reviews_human_approval_workbench.png",
+      "label": "Human Review Approval Gate & PayPal Workbench",
+      "bytes": 217468
+    },
+    {
+      "filename": "07_trust_evidence_passport.png",
+      "label": "Evidence Passport Cryptographic Verification & SLSA Provenance",
+      "bytes": 165300
+    },
+    {
+      "filename": "08_disputes_evidence_pack.png",
+      "label": "Dispute Evidence Pack & Tamper-Evident Chronological Trail",
+      "bytes": 119444
+    },
+    {
+      "filename": "09_dashboard_executive_overview.png",
+      "label": "Executive Dashboard & Portfolio Intelligence",
+      "bytes": 163140
+    }
+  ],
+  "workflowSteps": {}
+}
