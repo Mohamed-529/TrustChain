@@ -107,10 +107,14 @@ export class PaymentController {
     next: NextFunction
   ): Promise<void> => {
     try {
+      const transmissionId = req.headers['paypal-transmission-id'];
+      console.log(`[PayPal Webhook Inbound] Received POST /api/v1/webhooks/paypal (transmission-id: ${transmissionId})`);
       const payload = req.rawBody ?? req.body;
       const result = await this.paypalService.handleWebhook(req.headers, payload);
+      console.log(`[PayPal Webhook Result] Event ${result.eventId} processed: status=${result.status}, verified=${result.verified}`);
       res.status(200).json(result);
     } catch (err) {
+      console.error(`[PayPal Webhook Error]`, err instanceof Error ? err.message : String(err));
       next(err);
     }
   };
