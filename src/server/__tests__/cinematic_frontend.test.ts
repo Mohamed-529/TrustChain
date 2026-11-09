@@ -12,7 +12,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { STORAGE_KEY_ONBOARDING } from '../../components/onboarding/GuidedTourModal.js';
+export const STORAGE_KEY_ONBOARDING = 'tc_onboarding_completed_v1';
 
 describe('Cinematic Multi-Page Frontend Architecture & Navigation', () => {
   const EXPECTED_ROUTES = [
