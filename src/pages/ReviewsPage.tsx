@@ -67,6 +67,16 @@ export function ReviewsPage({
   const policy = reviewDetails?.policyCalculation;
   const latestTx = paypalTransactions[0] ?? null;
 
+  const latestApproval = reviewDetails?.approvals?.[0] ?? null;
+  const isApprovedByHuman =
+    reviewDetails?.milestone.status === 'APPROVED' &&
+    latestApproval?.decision === 'APPROVE';
+
+  const rawLinks = Array.isArray(latestTx?.rawPaypalResponse?.links)
+    ? (latestTx?.rawPaypalResponse?.links as Array<{ rel: string; href: string }>)
+    : null;
+  const approveLink = rawLinks?.find((l) => l.rel === 'approve' || l.rel === 'payer-action')?.href;
+
   return (
     <div className="space-y-6 font-sans">
       {/* 1-Line Clean Header */}
@@ -365,11 +375,32 @@ export function ReviewsPage({
               </div>
               {latestTx && (
                 <div className="space-y-0.5 text-zinc-400 text-[10px]">
-                  <div>Auth ID: {latestTx.paypalAuthorizationId ?? '—'}</div>
-                  <div>Capture ID: {latestTx.paypalCaptureId ?? '—'}</div>
+                  {latestTx.paypalOrderId && <div>Order: <span className="font-mono text-zinc-200">{latestTx.paypalOrderId}</span></div>}
+                  <div>Auth ID: <span className="font-mono text-zinc-200">{latestTx.paypalAuthorizationId ?? '—'}</span></div>
+                  <div>Capture ID: <span className="font-mono text-zinc-200">{latestTx.paypalCaptureId ?? '—'}</span></div>
                 </div>
               )}
             </div>
+
+            {/* Buyer Approval Action Card */}
+            {approveLink && (latestTx?.status === 'ORDER_CREATED' || latestTx?.status === 'SIMULATED_ORDER_CREATED') && (
+              <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/40 space-y-2">
+                <div className="text-[10px] text-amber-300 font-bold flex items-center gap-1">
+                  <span>👉</span> <span>Action: Buyer Sandbox Approval</span>
+                </div>
+                <p className="text-[10px] text-zinc-400 font-sans leading-tight">
+                  PayPal Order created. Open Sandbox checkout to authenticate and approve the hold.
+                </p>
+                <a
+                  href={approveLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center w-full px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow transition text-center"
+                >
+                  Open PayPal Checkout ↗
+                </a>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 pt-3 border-t border-zinc-800">
@@ -387,13 +418,20 @@ export function ReviewsPage({
             >
               2. Authorize Hold (29 Days)
             </button>
-            <button
-              disabled={loading}
-              onClick={() => void onPayPalAction('capture')}
-              className="w-full px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-bold transition disabled:opacity-50"
-            >
-              3. Capture Settlement
-            </button>
+            <div>
+              <button
+                disabled={loading || !isApprovedByHuman || (latestTx?.status !== 'AUTHORIZED' && latestTx?.status !== 'SIMULATED_AUTHORIZED')}
+                onClick={() => void onPayPalAction('capture')}
+                className="w-full px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-bold transition disabled:opacity-40"
+              >
+                3. Capture Settlement
+              </button>
+              {!isApprovedByHuman && (
+                <div className="text-[9px] text-zinc-500 text-center mt-1">
+                  🔒 Fiduciary gate: human review approval required in Column 3
+                </div>
+              )}
+            </div>
             <button
               disabled={loading}
               onClick={() => void onPayPalReconcile()}

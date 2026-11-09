@@ -197,6 +197,35 @@ function AppContent() {
     }
   }, [token, selectedMilestoneId, selectedContractId, refreshAllData]);
 
+  // Detect PayPal redirect return parameters (?paypal_return=approved)
+  useEffect(() => {
+    try {
+      const search = window.location.search;
+      if (!search) return;
+      const params = new URLSearchParams(search);
+      const paypalReturn = params.get('paypal_return');
+      const milestoneId = params.get('milestone_id');
+      if (paypalReturn === 'approved') {
+        setStatusBanner({
+          type: 'success',
+          message: `PayPal Sandbox buyer approval confirmed for milestone ${milestoneId ?? ''}! Step 1 complete. Proceed to Step 2 (Authorize Hold).`,
+        });
+        if (milestoneId) {
+          setSelectedMilestoneId(milestoneId);
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (paypalReturn === 'cancelled') {
+        setStatusBanner({
+          type: 'info',
+          message: 'PayPal Sandbox checkout was cancelled by the buyer.',
+        });
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    } catch {
+      // browser environment safe
+    }
+  }, []);
+
   // 4. Action Handlers
   const handleLoadControlTowerDemoScenario = async () => {
     if (!token) return;
@@ -566,9 +595,18 @@ function AppContent() {
       if (!res.ok) {
         throw new Error(data.error?.message ?? `PayPal ${step} failed`);
       }
+      const rawLinks = Array.isArray(data.transaction?.rawPaypalResponse?.links)
+        ? (data.transaction.rawPaypalResponse.links as Array<{ rel: string; href: string }>)
+        : null;
+      const approveLink = rawLinks?.find((l) => l.rel === 'approve' || l.rel === 'payer-action')?.href;
+
+      let successMsg = `PayPal Orders API v2 (${step.toUpperCase()}) succeeded: status=${data.transaction.status} [PayPal-Request-Id: ${requestId}]`;
+      if (step === 'order' && approveLink) {
+        successMsg += ' — Action: Complete buyer checkout approval before authorizing hold.';
+      }
       setStatusBanner({
         type: 'success',
-        message: `PayPal Orders API v2 (${step.toUpperCase()}) succeeded: status=${data.transaction.status} [PayPal-Request-Id: ${requestId}]`,
+        message: successMsg,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
