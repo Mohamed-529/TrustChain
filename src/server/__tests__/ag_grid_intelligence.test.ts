@@ -421,4 +421,78 @@ test('Prompt 6 — AG Grid Intelligence Control Room & Frontend Engineering', as
     assert.ok(source.includes('pendingReviewMilestones'), 'Must count pending reviews');
     assert.ok(source.includes('onSelectQuickFilter'), 'Must support interactive KPI card filtering');
   });
+
+  // --------------------------------------------------------------------------
+  // TEST 14: Evidence Intelligence Fields: submittedAtIso and evidenceType
+  // --------------------------------------------------------------------------
+  await t.test('14. Evidence intelligence fields populated in financial decision ledger', () => {
+    const ledger = humanReviewService.getFinancialDecisionLedger();
+    assert.ok(ledger.length > 0, 'Ledger should have seed rows');
+    for (const row of ledger) {
+      assert.ok('submittedAtIso' in row, 'Row must include submittedAtIso property');
+      assert.ok('evidenceType' in row, 'Row must include evidenceType property');
+      if (row.evidenceType) {
+        assert.ok(
+          ['CODE_COMMIT', 'PULL_REQUEST', 'CI_TESTS', 'SECURITY_SCAN', 'NONE'].includes(row.evidenceType),
+          `evidenceType must be valid enum, found: ${row.evidenceType}`
+        );
+      }
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 15: Sponsor Evaluation Natural-Language Queries
+  // --------------------------------------------------------------------------
+  await t.test('15. Sponsor evaluation queries parse to deterministic safe instructions', () => {
+    // 1. Evidence requiring human review
+    const p1 = interpretNaturalLanguageQuery('Show evidence requiring human review');
+    assert.ok(p1.instructions.length >= 1, 'Must generate instructions for human review query');
+    assert.equal(p1.instructions[0].column, 'stateMachineStatus');
+    assert.equal(p1.instructions[0].operator, 'IN');
+
+    // 2. High-risk milestone submissions
+    const p2 = interpretNaturalLanguageQuery('Find high risk milestone submissions');
+    assert.ok(p2.instructions.length >= 1, 'Must generate instructions for high risk query');
+    assert.equal(p2.instructions[0].column, 'riskSeverity');
+    assert.equal(p2.instructions[0].value, 'HIGH');
+
+    // 3. Evidence submitted this week
+    const p3 = interpretNaturalLanguageQuery('Show evidence submitted this week');
+    assert.ok(p3.instructions.length >= 1, 'Must generate instructions for recent evidence query');
+    assert.equal(p3.instructions[0].column, 'evidenceType');
+    assert.equal(p3.instructions[0].operator, 'IN');
+
+    // 4. Failed verification results
+    const p4 = interpretNaturalLanguageQuery('Show failed verification results');
+    assert.ok(p4.instructions.length >= 1, 'Must generate instructions for failed verification query');
+    assert.equal(p4.instructions[0].column, 'provenanceStatus');
+    assert.equal(p4.instructions[0].operator, 'IN');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 16: Grid Operational Columns & CWE-1236 Protected Export Keys
+  // --------------------------------------------------------------------------
+  await t.test('16. Operational columns and CSV export keys include new intelligence fields', () => {
+    const gridSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src', 'components', 'ag-grid', 'MilestoneIntelligenceGrid.tsx'),
+      'utf8'
+    );
+
+    // Verify operational columns in ColDef
+    assert.ok(gridSource.includes("field: 'developerId'"), 'ColDefs must include developerId');
+    assert.ok(gridSource.includes("field: 'evidenceType'"), 'ColDefs must include evidenceType');
+    assert.ok(gridSource.includes("field: 'submittedAtIso'"), 'ColDefs must include submittedAtIso');
+    assert.ok(gridSource.includes("field: 'provenanceStatus'"), 'ColDefs must include provenanceStatus');
+
+    // Verify Quick Filter and Auto-fit
+    assert.ok(gridSource.includes('quickFilterText'), 'Grid must support live quickFilterText');
+    assert.ok(gridSource.includes('autoSizeAllColumns'), 'Grid must support auto-fitting columns');
+    assert.ok(gridSource.includes('pagination={true}'), 'Grid must configure pagination');
+
+    // Verify CSV export includes new keys
+    assert.ok(gridSource.includes("'developerId'"), 'CSV export must include developerId');
+    assert.ok(gridSource.includes("'evidenceType'"), 'CSV export must include evidenceType');
+    assert.ok(gridSource.includes("'submittedAtIso'"), 'CSV export must include submittedAtIso');
+    assert.ok(gridSource.includes("'provenanceStatus'"), 'CSV export must include provenanceStatus');
+  });
 });
