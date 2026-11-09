@@ -23,6 +23,7 @@ export function NaturalLanguageFilterBar({
 }: NaturalLanguageFilterBarProps) {
   const [queryInput, setQueryInput] = useState<string>('');
   const [activePlan, setActivePlan] = useState<InterpretedQueryPlan | null>(null);
+  const [activeInstructions, setActiveInstructions] = useState<GridFilterInstruction[]>([]);
   const [showPlanModal, setShowPlanModal] = useState<boolean>(false);
   const [appliedBadge, setAppliedBadge] = useState<string | null>(null);
 
@@ -34,13 +35,12 @@ export function NaturalLanguageFilterBar({
     setShowPlanModal(true);
   };
 
-  const handleApplyPlan = () => {
-    if (!activePlan || !gridApi) return;
+  const applyInstructionsToGrid = (instructions: GridFilterInstruction[], originalQuery = '') => {
+    if (!gridApi) return;
 
-    // Apply strict whitelisted filters
     const filterModel: Record<string, any> = {};
 
-    for (const inst of activePlan.instructions) {
+    for (const inst of instructions) {
       if (inst.operator === 'EQUALS') {
         filterModel[inst.column] = {
           filterType: 'text',
@@ -59,25 +59,64 @@ export function NaturalLanguageFilterBar({
           type: 'lessThan',
           filter: Number(inst.value),
         };
+      } else if (inst.operator === 'IN') {
+        const values = String(inst.value)
+          .split(',')
+          .map((v) => v.trim());
+        if (values.length === 1) {
+          filterModel[inst.column] = {
+            filterType: 'text',
+            type: 'equals',
+            filter: values[0],
+          };
+        } else {
+          filterModel[inst.column] = {
+            filterType: 'text',
+            operator: 'OR',
+            conditions: values.map((val) => ({
+              filterType: 'text',
+              type: 'equals',
+              filter: val,
+            })),
+          };
+        }
       }
     }
 
     gridApi.setFilterModel(filterModel);
     gridApi.onFilterChanged();
+    setActiveInstructions(instructions);
 
-    setAppliedBadge(
-      activePlan.instructions.length > 0
-        ? `${activePlan.instructions.length} filter(s) active: "${activePlan.originalQuery}"`
-        : `Searched "${activePlan.originalQuery}"`
-    );
+    if (instructions.length > 0) {
+      setAppliedBadge(
+        originalQuery
+          ? `${instructions.length} filter(s) active: "${originalQuery}"`
+          : `${instructions.length} filter rule(s) active`
+      );
+    } else {
+      setAppliedBadge(null);
+    }
+  };
 
+  const handleApplyPlan = () => {
+    if (!activePlan || !gridApi) return;
+    applyInstructionsToGrid(activePlan.instructions, activePlan.originalQuery);
     setShowPlanModal(false);
     onFilterApplied?.(activePlan);
+  };
+
+  const handleRemoveInstruction = (columnName: string) => {
+    const updated = activeInstructions.filter((inst) => inst.column !== columnName);
+    applyInstructionsToGrid(updated);
+    if (updated.length === 0) {
+      onResetFilters?.();
+    }
   };
 
   const handleClear = () => {
     setQueryInput('');
     setActivePlan(null);
+    setActiveInstructions([]);
     setAppliedBadge(null);
     if (gridApi) {
       gridApi.setFilterModel(null);
@@ -88,11 +127,12 @@ export function NaturalLanguageFilterBar({
   };
 
   const presets = [
-    'Show HIGH risk milestones',
+    'Show evidence requiring human review',
+    'Find high-risk milestone submissions',
+    'Show evidence submitted this week',
+    'Show failed verification results',
     'Show milestones with budget > $2,000',
-    'Show approved milestones',
     'Show unverified evidence (<100%)',
-    'Show AUTHORIZED escrow holds',
   ];
 
   return (
@@ -103,18 +143,18 @@ export function NaturalLanguageFilterBar({
             type="text"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
-            placeholder="Natural language investigation query (e.g., 'Show high risk milestones with budget > $1,000')..."
+            placeholder="Natural language investigation query (e.g., 'Show evidence requiring human review', 'Find high-risk milestone submissions')..."
             className="w-full px-3 py-1.5 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-sans"
           />
         </div>
         <button
           type="submit"
           disabled={!queryInput.trim()}
-          className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white flex items-center gap-1.5"
+          className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white flex items-center gap-1.5 transition"
         >
           <span>✨</span> Interpret Query
         </button>
-        {(appliedBadge || queryInput) && (
+        {(appliedBadge || queryInput || activeInstructions.length > 0) && (
           <button
             type="button"
             onClick={handleClear}
@@ -145,17 +185,34 @@ export function NaturalLanguageFilterBar({
         ))}
       </div>
 
-      {appliedBadge && (
-        <div className="flex items-center justify-between px-3 py-1.5 rounded bg-indigo-950/60 border border-indigo-800 text-indigo-200 text-xs font-mono">
-          <div className="flex items-center gap-2">
-            <span className="text-emerald-400">✓</span>
-            <span>{appliedBadge}</span>
-          </div>
+      {/* Active Filter Pills with 1-Click Removal */}
+      {activeInstructions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <span className="text-[10px] font-mono text-slate-400">Active Rules:</span>
+          {activeInstructions.map((inst) => (
+            <span
+              key={inst.column}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-700/60 text-indigo-200 text-[11px] font-mono shadow-sm"
+            >
+              <span className="font-semibold text-indigo-300">{inst.columnLabel}:</span>
+              <span>{inst.operator === 'IN' ? `[${inst.value}]` : String(inst.value)}</span>
+              <button
+                type="button"
+                onClick={() => handleRemoveInstruction(inst.column)}
+                className="text-slate-400 hover:text-rose-400 font-bold ml-1 transition"
+                title={`Remove ${inst.columnLabel} filter`}
+                aria-label={`Remove ${inst.columnLabel} filter`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
           <button
+            type="button"
             onClick={handleClear}
-            className="text-[11px] underline hover:text-white text-indigo-300"
+            className="text-[10px] font-mono text-slate-400 hover:text-white underline ml-1"
           >
-            Clear Filter
+            Clear all
           </button>
         </div>
       )}
@@ -178,7 +235,8 @@ export function NaturalLanguageFilterBar({
 
             <div className="space-y-2 text-xs">
               <div className="text-slate-400">
-                Original Query: <span className="font-mono text-white">"{activePlan.originalQuery}"</span>
+                Original Query:{' '}
+                <span className="font-mono text-white">"{activePlan.originalQuery}"</span>
               </div>
               <div className="text-slate-400">
                 Rationale: <span className="text-slate-300">{activePlan.rationale}</span>
@@ -202,42 +260,42 @@ export function NaturalLanguageFilterBar({
                               : String(inst.value)}
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-500">Column: {inst.column}</span>
+                        <span className="text-[10px] text-slate-500 font-sans">
+                          {inst.description}
+                        </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-amber-300 text-[11px] italic">
-                    No strict filters matched; query will be applied as general search text.
-                  </p>
+                  <div className="p-3 rounded bg-slate-950 border border-slate-800 text-slate-400 italic">
+                    No specific filter rules extracted. A general keyword search across visible columns
+                    will be applied.
+                  </div>
                 )}
               </div>
 
               {activePlan.sortInstruction && (
-                <div className="p-2.5 rounded bg-slate-950 border border-slate-800 font-mono text-[11px]">
-                  Sort By:{' '}
-                  <span className="text-sky-300 font-bold">
-                    {activePlan.sortInstruction.columnLabel}
-                  </span>{' '}
-                  ({activePlan.sortInstruction.direction.toUpperCase()})
+                <div className="pt-1 text-[11px] font-mono text-indigo-300">
+                  ⚡ Suggested Sort: {activePlan.sortInstruction.columnLabel} (
+                  {activePlan.sortInstruction.direction.toUpperCase()})
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800 text-xs">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
                 onClick={() => setShowPlanModal(false)}
-                className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleApplyPlan}
-                className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 font-semibold text-white flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1"
               >
-                <span>✓</span> Apply to Grid
+                <span>✓</span> Apply Filter Plan
               </button>
             </div>
           </div>

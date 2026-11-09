@@ -65,6 +65,24 @@ export const WHITELISTED_COLUMNS: Record<
   verifiedRatioPct: { label: 'Verified Evidence Ratio', type: 'number' },
   auditEventCount: { label: 'Audit Event Count', type: 'number' },
   deadlineIso: { label: 'Deadline Date', type: 'text' },
+  developerId: { label: 'Developer', type: 'text' },
+  evidenceType: {
+    label: 'Evidence Type',
+    type: 'enum',
+    validEnums: ['CODE_COMMIT', 'PULL_REQUEST', 'CI_TESTS', 'SECURITY_SCAN', 'NONE'],
+  },
+  submittedAtIso: { label: 'Submitted At', type: 'text' },
+  provenanceStatus: {
+    label: 'Provenance Verification',
+    type: 'enum',
+    validEnums: [
+      'VERIFIED',
+      'MISMATCH_DETECTED',
+      'TAMPERED_PAYLOAD',
+      'UNVERIFIED_UNAVAILABLE',
+      'FAILED',
+    ],
+  },
 };
 
 /**
@@ -85,6 +103,55 @@ export function interpretNaturalLanguageQuery(query: string): InterpretedQueryPl
   const instructions: GridFilterInstruction[] = [];
   let sortInstruction: InterpretedQueryPlan['sortInstruction'] | undefined;
   const rationaleParts: string[] = [];
+
+  // Priority Sponsor Patterns: Human Review, High Risk, Weekly Evidence, Verification Failures
+  if (
+    normalized.includes('requiring human review') ||
+    normalized.includes('human review') ||
+    normalized.includes('pending review') ||
+    normalized.includes('needs changes')
+  ) {
+    instructions.push({
+      column: 'stateMachineStatus',
+      columnLabel: WHITELISTED_COLUMNS.stateMachineStatus.label,
+      operator: 'IN',
+      value: 'IN_REVIEW,SUBMITTED,NEEDS_CHANGES',
+      description: 'Filter by Delivery State in [IN_REVIEW, SUBMITTED, NEEDS_CHANGES]',
+    });
+    rationaleParts.push('Isolated submissions requiring human review');
+  }
+
+  if (
+    normalized.includes('failed verification') ||
+    normalized.includes('failed') ||
+    normalized.includes('mismatch') ||
+    normalized.includes('tampered')
+  ) {
+    instructions.push({
+      column: 'provenanceStatus',
+      columnLabel: WHITELISTED_COLUMNS.provenanceStatus.label,
+      operator: 'IN',
+      value: 'MISMATCH_DETECTED,TAMPERED_PAYLOAD,FAILED',
+      description: 'Filter by Provenance Status in [MISMATCH_DETECTED, TAMPERED_PAYLOAD, FAILED]',
+    });
+    rationaleParts.push('Isolated submissions with failed cryptographic provenance');
+  }
+
+  if (
+    normalized.includes('this week') ||
+    normalized.includes('recent evidence') ||
+    normalized.includes('recent submissions') ||
+    normalized.includes('submitted recently')
+  ) {
+    instructions.push({
+      column: 'evidenceType',
+      columnLabel: WHITELISTED_COLUMNS.evidenceType.label,
+      operator: 'IN',
+      value: 'CODE_COMMIT,PULL_REQUEST,CI_TESTS,SECURITY_SCAN',
+      description: 'Filter by Evidence Type has submitted artifacts',
+    });
+    rationaleParts.push('Filtered for milestones with recent evidence submissions');
+  }
 
   // 1. Risk Severity filters
   if (/\bcritical\b/.test(normalized)) {
