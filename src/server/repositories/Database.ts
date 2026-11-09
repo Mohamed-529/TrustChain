@@ -41,6 +41,48 @@ export class AppDatabase {
     this.raw.exec('PRAGMA synchronous = FULL;');
     this.raw.exec('PRAGMA foreign_keys = ON;');
     this.raw.exec('PRAGMA busy_timeout = 5000;');
+    this.raw.exec('PRAGMA cache_size = -64000;'); // 64MB memory page cache
+    this.raw.exec('PRAGMA temp_store = MEMORY;');
+  }
+
+  /**
+   * Performs an explicit WAL checkpoint to flush journal pages into the main SQLite database.
+   */
+  public checkpointWal(mode: 'PASSIVE' | 'FULL' | 'RESTART' | 'TRUNCATE' = 'PASSIVE'): {
+    busy: number;
+    log: number;
+    checkpointed: number;
+  } {
+    const row = this.raw.prepare(`PRAGMA wal_checkpoint(${mode});`).get() as {
+      busy: number;
+      log: number;
+      checkpointed: number;
+    };
+    return row ?? { busy: 0, log: 0, checkpointed: 0 };
+  }
+
+  /**
+   * Executes a minimal roundtrip query to measure live SQLite ping latency.
+   */
+  public ping(): { ok: boolean; latencyMs: number } {
+    const start = performance.now();
+    this.raw.prepare('SELECT 1 as ping;').get();
+    const latencyMs = Number((performance.now() - start).toFixed(2));
+    return { ok: true, latencyMs };
+  }
+
+  /**
+   * Safely closes the database connection after executing a TRUNCATE WAL checkpoint.
+   */
+  public close(): void {
+    try {
+      this.checkpointWal('TRUNCATE');
+    } catch {
+      // Ignore error during shutdown checkpoint
+    }
+    if (this.raw.isOpen) {
+      this.raw.close();
+    }
   }
 
   /**
@@ -580,6 +622,7 @@ export class AppDatabase {
       .prepare('SELECT version FROM schema_migrations WHERE version = 7')
       .get() as { version: number } | undefined;
     if (existingV7) {
+      this.runPrompt7HardeningMigrations();
       return;
     }
 
@@ -618,6 +661,33 @@ export class AppDatabase {
       this.raw
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(7, '007_prompt5_paypal_lifecycle_statuses', new Date().toISOString());
+    });
+
+    this.runPrompt7HardeningMigrations();
+  }
+
+  private runPrompt7HardeningMigrations(): void {
+    const existingV8 = this.raw
+      .prepare('SELECT version FROM schema_migrations WHERE version = 8')
+      .get() as { version: number } | undefined;
+    if (existingV8) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      this.raw.exec(`
+        CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payment_transactions(paypal_order_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_auth_id ON payment_transactions(paypal_authorization_id);
+        CREATE INDEX IF NOT EXISTS idx_payments_status ON payment_transactions(status);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_milestones_payment_status ON milestones(payment_status);
+        CREATE INDEX IF NOT EXISTS idx_paypal_webhook_events_event_type ON paypal_webhook_events(event_type);
+      `);
+
+      this.raw
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+        .run(8, '008_prompt7_backend_hardening_indexes', new Date().toISOString());
     });
   }
 
@@ -810,11 +880,5 @@ export class AppDatabase {
         timestamp: now,
       });
     });
-  }
-
-  public close(): void {
-    if (this.raw.isOpen) {
-      this.raw.close();
-    }
   }
 }

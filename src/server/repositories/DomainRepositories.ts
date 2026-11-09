@@ -1103,21 +1103,21 @@ export class PaymentTransactionRepository {
       .run(
         tx.id,
         tx.milestoneId,
-        tx.approvalId,
-        tx.paypalOrderId,
-        tx.paypalAuthorizationId,
-        tx.paypalCaptureId,
-        tx.idempotencyKey,
-        tx.authorizedAmountCents,
-        tx.capturedAmountCents,
-        tx.currency,
+        tx.approvalId ?? null,
+        tx.paypalOrderId ?? null,
+        tx.paypalAuthorizationId ?? null,
+        tx.paypalCaptureId ?? null,
+        tx.idempotencyKey ?? null,
+        tx.authorizedAmountCents ?? 0,
+        tx.capturedAmountCents ?? 0,
+        tx.currency ?? 'USD',
         tx.status,
-        tx.authExpiresAt,
+        tx.authExpiresAt ?? null,
         JSON.stringify({
-          ...tx.rawPaypalResponse,
-          executionMode: tx.executionMode,
+          ...(tx.rawPaypalResponse ?? {}),
+          executionMode: tx.executionMode ?? 'PAYPAL_SANDBOX',
         }),
-        tx.updatedAt
+        tx.updatedAt ?? new Date().toISOString()
       );
   }
 
