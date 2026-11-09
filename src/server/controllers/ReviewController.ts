@@ -109,9 +109,29 @@ export class ReviewController {
     }
   };
 
-  public getLedger = (_req: ApiRequest, res: ApiResponse, next: NextFunction): void => {
+  public getLedger = (req: ApiRequest, res: ApiResponse, next: NextFunction): void => {
     try {
       const rows = this.humanReviewService.getFinancialDecisionLedger();
+      const totalCount = rows.length;
+
+      const limitStr = req.query.limit;
+      const offsetStr = req.query.offset;
+      if (limitStr !== undefined || offsetStr !== undefined) {
+        const offset = Math.max(0, parseInt(offsetStr ?? '0', 10) || 0);
+        const limit = Math.min(100, Math.max(1, parseInt(limitStr ?? '50', 10) || 50));
+        const paginated = rows.slice(offset, offset + limit);
+        res.status(200).json({
+          rows: paginated,
+          pagination: {
+            total: totalCount,
+            offset,
+            limit,
+            hasMore: offset + limit < totalCount,
+          },
+        });
+        return;
+      }
+
       res.status(200).json({ rows });
     } catch (err) {
       next(err);

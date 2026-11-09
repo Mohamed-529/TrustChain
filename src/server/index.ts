@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { AppDatabase } from './repositories/Database.ts';
 import {
@@ -55,6 +56,10 @@ import {
   type ApiRequest,
   type ApiResponse,
 } from './middleware/errorHandler.ts';
+import {
+  InMemoryRateLimiter,
+  type RateLimiterOptions,
+} from './middleware/rateLimiter.ts';
 
 // Load .env file using Node.js v24 native process.loadEnvFile if present
 try {
@@ -138,9 +143,30 @@ async function readJsonBody(
   });
 }
 
-function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpApp {
+export interface RateLimitingConfig {
+  disableRateLimiting?: boolean;
+  generalLimit?: number;
+  sensitiveLimit?: number;
+  windowMs?: number;
+}
+
+export interface MountedHttpAppOptions {
+  rateLimiter?: {
+    general?: InMemoryRateLimiter;
+    sensitive?: InMemoryRateLimiter;
+    disabled?: boolean;
+  };
+}
+
+function createMountedHttpApp(
+  prefix: string,
+  routes: RouteDefinition[],
+  mountOptions?: MountedHttpAppOptions
+): HttpApp {
   let fallbackHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => void) | null =
     null;
+
+  const rateLimiterConfig = mountOptions?.rateLimiter;
 
   const listener = async (
     rawReq: http.IncomingMessage,
@@ -151,12 +177,36 @@ function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpAp
     const parsedUrl = new URL(originalUrl, 'http://localhost');
     const pathname = parsedUrl.pathname;
 
+    // Standard HTTP Security Headers & CORS Preflight
+    const responseHeaders: Record<string, string> = {
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'x-xss-protection': '0',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'access-control-allow-origin': '*',
+    };
+
+    if (method === 'OPTIONS') {
+      rawRes.writeHead(204, {
+        ...responseHeaders,
+        'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'access-control-allow-headers':
+          'Content-Type, Authorization, X-Request-Id, X-Forwarded-For, X-Real-IP',
+        'access-control-max-age': '86400',
+      });
+      rawRes.end();
+      return;
+    }
+
     if (!pathname.startsWith(prefix)) {
       if (fallbackHandler) {
         fallbackHandler(rawReq, rawRes);
         return;
       }
-      rawRes.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+      rawRes.writeHead(404, {
+        ...responseHeaders,
+        'content-type': 'application/json; charset=utf-8',
+      });
       rawRes.end(
         JSON.stringify({
           error: {
@@ -176,11 +226,33 @@ function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpAp
       query[k] = v;
     }
 
+    // Correlation ID tracing (DEF-04)
+    const incomingReqId = rawReq.headers['x-request-id'];
+    const requestId =
+      typeof incomingReqId === 'string' && incomingReqId.trim().length > 0
+        ? incomingReqId.trim()
+        : crypto.randomUUID();
+    responseHeaders['x-request-id'] = requestId;
+
+    // Client IP extraction
+    const forwarded = rawReq.headers['x-forwarded-for'];
+    const clientIp =
+      (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : undefined) ??
+      (typeof rawReq.headers['x-real-ip'] === 'string'
+        ? rawReq.headers['x-real-ip']
+        : undefined) ??
+      rawReq.socket?.remoteAddress ??
+      '127.0.0.1';
+
     let statusCode = 200;
     const apiRes: ApiResponse = {
       headersSent: false,
       status(code: number) {
         statusCode = code;
+        return apiRes;
+      },
+      setHeader(name: string, value: string) {
+        responseHeaders[name.toLowerCase()] = value;
         return apiRes;
       },
       json(payload: unknown) {
@@ -190,6 +262,7 @@ function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpAp
         apiRes.headersSent = true;
         const bodyStr = JSON.stringify(payload);
         rawRes.writeHead(statusCode, {
+          ...responseHeaders,
           'content-type': 'application/json; charset=utf-8',
           'content-length': Buffer.byteLength(bodyStr),
         });
@@ -201,6 +274,7 @@ function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpAp
         }
         apiRes.headersSent = true;
         rawRes.writeHead(statusCode, {
+          ...responseHeaders,
           'content-type': contentType,
           'content-length': Buffer.byteLength(body),
         });
@@ -217,7 +291,58 @@ function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpAp
       params: {},
       query,
       body: {},
+      requestId,
+      clientIp,
     };
+
+    // Abuse Resistance & Sliding-Window Rate Limiting (DEF-01)
+    if (!rateLimiterConfig?.disabled) {
+      if (rateLimiterConfig?.general) {
+        const checkResult = rateLimiterConfig.general.check(clientIp);
+        apiRes.setHeader?.('x-ratelimit-remaining', String(checkResult.remaining));
+        apiRes.setHeader?.('x-ratelimit-reset', String(checkResult.resetAfterSeconds));
+
+        if (!checkResult.allowed) {
+          apiRes.setHeader?.('retry-after', String(checkResult.resetAfterSeconds));
+          errorHandler(
+            new AppError(
+              429,
+              'RATE_LIMIT_EXCEEDED',
+              `API rate limit exceeded. Please wait ${checkResult.resetAfterSeconds} seconds before retrying.`,
+              { retryAfterSeconds: checkResult.resetAfterSeconds }
+            ),
+            apiReq,
+            apiRes,
+            () => {}
+          );
+          return;
+        }
+      }
+
+      // Stricter rate limits for sensitive authentication, payment, and webhook endpoints
+      const isSensitivePath =
+        subPath.startsWith('/auth/') ||
+        subPath.includes('/paypal/') ||
+        subPath.startsWith('/webhooks/');
+      if (isSensitivePath && rateLimiterConfig?.sensitive) {
+        const checkResult = rateLimiterConfig.sensitive.check(clientIp);
+        if (!checkResult.allowed) {
+          apiRes.setHeader?.('retry-after', String(checkResult.resetAfterSeconds));
+          errorHandler(
+            new AppError(
+              429,
+              'RATE_LIMIT_EXCEEDED',
+              `Sensitive endpoint rate limit exceeded. Please wait ${checkResult.resetAfterSeconds} seconds before retrying.`,
+              { retryAfterSeconds: checkResult.resetAfterSeconds }
+            ),
+            apiReq,
+            apiRes,
+            () => {}
+          );
+          return;
+        }
+      }
+    }
 
     // Match route
     let matchedRoute: RouteDefinition | null = null;
@@ -240,6 +365,7 @@ function createMountedHttpApp(prefix: string, routes: RouteDefinition[]): HttpAp
           message: `API endpoint '${method} ${originalUrl}' does not exist.`,
           details: {},
           timestamp: new Date().toISOString(),
+          requestId,
         },
       });
       return;
@@ -326,6 +452,10 @@ export interface ServerContainer {
   disputePackRepo: DisputeEvidencePackRepository;
   disputeEvidencePackService: DisputeEvidencePackService;
   disputeController: DisputeController;
+  rateLimiter: {
+    general: InMemoryRateLimiter;
+    sensitive: InMemoryRateLimiter;
+  };
 }
 
 export function createServerApp(options?: {
@@ -335,6 +465,7 @@ export function createServerApp(options?: {
   paypalOptions?: PayPalServiceOptions;
   githubOptions?: GitHubVerificationServiceOptions;
   passportOptions?: EvidencePassportServiceOptions;
+  rateLimitOptions?: RateLimitingConfig;
 }): ServerContainer {
   const db = new AppDatabase(options?.dbPath);
   const userRepo = new UserRepository(db.raw);
@@ -352,6 +483,19 @@ export function createServerApp(options?: {
   const passportRepo = new EvidencePassportRepository(db.raw);
   const disputePackRepo = new DisputeEvidencePackRepository(db.raw);
   const auditService = new AuditService(db.raw);
+
+  // In-memory sliding-window rate limiters (Ponytail Rung 6 — zero external Redis)
+  const generalRateLimiter = new InMemoryRateLimiter({
+    windowMs: options?.rateLimitOptions?.windowMs ?? 60_000,
+    maxRequests: options?.rateLimitOptions?.generalLimit ?? 120,
+    keyPrefix: 'rl_gen',
+  });
+
+  const sensitiveRateLimiter = new InMemoryRateLimiter({
+    windowMs: options?.rateLimitOptions?.windowMs ?? 60_000,
+    maxRequests: options?.rateLimitOptions?.sensitiveLimit ?? 30,
+    keyPrefix: 'rl_sens',
+  });
 
   const authService = new AuthService(
     db,
@@ -518,9 +662,16 @@ export function createServerApp(options?: {
     scheduleController,
     paymentController,
     disputeController,
+    db,
   });
 
-  const app = createMountedHttpApp('/api/v1', apiRouter.routes);
+  const app = createMountedHttpApp('/api/v1', apiRouter.routes, {
+    rateLimiter: {
+      general: generalRateLimiter,
+      sensitive: sensitiveRateLimiter,
+      disabled: options?.rateLimitOptions?.disableRateLimiting,
+    },
+  });
 
   return {
     app,
@@ -553,6 +704,10 @@ export function createServerApp(options?: {
     disputePackRepo,
     disputeEvidencePackService,
     disputeController,
+    rateLimiter: {
+      general: generalRateLimiter,
+      sensitive: sensitiveRateLimiter,
+    },
   };
 }
 
@@ -632,7 +787,7 @@ export function createProductionStaticFallback(distPath: string) {
 async function startDevOrProdServer(): Promise<void> {
   const port = Number(process.env.PORT ?? 3000);
   const isProd = process.env.NODE_ENV === 'production';
-  const { app } = createServerApp({
+  const { app, db } = createServerApp({
     authOptions: {
       nodeEnv: process.env.NODE_ENV ?? 'development',
       enableDemoImpersonation:
@@ -696,6 +851,32 @@ async function startDevOrProdServer(): Promise<void> {
       }`
     );
   });
+
+  // Graceful Process Termination (DEF-06)
+  const shutdown = (signal: string): void => {
+    console.log(`Received ${signal}. Gracefully stopping MilestoneProof AI server...`);
+    server.close(() => {
+      console.log('HTTP connection pool closed.');
+      try {
+        db.checkpointWal('TRUNCATE');
+        console.log('SQLite WAL successfully checkpointed (TRUNCATE).');
+        db.close();
+        console.log('SQLite database connection cleanly closed.');
+      } catch (err) {
+        console.error('Error during database shutdown checkpoint:', err);
+      }
+      process.exit(0);
+    });
+
+    // Forced termination fallback if active connections stall
+    setTimeout(() => {
+      console.error('Forced termination triggered after 10s shutdown timeout.');
+      process.exit(1);
+    }, 10_000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 const isMainModule =

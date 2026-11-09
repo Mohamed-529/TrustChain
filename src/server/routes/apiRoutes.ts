@@ -8,6 +8,7 @@ import type { ReviewController } from '../controllers/ReviewController.ts';
 import type { ScheduleController } from '../controllers/ScheduleController.ts';
 import type { PaymentController } from '../controllers/PaymentController.ts';
 import type { DisputeController } from '../controllers/DisputeController.ts';
+import type { AppDatabase } from '../repositories/Database.ts';
 import { createAuthMiddleware, requireRole } from '../middleware/authMiddleware.ts';
 import { OPENAPI_REQUEST_SCHEMAS, validateRequestSchema } from '../middleware/validateRequest.ts';
 import type { RequestHandler } from '../middleware/errorHandler.ts';
@@ -39,6 +40,7 @@ export function createApiRouter(params: {
   scheduleController: ScheduleController;
   paymentController: PaymentController;
   disputeController: DisputeController;
+  db?: AppDatabase;
 }): ApiRouter {
   const router = new ApiRouter();
   const {
@@ -50,16 +52,27 @@ export function createApiRouter(params: {
     scheduleController,
     paymentController,
     disputeController,
+    db,
   } = params;
   const authenticate = createAuthMiddleware(authService);
 
-  // Public health check
+  // Public health check with engine latency
   router.get('/health', (_req, res) => {
+    let pingLatencyMs = 0;
+    try {
+      if (db) {
+        pingLatencyMs = db.ping().latencyMs;
+      }
+    } catch {
+      // Ignore ping failure in liveness check
+    }
+
     res.status(200).json({
       status: 'ok',
       service: 'milestoneproof-ai-api',
       version: '1.0.0',
       runtime: process.version,
+      databaseLatencyMs: pingLatencyMs,
       capabilities: {
         sqlitePersistence: true,
         hmacSessionAuth: true,
@@ -85,6 +98,47 @@ export function createApiRouter(params: {
             process.env.GITHUB_WEBHOOK_SECRET !== 'MY_GITHUB_WEBHOOK_SECRET'
         ),
       },
+    });
+  });
+
+  // Public deep operational readiness probe
+  router.get('/ready', (_req, res) => {
+    let dbStatus = { ok: true, latencyMs: 0 };
+    let migrationVersion = 0;
+    try {
+      if (db) {
+        dbStatus = db.ping();
+        const row = db.raw.prepare('SELECT MAX(version) as v FROM schema_migrations;').get() as { v?: number };
+        migrationVersion = row?.v ?? 0;
+      }
+    } catch (dbErr) {
+      res.status(503).json({
+        status: 'not_ready',
+        service: 'milestoneproof-ai-api',
+        ready: false,
+        error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const mem = process.memoryUsage();
+    res.status(200).json({
+      status: 'ready',
+      service: 'milestoneproof-ai-api',
+      ready: true,
+      uptimeSeconds: Math.floor(process.uptime()),
+      database: {
+        engine: 'node:sqlite',
+        pingLatencyMs: dbStatus.latencyMs,
+        migrationVersion,
+        healthy: dbStatus.ok,
+      },
+      memory: {
+        rssMb: Number((mem.rss / 1024 / 1024).toFixed(1)),
+        heapUsedMb: Number((mem.heapUsed / 1024 / 1024).toFixed(1)),
+      },
+      timestamp: new Date().toISOString(),
     });
   });
 
