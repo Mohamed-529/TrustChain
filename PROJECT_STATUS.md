@@ -16,25 +16,25 @@
 
 ## Current Phase
 
-**AG Grid Sponsor Excellence — Audit & Implementation (Completed & Verified)**
+**Bryntum Sponsor Excellence — Intelligent Contract Execution Timeline (Completed & Verified)**
 
-All AG Grid sponsor evaluation, audit, feature implementation, and verification requirements are fully delivered:
-- **260 / 260 automated tests passing** across 22 test suites with 0 failures and 0 regressions.
-- **Clean TypeScript compilation** (`npm run lint` — `tsc --noEmit` exited 0).
-- **Clean Vite production bundle** (`npm run build` — 154 modules, 4.45s).
-- **100% Genuine AG Grid Community v36.3.0 (MIT):**
-  - Zero unauthorized enterprise imports, zero trial key spoofing, zero license watermarks.
-  - Accessible Master/Detail expansion architecture (`ExpandCellRenderer` + `<EvidenceDetailPanel>`) providing deep Git, PR, CI/CD, and Evidence Passport drilldown.
-  - Live quick-search input with instant debounced global filtering via `gridApi.setGridOption('quickFilterText', query)`.
-  - One-click auto-column sizing via `gridApi.autoSizeAllColumns(false)`.
-  - Client-side pagination (`pagination={true}`, default size 10, selector `[10, 20, 50]`).
-  - Four new operational intelligence fields added to `FinancialLedgerRow` and grid column definitions: `developerId`, `evidenceType`, `submittedAtIso`, and `provenanceStatus`.
-  - Deterministic natural-language query parser supporting 6 sponsor query patterns with active filter pill badges and 1-click removal.
-  - Hardened CSV export with CWE-1236 Excel/CSV Formula Injection neutralization and credential stripping.
-- **3 Comprehensive AG Grid Operational Reports:**
-  1. `AG_GRID_SPONSOR_AUDIT.md`
-  2. `AG_GRID_FEATURE_LICENSING.md`
-  3. `AG_GRID_IMPLEMENTATION_REPORT.md`
+All Bryntum Gantt sponsor evaluation, technical audit, feature implementation, and verification requirements are fully delivered:
+- **269 / 269 automated tests passing** across 22 test suites with 0 failures and 0 regressions.
+- **Clean TypeScript compilation** (`npm run lint` — `tsc --noEmit` exited 0 with 0 errors).
+- **Clean Vite production bundle** (`npm run build` — `vite build` cleanly bundled in 3.62s).
+- **Bryntum Gantt v7.3.8 Trial Integration:**
+  - **Feature A (Contract-to-Execution Planning):** Decomposed contract milestones into granular acceptance criteria child execution tasks (mapped directly from `acceptanceCriteria`). Real verification status mapped to `percentDone` without synthetic progress fabrication.
+  - **Feature B (Dependencies & Schedule Intelligence):** Supported FS, SS, FF, and SF dependencies with lag. Implemented Kahn's algorithm cycle detection on backend (`validateDependencies`) returning HTTP 400 on circular loops. Deterministic critical path and downstream delay cascade calculations (`analyzeDownstreamDelayImpact`).
+  - **Feature C (Baseline vs Actual Progress):** Schedule snapshot freezing (`captureScheduleBaseline`) recorded as an immutable hash-chained audit event (`SCHEDULE_BASELINE_SNAPSHOT`) with visual baseline variance bars.
+  - **Feature D (Payment-Aware Execution):** Live payment status badges (`ORDER_CREATED`, `AUTHORIZED`, `CAPTURED`, `REQUIRES_RECONCILIATION`) in Gantt columns with strict read-only financial safety boundary.
+  - **Feature E (Delay Analysis & Recovery Suggestions):** Downstream cascade impact calculation with AI schedule recovery proposal schema and client/reviewer-only approval gate (developers rejected with HTTP 403).
+  - **Feature F (Scheduler Evaluation):** Documented comparative evaluation between Bryntum Gantt (authoritative execution engine) and Bryntum Scheduler (Phase 2 resource capacity management).
+- **5 Comprehensive Bryntum Operational Reports Published:**
+  1. `BRYNTUM_SPONSOR_AUDIT.md`
+  2. `BRYNTUM_FEATURE_LICENSING.md`
+  3. `BRYNTUM_IMPLEMENTATION_REPORT.md`
+  4. `BRYNTUM_PERFORMANCE_REPORT.md`
+  5. `BRYNTUM_SECURITY_VALIDATION_REPORT.md`
 
 ---
 
@@ -62,3 +62,4 @@ All AG Grid sponsor evaluation, audit, feature implementation, and verification 
 - Phase 9 (Prompt 7/8 — Backend Hardening, Reliability & Scalability) — Database query optimization with 7 high-performance composite indexes (Schema Version 8), in-memory sliding-window rate limiting with RFC 6585 compliance, defensive security headers, correlation ID distributed tracing, deep `/ready` probe, and graceful SQLite shutdown (Completed & Verified — 223/223 tests passing).
 - Phase 9 (Prompt 8/8 — End-to-End Acceptance, Security Validation & Failure Recovery) — Complete 10-stage contract-to-settlement acceptance suite, 20-scenario cross-system failure recovery matrix, live PayPal Sandbox order and webhook cryptographic signature verification (`SUCCESS`), sub-4.2ms performance benchmarking, API contract gap analysis, and 7 comprehensive operational reports (Completed & Verified — 257/257 tests passing).
 - **AG Grid Sponsor Excellence — Audit & Implementation (Completed & Verified — 260/260 tests passing, 3 comprehensive reports published).**
+- **Bryntum Sponsor Excellence — Intelligent Contract Execution Timeline (Completed & Verified — 269/269 tests passing across 22 suites, 5 comprehensive operational reports published).**
