@@ -456,11 +456,12 @@ test('Prompt 6 — AG Grid Intelligence Control Room & Frontend Engineering', as
     assert.equal(p2.instructions[0].column, 'riskSeverity');
     assert.equal(p2.instructions[0].value, 'HIGH');
 
-    // 3. Evidence submitted this week
+    // 3. Evidence submitted this week (filters submittedAtIso with date range predicate)
     const p3 = interpretNaturalLanguageQuery('Show evidence submitted this week');
     assert.ok(p3.instructions.length >= 1, 'Must generate instructions for recent evidence query');
-    assert.equal(p3.instructions[0].column, 'evidenceType');
-    assert.equal(p3.instructions[0].operator, 'IN');
+    assert.equal(p3.instructions[0].column, 'submittedAtIso');
+    assert.equal(p3.instructions[0].operator, 'GREATER_THAN');
+    assert.match(String(p3.instructions[0].value), /^\d{4}-\d{2}-\d{2}$/);
 
     // 4. Failed verification results
     const p4 = interpretNaturalLanguageQuery('Show failed verification results');

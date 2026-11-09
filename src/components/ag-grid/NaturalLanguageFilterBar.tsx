@@ -48,17 +48,31 @@ export function NaturalLanguageFilterBar({
           filter: String(inst.value),
         };
       } else if (inst.operator === 'GREATER_THAN') {
-        filterModel[inst.column] = {
-          filterType: 'number',
-          type: 'greaterThan',
-          filter: Number(inst.value),
-        };
+        const isDateCol = inst.column === 'submittedAtIso' || inst.column === 'deadlineIso';
+        filterModel[inst.column] = isDateCol
+          ? {
+              filterType: 'text',
+              type: 'greaterThan',
+              filter: String(inst.value),
+            }
+          : {
+              filterType: 'number',
+              type: 'greaterThan',
+              filter: Number(inst.value),
+            };
       } else if (inst.operator === 'LESS_THAN') {
-        filterModel[inst.column] = {
-          filterType: 'number',
-          type: 'lessThan',
-          filter: Number(inst.value),
-        };
+        const isDateCol = inst.column === 'submittedAtIso' || inst.column === 'deadlineIso';
+        filterModel[inst.column] = isDateCol
+          ? {
+              filterType: 'text',
+              type: 'lessThan',
+              filter: String(inst.value),
+            }
+          : {
+              filterType: 'number',
+              type: 'lessThan',
+              filter: Number(inst.value),
+            };
       } else if (inst.operator === 'IN') {
         const values = String(inst.value)
           .split(',')

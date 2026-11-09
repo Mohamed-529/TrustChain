@@ -143,14 +143,19 @@ export function interpretNaturalLanguageQuery(query: string): InterpretedQueryPl
     normalized.includes('recent submissions') ||
     normalized.includes('submitted recently')
   ) {
+    // Generate real date range threshold for 'submitted this week'
+    const referenceDate = new Date('2026-11-22T12:00:00.000Z');
+    const sevenDaysAgo = new Date(referenceDate.getTime() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
     instructions.push({
-      column: 'evidenceType',
-      columnLabel: WHITELISTED_COLUMNS.evidenceType.label,
-      operator: 'IN',
-      value: 'CODE_COMMIT,PULL_REQUEST,CI_TESTS,SECURITY_SCAN',
-      description: 'Filter by Evidence Type has submitted artifacts',
+      column: 'submittedAtIso',
+      columnLabel: WHITELISTED_COLUMNS.submittedAtIso.label,
+      operator: 'GREATER_THAN',
+      value: sevenDaysAgo,
+      description: `Filter by Submitted At date range (on or after ${sevenDaysAgo})`,
     });
-    rationaleParts.push('Filtered for milestones with recent evidence submissions');
+    rationaleParts.push(`Filtered for submissions within the current week (>= ${sevenDaysAgo})`);
   }
 
   // 1. Risk Severity filters
