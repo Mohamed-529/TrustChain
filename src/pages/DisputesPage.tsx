@@ -25,23 +25,24 @@ export function DisputesPage({
 }: DisputesPageProps) {
   return (
     <div className="space-y-6 font-sans">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      {/* 1-Line Clean Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="text-xl">⚖️</span>
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-xl font-bold text-white tracking-tight">
               Dispute Evidence Pack & Arbitration Suite
             </h1>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Traceable engineering evidence record aggregating milestone criteria, GitHub telemetry, Evidence Passport, immutable audit replay, and human approval for external dispute resolution.
+          {/* EXACTLY 1 LINE DESCRIPTION */}
+          <p className="text-xs text-zinc-400 mt-1">
+            Tamper-evident arbitration bundle: GitHub telemetry, Evidence Passport, immutable audit replay, and portable JSON export.
           </p>
         </div>
       </div>
 
       {/* Primary Dispute Evidence Pack Viewer */}
-      <div id="dispute-evidence-pack-section">
+      <div id="dispute-evidence-pack-section" className="rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden shadow-xl">
         <DisputeEvidencePackViewer
           disputePack={disputePack}
           loading={loading}
