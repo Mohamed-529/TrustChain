@@ -585,6 +585,17 @@ export class HumanReviewService {
               ? 'PAYPAL_SANDBOX'
               : 'NONE';
 
+        const evidenceType: 'CODE_COMMIT' | 'PULL_REQUEST' | 'CI_TESTS' | 'SECURITY_SCAN' | 'NONE' =
+          latestSubmission?.ciReport?.totalTests
+            ? 'CI_TESTS'
+            : latestSubmission?.securityScan?.scanner
+              ? 'SECURITY_SCAN'
+              : latestSubmission?.prUrl
+                ? 'PULL_REQUEST'
+                : latestSubmission?.commitSha
+                  ? 'CODE_COMMIT'
+                  : 'NONE';
+
         rows.push({
           milestoneId: milestone.id,
           contractId: contract.id,
@@ -593,6 +604,8 @@ export class HumanReviewService {
           sequenceOrder: milestone.sequenceOrder,
           developerId: contract.developerId,
           deadlineIso: milestone.deadlineIso ?? null,
+          submittedAtIso: latestSubmission?.submittedAt ?? null,
+          evidenceType,
           milestoneStatus: milestone.status,
           stateMachineStatus: this.toStateMachineStatus(milestone.status),
           submissionId: latestSubmission?.id ?? null,

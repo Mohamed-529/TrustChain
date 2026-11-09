@@ -535,6 +535,8 @@ export interface FinancialLedgerRow {
   sequenceOrder: number;
   developerId?: string | null;
   deadlineIso?: string | null;
+  submittedAtIso?: string | null;
+  evidenceType?: 'CODE_COMMIT' | 'PULL_REQUEST' | 'CI_TESTS' | 'SECURITY_SCAN' | 'NONE';
   milestoneStatus: MilestoneStatus;
   stateMachineStatus: MilestoneStatus | 'NEEDS_CHANGES';
   submissionId: string | null;
