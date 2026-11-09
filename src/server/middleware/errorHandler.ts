@@ -12,6 +12,8 @@ export interface ApiRequest {
   rawBody?: string;
   actor?: User;
   tokenClaims?: SessionTokenClaims;
+  requestId?: string;
+  clientIp?: string;
 }
 
 export interface ApiResponse {
@@ -19,6 +21,7 @@ export interface ApiResponse {
   json(payload: unknown): void;
   sendText?(body: string, contentType?: string): void;
   sendFile?(filePath: string): void;
+  setHeader?(name: string, value: string): ApiResponse;
   headersSent?: boolean;
 }
 
@@ -50,7 +53,7 @@ export class AppError extends Error {
 
 export function errorHandler(
   err: unknown,
-  _req: ApiRequest,
+  req: ApiRequest,
   res: ApiResponse,
   _next: NextFunction
 ): void {
@@ -61,6 +64,7 @@ export function errorHandler(
         message: err.message,
         details: err.details ?? {},
         timestamp: new Date().toISOString(),
+        ...(req?.requestId ? { requestId: req.requestId } : {}),
       },
     });
     return;
@@ -73,6 +77,7 @@ export function errorHandler(
       message,
       details: {},
       timestamp: new Date().toISOString(),
+      ...(req?.requestId ? { requestId: req.requestId } : {}),
     },
   });
 }
