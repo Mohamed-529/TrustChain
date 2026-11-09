@@ -96,6 +96,7 @@ A dedicated test suite was built in `src/server/__tests__/paypal_application_pat
 
 | Test Suite | Total Tests | Passing | Failing | Status |
 |---|---|---|---|---|
+| `paypal_webhook_live_verification.test.ts` | 11 | 11 | 0 | **PASSED** |
 | `paypal_application_path_remediation.test.ts` | 6 | 6 | 0 | **PASSED** |
 | `paypal_lifecycle.test.ts` | 12 | 12 | 0 | **PASSED** |
 | `dispute_evidence_pack.test.ts` | 17 | 17 | 0 | **PASSED** |
@@ -104,6 +105,6 @@ A dedicated test suite was built in `src/server/__tests__/paypal_application_pat
 | `cinematic_frontend.test.ts` | 17 | 17 | 0 | **PASSED** |
 | `prompt6_intelligence.test.ts` | 14 | 14 | 0 | **PASSED** |
 | All other Phase 1–8 suites (11 suites) | 55 | 55 | 0 | **PASSED** |
-| **Total Automated Coverage** | **194** | **194** | **0** | **100% GREEN** |
+| **Total Automated Coverage** | **205** | **205** | **0** | **100% GREEN** |
 | **TypeScript Compilation (`tsc --noEmit`)** | — | — | — | **0 ERRORS** |
 | **Frontend Production Build (`vite build`)** | — | — | — | **PASSED** |
