@@ -72,6 +72,11 @@ export function createApiRouter(params: {
           (process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET) ||
           (process.env.PAYPAL_ACCESS_TOKEN && process.env.PAYPAL_ACCESS_TOKEN.trim().length > 0)
         ),
+        paypalWebhookConfigured: Boolean(
+          process.env.PAYPAL_WEBHOOK_ID &&
+            process.env.PAYPAL_WEBHOOK_ID.trim().length > 0 &&
+            process.env.PAYPAL_WEBHOOK_ID !== 'YOUR_PAYPAL_WEBHOOK_ID'
+        ),
         githubConfigured: Boolean(
           process.env.GITHUB_TOKEN && process.env.GITHUB_TOKEN !== 'MY_GITHUB_TOKEN'
         ),

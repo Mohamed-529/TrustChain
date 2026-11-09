@@ -683,7 +683,18 @@ async function startDevOrProdServer(): Promise<void> {
 
   const server = http.createServer(app);
   server.listen(port, '0.0.0.0', () => {
+    const webhookId = process.env.PAYPAL_WEBHOOK_ID?.trim();
+    const isWebhookConfigured = Boolean(
+      webhookId && webhookId !== 'YOUR_PAYPAL_WEBHOOK_ID'
+    );
     console.log(`MilestoneProof AI server listening on http://localhost:${port}`);
+    console.log(
+      `PayPal Webhook verification: ${
+        isWebhookConfigured
+          ? `CONFIGURED (Webhook ID: ${webhookId!.slice(0, 4)}***)`
+          : 'UNCONFIGURED (missing PAYPAL_WEBHOOK_ID)'
+      }`
+    );
   });
 }
 
