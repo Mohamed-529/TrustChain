@@ -85,7 +85,8 @@ export class AuthService {
       process.env.ENABLE_DEMO_IMPERSONATION === 'true';
     this.defaultTtlSeconds = options?.defaultTtlSeconds ?? DEFAULT_TOKEN_TTL_SECONDS;
 
-    const configuredSecret = options?.secret ?? process.env.AUTH_TOKEN_SECRET;
+    const configuredSecret =
+      options && 'secret' in options ? options.secret : process.env.AUTH_TOKEN_SECRET;
 
     if (this.nodeEnv === 'production') {
       if (!configuredSecret || configuredSecret.trim().length < 32) {

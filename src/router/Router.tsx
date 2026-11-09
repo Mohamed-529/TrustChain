@@ -5,11 +5,14 @@ export type AppRoute =
   | '/onboarding'
   | '/dashboard'
   | '/intelligence'
+  | '/ledger'
   | '/timeline'
   | '/reviews'
   | '/trust'
   | '/disputes'
-  | '/settings';
+  | '/settings'
+  | '/developers'
+  | '/docs';
 
 interface RouterContextType {
   currentPath: string;

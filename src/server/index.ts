@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -800,7 +801,10 @@ async function startDevOrProdServer(): Promise<void> {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const rootDir = path.resolve(__dirname, '../..');
 
-  if (!isProd) {
+  const distPath = path.join(rootDir, 'dist');
+  const hasDist = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (!isProd && !hasDist) {
     try {
       const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
@@ -832,7 +836,6 @@ async function startDevOrProdServer(): Promise<void> {
       });
     }
   } else {
-    const distPath = path.join(rootDir, 'dist');
     app.useFallback(createProductionStaticFallback(distPath));
   }
 

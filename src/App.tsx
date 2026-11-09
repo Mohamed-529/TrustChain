@@ -668,6 +668,7 @@ function AppContent() {
         );
 
       case '/intelligence':
+      case '/ledger':
         return (
           <IntelligencePage
             ledgerRows={ledgerRows}

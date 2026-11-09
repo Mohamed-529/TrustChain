@@ -50,6 +50,8 @@ export function AppShell({
   const currentPath = usePathname();
 
   const getBreadcrumbLabel = (path: string): string => {
+    if (path === '/ledger') return '⚡ AG Grid Financial Ledger';
+    if (path === '/docs') return '⚡ API & SDK Documentation';
     const item = NAV_ITEMS.find((n) => n.path === path);
     return item ? `${item.icon} ${item.label}` : 'Overview';
   };
