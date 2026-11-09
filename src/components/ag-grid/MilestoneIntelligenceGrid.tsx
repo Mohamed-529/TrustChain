@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import {
   AllCommunityModule,
@@ -54,6 +54,7 @@ export function MilestoneIntelligenceGrid({
   const gridRef = useRef<AgGridReact<FinancialLedgerRow>>(null);
   const [gridApi, setGridApi] = useState<GridApi<FinancialLedgerRow> | null>(null);
   const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
+  const [quickSearchText, setQuickSearchText] = useState<string>('');
 
   const toggleRowExpansion = useCallback((milestoneId: string) => {
     setExpandedRowIds((prev) => {
@@ -67,7 +68,7 @@ export function MilestoneIntelligenceGrid({
     });
   }, []);
 
-  // Filter rows if quick filter is selected
+  // Filter rows if quick category filter is selected
   const filteredRows = useMemo(() => {
     if (!ledgerRows) return [];
     switch (quickFilterType) {
@@ -145,8 +146,8 @@ export function MilestoneIntelligenceGrid({
       {
         headerName: 'Milestone',
         field: 'milestoneTitle',
-        minWidth: 200,
-        flex: 1.5,
+        minWidth: 190,
+        flex: 1.4,
         pinned: 'left',
         sortable: true,
         filter: 'agTextColumnFilter',
@@ -165,11 +166,114 @@ export function MilestoneIntelligenceGrid({
       {
         headerName: 'Contract',
         field: 'contractTitle',
-        minWidth: 160,
+        minWidth: 150,
         flex: 1,
         sortable: true,
         filter: 'agTextColumnFilter',
         cellClass: 'text-slate-300 font-sans text-xs',
+      },
+      {
+        headerName: 'Developer',
+        field: 'developerId',
+        width: 110,
+        sortable: true,
+        filter: 'agTextColumnFilter',
+        cellRenderer: (params: ICellRendererParams) => {
+          const dev = params.value;
+          if (!dev) return <span className="text-slate-500 font-mono text-xs">—</span>;
+          return <span className="font-mono text-xs text-slate-300 font-medium">{dev}</span>;
+        },
+      },
+      {
+        headerName: 'Type',
+        field: 'evidenceType',
+        width: 115,
+        sortable: true,
+        filter: 'agTextColumnFilter',
+        cellRenderer: (params: ICellRendererParams) => {
+          const type = (params.value as string) || 'NONE';
+          switch (type) {
+            case 'CI_TESTS':
+              return (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-sky-950 text-sky-300 border border-sky-800">
+                  CI TESTS
+                </span>
+              );
+            case 'SECURITY_SCAN':
+              return (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-950 text-purple-300 border border-purple-800">
+                  SEC SCAN
+                </span>
+              );
+            case 'PULL_REQUEST':
+              return (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-800">
+                  PR REVIEW
+                </span>
+              );
+            case 'CODE_COMMIT':
+              return (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  COMMIT
+                </span>
+              );
+            default:
+              return <span className="text-slate-500 text-xs font-mono">NONE</span>;
+          }
+        },
+      },
+      {
+        headerName: 'Submitted',
+        field: 'submittedAtIso',
+        width: 135,
+        sortable: true,
+        filter: 'agTextColumnFilter',
+        cellRenderer: (params: ICellRendererParams) => {
+          const val = params.value;
+          if (!val) return <span className="text-slate-500 text-xs font-mono">—</span>;
+          const d = new Date(val);
+          return (
+            <span className="font-mono text-[11px] text-slate-300" title={val}>
+              {isNaN(d.getTime())
+                ? val
+                : d.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+            </span>
+          );
+        },
+      },
+      {
+        headerName: 'Provenance',
+        field: 'provenanceStatus',
+        width: 125,
+        sortable: true,
+        filter: 'agTextColumnFilter',
+        cellRenderer: (params: ICellRendererParams) => {
+          const status = (params.value as string) || 'UNVERIFIED_UNAVAILABLE';
+          if (status === 'VERIFIED') {
+            return (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                VERIFIED
+              </span>
+            );
+          }
+          if (status === 'MISMATCH_DETECTED' || status === 'TAMPERED_PAYLOAD') {
+            return (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-rose-950 text-rose-300 border border-rose-800">
+                MISMATCH
+              </span>
+            );
+          }
+          return (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">
+              UNVERIFIED
+            </span>
+          );
+        },
       },
       {
         headerName: 'State',
@@ -182,7 +286,7 @@ export function MilestoneIntelligenceGrid({
       {
         headerName: 'Evidence',
         field: 'verifiedRatioPct',
-        width: 140,
+        width: 135,
         sortable: true,
         filter: 'agNumberColumnFilter',
         cellRenderer: EvidenceCompletenessRenderer,
@@ -199,7 +303,10 @@ export function MilestoneIntelligenceGrid({
           if (rec === 'APPROVED' || rec === 'PASS') color = 'text-emerald-300';
           if (rec === 'REJECTED' || rec === 'FAIL') color = 'text-rose-300';
           return (
-            <span className={`font-mono text-xs font-semibold ${color}`} title="AI Advisory Recommendation">
+            <span
+              className={`font-mono text-xs font-semibold ${color}`}
+              title="AI Advisory Recommendation"
+            >
               {rec}
             </span>
           );
@@ -250,7 +357,7 @@ export function MilestoneIntelligenceGrid({
       {
         headerName: 'Payment Status',
         field: 'paymentStatus',
-        width: 160,
+        width: 155,
         sortable: true,
         filter: 'agTextColumnFilter',
         cellRenderer: PaymentStatusRenderer,
@@ -262,9 +369,7 @@ export function MilestoneIntelligenceGrid({
         sortable: true,
         filter: 'agNumberColumnFilter',
         cellRenderer: (params: ICellRendererParams) => (
-          <span className="font-mono text-xs text-slate-300">
-            {params.value} events
-          </span>
+          <span className="font-mono text-xs text-slate-300">{params.value} events</span>
         ),
       },
     ];
@@ -300,7 +405,25 @@ export function MilestoneIntelligenceGrid({
     gridApi.resetColumnState();
   }, [gridApi]);
 
-  // Export Sanitized CSV
+  // Auto-size all columns for optimal layout
+  const handleAutoSizeColumns = useCallback(() => {
+    if (!gridApi) return;
+    gridApi.autoSizeAllColumns(false);
+  }, [gridApi]);
+
+  // Live Quick Filter Handler
+  const handleQuickSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const query = e.target.value;
+      setQuickSearchText(query);
+      if (gridApi) {
+        gridApi.setGridOption('quickFilterText', query);
+      }
+    },
+    [gridApi]
+  );
+
+  // Export Sanitized CSV with CWE-1236 Mitigation
   const handleExportCsv = useCallback(() => {
     if (!gridApi) return;
     gridApi.exportDataAsCsv({
@@ -308,6 +431,10 @@ export function MilestoneIntelligenceGrid({
       columnKeys: [
         'milestoneTitle',
         'contractTitle',
+        'developerId',
+        'evidenceType',
+        'submittedAtIso',
+        'provenanceStatus',
         'stateMachineStatus',
         'verifiedRatioPct',
         'aiRecommendation',
@@ -343,7 +470,10 @@ export function MilestoneIntelligenceGrid({
   );
 
   return (
-    <section id="milestone-intelligence-grid-section" className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4 font-sans">
+    <section
+      id="milestone-intelligence-grid-section"
+      className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4 font-sans"
+    >
       {/* Grid Toolbar & Natural Language Filter */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -362,10 +492,41 @@ export function MilestoneIntelligenceGrid({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Quick Text Filter */}
+            <div className="relative">
+              <input
+                type="text"
+                value={quickSearchText}
+                onChange={handleQuickSearchChange}
+                placeholder="Instant filter..."
+                className="px-2.5 py-1.5 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-36 sm:w-44 font-sans"
+                title="Instant live filter across all columns"
+              />
+              {quickSearchText && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickSearchText('');
+                    if (gridApi) gridApi.setGridOption('quickFilterText', '');
+                  }}
+                  className="absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={handleAutoSizeColumns}
+              className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200"
+              title="Automatically fit column widths to cell content"
+            >
+              Auto-fit
+            </button>
             <button
               onClick={handleExportCsv}
               className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 flex items-center gap-1.5"
-              title="Export sanitized CSV excluding credentials and internal hashes"
+              title="Export sanitized CSV excluding credentials and internal hashes (CWE-1236 guarded)"
             >
               <span>📥</span> Export CSV
             </button>
@@ -396,7 +557,10 @@ export function MilestoneIntelligenceGrid({
       </div>
 
       {/* Main AG Grid Container */}
-      <div className="ag-theme-quartz-dark w-full rounded-lg overflow-hidden border border-slate-800" style={{ height: '380px' }}>
+      <div
+        className="ag-theme-quartz-dark w-full rounded-lg overflow-hidden border border-slate-800"
+        style={{ height: '410px' }}
+      >
         <AgGridReact<FinancialLedgerRow>
           ref={gridRef}
           rowData={filteredRows}
@@ -414,6 +578,9 @@ export function MilestoneIntelligenceGrid({
           animateRows={true}
           suppressCellFocus={false}
           enableCellTextSelection={true}
+          pagination={true}
+          paginationPageSize={10}
+          paginationPageSizeSelector={[10, 20, 50]}
         />
       </div>
 
@@ -424,7 +591,10 @@ export function MilestoneIntelligenceGrid({
             const rowData = ledgerRows.find((r) => r.milestoneId === mId);
             if (!rowData) return null;
             return (
-              <div key={mId} className="rounded-lg overflow-hidden border border-indigo-800/80 shadow-lg">
+              <div
+                key={mId}
+                className="rounded-lg overflow-hidden border border-indigo-800/80 shadow-lg"
+              >
                 <EvidenceDetailPanel
                   data={rowData}
                   token={token}
