@@ -621,6 +621,12 @@ export interface ContractScheduleTask {
   riskSeverity: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'UNAVAILABLE';
   evidenceReferences: string[];
   riskExplanation: string;
+  children?: ContractScheduleTask[];
+  parentId?: string | null;
+  acceptanceCriterionId?: string | null;
+  requiredProofType?: RequiredProofType;
+  leaf?: boolean;
+  expanded?: boolean;
 }
 
 export interface ContractScheduleDependency {
