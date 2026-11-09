@@ -85,12 +85,57 @@ export const WHITELISTED_COLUMNS: Record<
   },
 };
 
+export interface DateRangeUtc {
+  startDateIso: string;
+  endDateIso: string;
+  timezone: 'UTC';
+  isCalendarWeek: boolean;
+}
+
+/**
+ * Calculates start (Monday 00:00:00.000Z) and end (Sunday 23:59:59.999Z) of the calendar week in UTC.
+ * Ensures future timestamps are excluded via the endDateIso upper bound (next Monday 00:00:00.000Z).
+ */
+export function getCalendarWeekRangeUtc(referenceDate: Date = new Date()): DateRangeUtc {
+  const d = referenceDate instanceof Date && !isNaN(referenceDate.getTime()) ? referenceDate : new Date();
+  const utcDay = d.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay;
+  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + diffToMonday, 0, 0, 0, 0));
+  const nextMonday = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 7, 0, 0, 0, 0));
+
+  return {
+    startDateIso: monday.toISOString().slice(0, 10),
+    endDateIso: nextMonday.toISOString().slice(0, 10),
+    timezone: 'UTC',
+    isCalendarWeek: true,
+  };
+}
+
+/**
+ * Calculates rolling 7-day lookback window: [refDate - 7 days, refDate + 1 day] in UTC.
+ * Upper bound ensures future timestamps are excluded.
+ */
+export function getRollingSevenDaysRangeUtc(referenceDate: Date = new Date()): DateRangeUtc {
+  const d = referenceDate instanceof Date && !isNaN(referenceDate.getTime()) ? referenceDate : new Date();
+  const start = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const tomorrow = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+  return {
+    startDateIso: start.toISOString().slice(0, 10),
+    endDateIso: tomorrow.toISOString().slice(0, 10),
+    timezone: 'UTC',
+    isCalendarWeek: false,
+  };
+}
+
 /**
  * Deterministic Natural-Language Query Parser.
  * Strictly validates against the explicit whitelist of supported columns and operations.
  * Never executes dynamic code or SQL expressions.
  */
-export function interpretNaturalLanguageQuery(query: string): InterpretedQueryPlan {
+export function interpretNaturalLanguageQuery(
+  query: string,
+  referenceDate?: Date
+): InterpretedQueryPlan {
   if (!query || typeof query !== 'string') {
     return {
       originalQuery: String(query || ''),
@@ -139,23 +184,55 @@ export function interpretNaturalLanguageQuery(query: string): InterpretedQueryPl
 
   if (
     normalized.includes('this week') ||
-    normalized.includes('recent evidence') ||
-    normalized.includes('recent submissions') ||
-    normalized.includes('submitted recently')
+    normalized.includes('calendar week') ||
+    normalized.includes('current week')
   ) {
-    // Generate real date range threshold for 'submitted this week'
-    const referenceDate = new Date('2026-11-22T12:00:00.000Z');
-    const sevenDaysAgo = new Date(referenceDate.getTime() - 7 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
+    // Explicit Calendar Week Semantics: Monday 00:00:00.000Z to Sunday 23:59:59.999Z in UTC
+    const range = getCalendarWeekRangeUtc(referenceDate);
     instructions.push({
       column: 'submittedAtIso',
       columnLabel: WHITELISTED_COLUMNS.submittedAtIso.label,
       operator: 'GREATER_THAN',
-      value: sevenDaysAgo,
-      description: `Filter by Submitted At date range (on or after ${sevenDaysAgo})`,
+      value: range.startDateIso,
+      description: `Filter by Submitted At calendar week start (on or after ${range.startDateIso} 00:00:00 UTC)`,
     });
-    rationaleParts.push(`Filtered for submissions within the current week (>= ${sevenDaysAgo})`);
+    instructions.push({
+      column: 'submittedAtIso',
+      columnLabel: WHITELISTED_COLUMNS.submittedAtIso.label,
+      operator: 'LESS_THAN',
+      value: range.endDateIso,
+      description: `Filter by Submitted At calendar week end (before ${range.endDateIso} 00:00:00 UTC, excluding future dates)`,
+    });
+    rationaleParts.push(
+      `Filtered for submissions in the current calendar week (Monday ${range.startDateIso} to Sunday in UTC; future timestamps excluded)`
+    );
+  } else if (
+    normalized.includes('last 7 days') ||
+    normalized.includes('past 7 days') ||
+    normalized.includes('rolling week') ||
+    normalized.includes('recent evidence') ||
+    normalized.includes('recent submissions') ||
+    normalized.includes('submitted recently')
+  ) {
+    // Explicit Rolling 7-Day Window Semantics in UTC
+    const range = getRollingSevenDaysRangeUtc(referenceDate);
+    instructions.push({
+      column: 'submittedAtIso',
+      columnLabel: WHITELISTED_COLUMNS.submittedAtIso.label,
+      operator: 'GREATER_THAN',
+      value: range.startDateIso,
+      description: `Filter by Submitted At rolling 7-day window (on or after ${range.startDateIso} UTC)`,
+    });
+    instructions.push({
+      column: 'submittedAtIso',
+      columnLabel: WHITELISTED_COLUMNS.submittedAtIso.label,
+      operator: 'LESS_THAN',
+      value: range.endDateIso,
+      description: `Filter by Submitted At upper bound (before ${range.endDateIso} UTC, excluding future dates)`,
+    });
+    rationaleParts.push(
+      `Filtered for submissions in the rolling past 7 days (>= ${range.startDateIso} UTC; future timestamps excluded)`
+    );
   }
 
   // 1. Risk Severity filters

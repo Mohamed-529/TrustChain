@@ -41,15 +41,17 @@ export function NaturalLanguageFilterBar({
     const filterModel: Record<string, any> = {};
 
     for (const inst of instructions) {
+      const isDateCol = inst.column === 'submittedAtIso' || inst.column === 'deadlineIso';
+      let singleCondition: any;
+
       if (inst.operator === 'EQUALS') {
-        filterModel[inst.column] = {
+        singleCondition = {
           filterType: 'text',
           type: 'equals',
           filter: String(inst.value),
         };
       } else if (inst.operator === 'GREATER_THAN') {
-        const isDateCol = inst.column === 'submittedAtIso' || inst.column === 'deadlineIso';
-        filterModel[inst.column] = isDateCol
+        singleCondition = isDateCol
           ? {
               filterType: 'text',
               type: 'greaterThan',
@@ -61,8 +63,7 @@ export function NaturalLanguageFilterBar({
               filter: Number(inst.value),
             };
       } else if (inst.operator === 'LESS_THAN') {
-        const isDateCol = inst.column === 'submittedAtIso' || inst.column === 'deadlineIso';
-        filterModel[inst.column] = isDateCol
+        singleCondition = isDateCol
           ? {
               filterType: 'text',
               type: 'lessThan',
@@ -78,13 +79,13 @@ export function NaturalLanguageFilterBar({
           .split(',')
           .map((v) => v.trim());
         if (values.length === 1) {
-          filterModel[inst.column] = {
+          singleCondition = {
             filterType: 'text',
             type: 'equals',
             filter: values[0],
           };
         } else {
-          filterModel[inst.column] = {
+          singleCondition = {
             filterType: 'text',
             operator: 'OR',
             conditions: values.map((val) => ({
@@ -92,6 +93,20 @@ export function NaturalLanguageFilterBar({
               type: 'equals',
               filter: val,
             })),
+          };
+        }
+      }
+
+      if (singleCondition) {
+        if (!filterModel[inst.column]) {
+          filterModel[inst.column] = singleCondition;
+        } else if (filterModel[inst.column].operator === 'AND') {
+          filterModel[inst.column].conditions.push(singleCondition);
+        } else {
+          filterModel[inst.column] = {
+            filterType: isDateCol ? 'text' : typeof inst.value === 'number' ? 'number' : 'text',
+            operator: 'AND',
+            conditions: [filterModel[inst.column], singleCondition],
           };
         }
       }
@@ -143,7 +158,8 @@ export function NaturalLanguageFilterBar({
   const presets = [
     'Show evidence requiring human review',
     'Find high-risk milestone submissions',
-    'Show evidence submitted this week',
+    'Show evidence submitted this calendar week (Mon–Sun UTC)',
+    'Show evidence submitted in the last 7 days (rolling)',
     'Show failed verification results',
     'Show milestones with budget > $2,000',
     'Show unverified evidence (<100%)',
