@@ -24,11 +24,15 @@ import type {
   Contract,
   ContractScheduleResponse,
   CreateContractInput,
+  DisputeEvidencePack,
   EvaluationRun,
+  EvidencePassport,
   EvidenceProvenanceVerificationRecord,
   EvidenceSubmission,
   FinancialLedgerRow,
   HumanApprovalRecord,
+  Milestone,
+  MilestoneReviewDetails,
   MilestoneStatus,
   PayPalTransactionRecord,
   PolicyCalculationResult,
@@ -166,6 +170,18 @@ export class MilestoneProofClient {
 
   public async getOpenApiYaml(): Promise<string> {
     return this.request({ method: 'GET', path: '/openapi.yaml', requiresAuth: false });
+  }
+
+  public async getReadinessStatus(): Promise<{
+    status: string;
+    service: string;
+    ready: boolean;
+    uptimeSeconds: number;
+    database: { engine: string; pingLatencyMs: number; migrationVersion: number; healthy: boolean };
+    memory: { rssMb: number; heapUsedMb: number };
+    timestamp: string;
+  }> {
+    return this.request({ method: 'GET', path: '/ready', requiresAuth: false });
   }
 
   // ==========================================================================
@@ -307,6 +323,62 @@ export class MilestoneProofClient {
     });
   }
 
+  public async captureScheduleBaseline(
+    contractId: string,
+    body?: { label?: string }
+  ): Promise<{
+    status: string;
+    contractId: string;
+    label: string | null;
+    baselineCapturedAt: string;
+    auditEntryHash: string;
+    updatedMilestonesCount: number;
+  }> {
+    return this.request({
+      method: 'POST',
+      path: `/contracts/${encodeURIComponent(contractId)}/schedule/baseline`,
+      body: body ?? {},
+    });
+  }
+
+  public async getScheduleDownstreamImpact(
+    contractId: string,
+    delayedMilestoneId: string,
+    delayDays: number
+  ): Promise<{
+    status: string;
+    contractId: string;
+    delayedMilestoneId: string;
+    delayDays: number;
+    directlyAffectedCount: number;
+    downstreamAffectedCount: number;
+    impactedMilestones: Array<Record<string, unknown>>;
+    newContractEndDate: string;
+    deadlineBreached: boolean;
+  }> {
+    return this.request({
+      method: 'GET',
+      path: `/contracts/${encodeURIComponent(contractId)}/schedule/impact?delayedMilestoneId=${encodeURIComponent(delayedMilestoneId)}&delayDays=${delayDays}`,
+    });
+  }
+
+  public async validateScheduleDependencies(
+    contractId: string,
+    dependencies: Array<{ fromMilestoneId: string; toMilestoneId: string; type?: number; lagDays?: number }>
+  ): Promise<{
+    status: string;
+    valid: boolean;
+    cyclic: boolean;
+    cyclePath?: string[];
+    validatedCount: number;
+  }> {
+    return this.request({
+      method: 'POST',
+      path: `/contracts/${encodeURIComponent(contractId)}/schedule/validate-dependencies`,
+      body: { dependencies },
+    });
+  }
+
   // ==========================================================================
   // 5. EvidenceController
   // ==========================================================================
@@ -353,6 +425,36 @@ export class MilestoneProofClient {
       method: 'GET',
       path: `/milestones/${encodeURIComponent(milestoneId)}/evidence/provenance`,
     });
+  }
+
+  public async getEvidencePassport(
+    milestoneId: string,
+    contractId?: string
+  ): Promise<{ passport: EvidencePassport; verificationSummary?: Record<string, unknown> }> {
+    const path = contractId
+      ? `/contracts/${encodeURIComponent(contractId)}/milestones/${encodeURIComponent(milestoneId)}/evidence-passport`
+      : `/milestones/${encodeURIComponent(milestoneId)}/evidence-passport`;
+    return this.request({ method: 'GET', path });
+  }
+
+  public async validateRuntimePreview(
+    milestoneId: string,
+    options: { previewUrl: string; expectedStatus?: number; timeoutMs?: number },
+    contractId?: string
+  ): Promise<{
+    status: string;
+    milestoneId: string;
+    previewUrl: string;
+    httpStatus: number;
+    responseTimeMs: number;
+    sslValid: boolean;
+    finalIp: string;
+    passed: boolean;
+  }> {
+    const path = contractId
+      ? `/contracts/${encodeURIComponent(contractId)}/milestones/${encodeURIComponent(milestoneId)}/evidence-passport/runtime-validate`
+      : `/milestones/${encodeURIComponent(milestoneId)}/evidence-passport/runtime-validate`;
+    return this.request({ method: 'POST', path, body: options });
   }
 
   public async handleGitHubWebhook(
@@ -444,6 +546,100 @@ export class MilestoneProofClient {
     });
   }
 
+  public async getMilestoneReviewDetails(
+    milestoneId: string
+  ): Promise<MilestoneReviewDetails> {
+    return this.request({
+      method: 'GET',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/review`,
+    });
+  }
+
+  public async approveMilestone(
+    milestoneId: string,
+    body?: { notes?: string }
+  ): Promise<{ status: string; approval: HumanApprovalRecord; milestone: Milestone }> {
+    return this.request({
+      method: 'POST',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/review/approve`,
+      body: body ?? {},
+    });
+  }
+
+  public async rejectMilestone(
+    milestoneId: string,
+    body?: { notes?: string }
+  ): Promise<{ status: string; approval: HumanApprovalRecord; milestone: Milestone }> {
+    return this.request({
+      method: 'POST',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/review/reject`,
+      body: body ?? {},
+    });
+  }
+
+  public async requestMilestoneChanges(
+    milestoneId: string,
+    body: { notes: string }
+  ): Promise<{ status: string; approval: HumanApprovalRecord; milestone: Milestone }> {
+    return this.request({
+      method: 'POST',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/review/request-changes`,
+      body,
+    });
+  }
+
+  public async generateDisputePack(
+    contractId: string,
+    milestoneId: string,
+    body?: { reason?: string; notes?: string }
+  ): Promise<{ status: string; pack: DisputeEvidencePack }> {
+    return this.request({
+      method: 'POST',
+      path: `/contracts/${encodeURIComponent(contractId)}/milestones/${encodeURIComponent(milestoneId)}/dispute-pack`,
+      body: body ?? {},
+    });
+  }
+
+  public async getDisputePack(
+    contractId: string,
+    packId: string
+  ): Promise<{ status: string; pack: DisputeEvidencePack }> {
+    return this.request({
+      method: 'GET',
+      path: `/contracts/${encodeURIComponent(contractId)}/dispute-packs/${encodeURIComponent(packId)}`,
+    });
+  }
+
+  public async verifyDisputePack(
+    contractId: string,
+    packId: string
+  ): Promise<{
+    status: string;
+    valid: boolean;
+    packId: string;
+    contractId: string;
+    milestoneId: string;
+    packDigest: string;
+    computedDigest: string;
+    timelineItemsCount: number;
+    mismatchField?: string;
+  }> {
+    return this.request({
+      method: 'GET',
+      path: `/contracts/${encodeURIComponent(contractId)}/dispute-packs/${encodeURIComponent(packId)}/verify`,
+    });
+  }
+
+  public async exportDisputePack(
+    contractId: string,
+    packId: string
+  ): Promise<{ status: string; export: Record<string, unknown>; exportedAt: string }> {
+    return this.request({
+      method: 'GET',
+      path: `/contracts/${encodeURIComponent(contractId)}/dispute-packs/${encodeURIComponent(packId)}/export`,
+    });
+  }
+
   // ==========================================================================
   // 9. PaymentsController (PayPal Orders API v2)
   // ==========================================================================
@@ -491,6 +687,35 @@ export class MilestoneProofClient {
     });
   }
 
+  public async getPayPalOrderDetails(
+    milestoneId: string
+  ): Promise<{ status: string; milestoneId: string; order: Record<string, unknown> }> {
+    return this.request({
+      method: 'GET',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/paypal/order-details`,
+    });
+  }
+
+  public async reconcilePayment(
+    milestoneId: string,
+    options?: { triggerReconcile?: boolean }
+  ): Promise<{
+    status: string;
+    milestoneId: string;
+    transactionId: string | null;
+    paymentStatus: string;
+    paypalOrderId: string | null;
+    authorizationId: string | null;
+    captureId: string | null;
+    driftDetected: boolean;
+    actionTaken: string;
+  }> {
+    return this.request({
+      method: options?.triggerReconcile ? 'POST' : 'GET',
+      path: `/milestones/${encodeURIComponent(milestoneId)}/paypal/reconcile`,
+    });
+  }
+
   public async handlePayPalWebhook(
     headers: {
       'PAYPAL-TRANSMISSION-ID': string;
@@ -531,5 +756,32 @@ export class MilestoneProofClient {
 
   public async verifyAuditHashChain(): Promise<AuditChainVerificationResult> {
     return this.request({ method: 'GET', path: '/audit/verify' });
+  }
+
+  public async replayContractAudit(
+    contractId: string,
+    maxSeq?: number
+  ): Promise<{
+    status: string;
+    contractId: string;
+    replayThroughSeq: number;
+    totalEventsReplayed: number;
+    chainIntegrityValid: boolean;
+    reconstructedState: Record<string, unknown>;
+  }> {
+    const qs = maxSeq ? `?maxSeq=${maxSeq}` : '';
+    return this.request({
+      method: 'GET',
+      path: `/contracts/${encodeURIComponent(contractId)}/audit/replay${qs}`,
+    });
+  }
+
+  public async verifyContractAudit(
+    contractId: string
+  ): Promise<AuditChainVerificationResult> {
+    return this.request({
+      method: 'GET',
+      path: `/contracts/${encodeURIComponent(contractId)}/audit/verify`,
+    });
   }
 }
