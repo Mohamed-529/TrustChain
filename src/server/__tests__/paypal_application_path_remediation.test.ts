@@ -174,7 +174,7 @@ describe('TrustChain — PayPal Application-Path Remediation & Financial Control
       );
 
       assert.equal(tx.status, 'ORDER_CREATED');
-      assert.ok(tx.paypalOrderId.startsWith('ORD-REMED-'));
+      assert.ok(tx.paypalOrderId?.startsWith('ORD-REMED-'));
 
       // Verify application_context in captured payload
       assert.ok(capturedPayload, 'PayPal Orders payload must be captured');
@@ -239,6 +239,8 @@ describe('TrustChain — PayPal Application-Path Remediation & Financial Control
         email: 'stranger@example.com',
         name: 'Stranger',
         role: 'CLIENT',
+        isActive: true,
+        isDemoAccount: false,
         createdAt: new Date().toISOString(),
       };
       await assert.rejects(
@@ -356,22 +358,20 @@ describe('TrustChain — PayPal Application-Path Remediation & Financial Control
         prUrl: 'https://github.com/example/repo/pull/1',
         prStatus: 'MERGED',
         ciReport: {
-          runUrl: 'https://github.com/example/repo/actions/runs/1',
-          testSuiteName: 'unit-tests',
+          provider: 'GITHUB_ACTIONS',
+          status: 'SUCCESS',
           totalTests: 64,
-          passingTests: 64,
-          failingTests: 0,
-          statementCoveragePercent: 88,
-          branchCoveragePercent: 82,
+          passedTests: 64,
+          failedTests: 0,
+          coveragePct: 88,
+          runUrl: 'https://github.com/example/repo/actions/runs/1',
+          logSummary: 'All 64 tests passed',
         },
         securityScan: {
-          scannerName: 'npm-audit',
-          scannedAt: now,
-          criticalCount: 0,
-          highCount: 0,
-          mediumCount: 0,
-          lowCount: 0,
-          vulnerabilities: [],
+          scanner: 'SNYK',
+          scannerVersion: '1.0.0',
+          status: 'COMPLETED',
+          findings: [],
         },
         developerNotes: 'Completed OAuth2 integration',
         submittedAt: now,
