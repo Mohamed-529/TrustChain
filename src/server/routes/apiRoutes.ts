@@ -69,7 +69,8 @@ export function createApiRouter(params: {
           process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'
         ),
         paypalConfigured: Boolean(
-          process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET
+          (process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET) ||
+          (process.env.PAYPAL_ACCESS_TOKEN && process.env.PAYPAL_ACCESS_TOKEN.trim().length > 0)
         ),
         githubConfigured: Boolean(
           process.env.GITHUB_TOKEN && process.env.GITHUB_TOKEN !== 'MY_GITHUB_TOKEN'
@@ -282,6 +283,11 @@ export function createApiRouter(params: {
     '/milestones/:id/paypal/transactions',
     authenticate,
     paymentController.listTransactions
+  );
+  router.get(
+    '/milestones/:id/paypal/order-details',
+    authenticate,
+    paymentController.getOrderDetails
   );
   router.get(
     '/milestones/:id/paypal/reconcile',

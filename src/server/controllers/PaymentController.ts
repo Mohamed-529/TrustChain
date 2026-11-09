@@ -132,4 +132,23 @@ export class PaymentController {
       next(err);
     }
   };
+
+  public getOrderDetails = async (
+    req: ApiRequest,
+    res: ApiResponse,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.actor) {
+        throw new AppError(401, 'AUTH_TOKEN_REQUIRED', 'Authentication required.');
+      }
+      const orderDetails = await this.paypalService.getOrderDetails(
+        req.actor,
+        req.params.id
+      );
+      res.status(200).json({ orderDetails });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

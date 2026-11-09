@@ -28,6 +28,8 @@ export interface PayPalServiceOptions {
   fetchImpl?: typeof fetch;
   clientId?: string;
   clientSecret?: string;
+  accessToken?: string;
+  appUrl?: string;
   webhookId?: string;
   apiBaseUrl?: string;
   webhookEventRepo?: WebhookEventRepository;
@@ -107,6 +109,18 @@ export class PayPalService {
     return this.options?.clientSecret ?? process.env.PAYPAL_CLIENT_SECRET;
   }
 
+  private getAccessToken(): string | undefined {
+    return this.options?.accessToken ?? process.env.PAYPAL_ACCESS_TOKEN;
+  }
+
+  public getAppUrl(): string {
+    return (
+      this.options?.appUrl ??
+      process.env.APP_URL ??
+      'http://localhost:3000'
+    ).replace(/\/$/, '');
+  }
+
   private getWebhookId(): string | undefined {
     return this.options?.webhookId ?? process.env.PAYPAL_WEBHOOK_ID;
   }
@@ -120,6 +134,10 @@ export class PayPalService {
   }
 
   public isLivePayPalConfigured(): boolean {
+    const directToken = this.getAccessToken();
+    if (directToken && directToken.trim().length > 0) {
+      return true;
+    }
     const clientId = this.getClientId();
     const clientSecret = this.getClientSecret();
     return Boolean(
@@ -159,8 +177,19 @@ export class PayPalService {
   }
 
   private async getLivePayPalAccessToken(): Promise<string> {
-    const clientId = this.getClientId()!;
-    const secret = this.getClientSecret()!;
+    const directToken = this.getAccessToken();
+    if (directToken && directToken.trim().length > 0) {
+      return directToken.trim();
+    }
+    const clientId = this.getClientId();
+    const secret = this.getClientSecret();
+    if (!clientId || !secret) {
+      throw new AppError(
+        500,
+        'PAYPAL_CREDENTIALS_MISSING',
+        'PayPal Sandbox credentials (PAYPAL_CLIENT_ID & PAYPAL_CLIENT_SECRET or PAYPAL_ACCESS_TOKEN) are required for live PayPal operations.'
+      );
+    }
     const baseUrl = this.getApiBaseUrl();
     const basicAuth = Buffer.from(`${clientId}:${secret}`).toString('base64');
 
@@ -353,6 +382,10 @@ export class PayPalService {
     const nowIso = new Date().toISOString();
     const isLive = this.isLivePayPalConfigured();
 
+    const appUrl = this.getAppUrl();
+    const returnUrl = `${appUrl}/reviews?paypal_return=approved&milestone_id=${encodeURIComponent(milestone.id)}`;
+    const cancelUrl = `${appUrl}/reviews?paypal_return=cancelled&milestone_id=${encodeURIComponent(milestone.id)}`;
+
     let paypalOrderId = `ORD-MPAI-${crypto.createHash('sha256').update(`${milestoneId}:${idempotencyKey}`).digest('hex').slice(0, 12).toUpperCase()}`;
     let rawPaypalResponse: Record<string, unknown> = {
       id: paypalOrderId,
@@ -367,6 +400,25 @@ export class PayPalService {
             currency_code: 'USD',
             value: amountUsd,
           },
+        },
+      ],
+      application_context: {
+        brand_name: 'TrustChain Settlement Engine',
+        landing_page: 'NO_PREFERENCE',
+        user_action: 'CONTINUE',
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
+      },
+      links: [
+        {
+          rel: 'approve',
+          href: `${returnUrl}&token=${paypalOrderId}&simulated=true`,
+          method: 'GET',
+        },
+        {
+          rel: 'self',
+          href: `${this.getApiBaseUrl()}/v2/checkout/orders/${paypalOrderId}`,
+          method: 'GET',
         },
       ],
       create_time: nowIso,
@@ -398,6 +450,13 @@ export class PayPalService {
                 },
               },
             ],
+            application_context: {
+              brand_name: 'TrustChain Settlement Engine',
+              landing_page: 'NO_PREFERENCE',
+              user_action: 'CONTINUE',
+              return_url: returnUrl,
+              cancel_url: cancelUrl,
+            },
           }),
         });
       } catch (networkErr: any) {
@@ -571,6 +630,7 @@ export class PayPalService {
     if (isLive) {
       const token = await this.getLivePayPalAccessToken();
       const baseUrl = this.getApiBaseUrl();
+
       let authRes: Response;
       try {
         authRes = await this.getFetch()(
@@ -678,6 +738,13 @@ export class PayPalService {
           );
         }
         const errText = await authRes.text();
+        if (errText.includes('ORDER_NOT_APPROVED') || errText.includes('PAYER_ACTION_REQUIRED')) {
+          throw new AppError(
+            422,
+            'PAYPAL_ORDER_AWAITING_BUYER_APPROVAL',
+            `PayPal Order '${targetOrderId}' requires buyer approval before authorization. Please complete checkout approval via the PayPal approval link.`
+          );
+        }
         throw new AppError(
           422,
           'PAYPAL_ORDER_AUTHORIZE_FAILED',
@@ -1115,6 +1182,30 @@ export class PayPalService {
 
       rawCaptureResponse = parsedCap;
       paypalCaptureId = liveCaptureId;
+
+      // Confirmatory query on the authoritative remote capture resource
+      try {
+        const verifyRes = await this.getFetch()(
+          `${baseUrl}/v2/payments/captures/${encodeURIComponent(liveCaptureId)}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        if (verifyRes.ok) {
+          const verifyData = (await verifyRes.json()) as Record<string, unknown>;
+          rawCaptureResponse = {
+            ...rawCaptureResponse,
+            ...verifyData,
+            authoritativeVerification: 'CONFIRMED_VIA_REMOTE_RETRIEVAL',
+          };
+        }
+      } catch {
+        // Non-fatal confirmatory check
+      }
     } else {
       paypalCaptureId = `CAP-MPAI-${crypto
         .createHash('sha256')
@@ -1822,6 +1913,53 @@ export class PayPalService {
       throw new AppError(res.status, 'PAYPAL_REMOTE_QUERY_ERROR', `Failed to query PayPal capture: ${res.statusText}`);
     }
     return (await res.json()) as Record<string, unknown>;
+  }
+
+  /**
+   * Retrieves authoritative order details directly from PayPal Orders API v2 or local simulation cache.
+   */
+  public async getOrderDetails(
+    actor: User,
+    milestoneId: string
+  ): Promise<Record<string, unknown>> {
+    const milestone = this.milestoneRepo.findById(milestoneId);
+    if (!milestone) {
+      throw new AppError(404, 'MILESTONE_NOT_FOUND', `Milestone '${milestoneId}' was not found.`);
+    }
+    const contract = this.contractRepo.findById(milestone.contractId);
+    if (!contract) {
+      throw new AppError(404, 'CONTRACT_NOT_FOUND', `Contract '${milestone.contractId}' was not found.`);
+    }
+    if (
+      actor.id !== contract.clientId &&
+      actor.id !== contract.reviewerId &&
+      actor.id !== contract.developerId
+    ) {
+      throw new AppError(403, 'FORBIDDEN_NOT_CONTRACT_PARTY', 'Only parties to this contract may view order details.');
+    }
+    const latestTx = this.paymentRepo.findLatestByMilestoneId(milestoneId);
+    if (!latestTx || !latestTx.paypalOrderId) {
+      throw new AppError(404, 'NO_PAYPAL_ORDER', `No PayPal order found for milestone '${milestoneId}'.`);
+    }
+    if (this.isLivePayPalConfigured()) {
+      const token = await this.getLivePayPalAccessToken();
+      const baseUrl = this.getApiBaseUrl();
+      const res = await this.getFetch()(
+        `${baseUrl}/v2/checkout/orders/${encodeURIComponent(latestTx.paypalOrderId)}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      if (!res.ok) {
+        throw new AppError(422, 'PAYPAL_ORDER_QUERY_FAILED', `Failed to query PayPal order: ${await res.text()}`);
+      }
+      return (await res.json()) as Record<string, unknown>;
+    }
+    return (latestTx.rawPaypalResponse as Record<string, unknown>) ?? { id: latestTx.paypalOrderId, status: 'CREATED' };
   }
 
   /**
