@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/reviews', label: 'Review & Pay', icon: '◈', badge: 'PayPal' },
   { path: '/trust', label: 'Passport', icon: '🛡' },
   { path: '/disputes', label: 'Disputes', icon: '⚖' },
+  { path: '/developers', label: 'API & SDK', icon: '⚡', badge: 'APIMatic' },
   { path: '/settings', label: 'Settings', icon: '⚙' },
 ];
 

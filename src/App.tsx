@@ -28,6 +28,7 @@ import { ReviewsPage } from './pages/ReviewsPage.tsx';
 import { TrustPage } from './pages/TrustPage.tsx';
 import { DisputesPage } from './pages/DisputesPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
+import { DeveloperPortalPage } from './pages/DeveloperPortalPage.tsx';
 
 function AppContent() {
   const currentPath = usePathname();
@@ -771,6 +772,10 @@ function AppContent() {
             statusBanner={statusBanner}
           />
         );
+
+      case '/developers':
+      case '/docs':
+        return <DeveloperPortalPage />;
 
       case '/':
       case '/onboarding':
