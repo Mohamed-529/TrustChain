@@ -74,7 +74,12 @@ describe('Prompt 2/8 — Audit Replay Engine & Lifecycle State Reconstruction', 
     tempFilesToClean.push(dbPath);
     tempFilesToClean.push(`${dbPath}-wal`);
     tempFilesToClean.push(`${dbPath}-shm`);
-    return createServerApp({ dbPath });
+    return createServerApp({
+      dbPath,
+      paypalOptions: {
+        simulateMode: true,
+      },
+    });
   }
 
   function cleanupFiles() {

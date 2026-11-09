@@ -32,6 +32,7 @@ export interface PayPalServiceOptions {
   appUrl?: string;
   webhookId?: string;
   apiBaseUrl?: string;
+  simulateMode?: boolean;
   webhookEventRepo?: WebhookEventRepository;
   beforeWebhookReconcileHook?: (eventId: string, eventType: string) => void;
 }
@@ -102,15 +103,24 @@ export class PayPalService {
   }
 
   private getClientId(): string | undefined {
-    return this.options?.clientId ?? process.env.PAYPAL_CLIENT_ID;
+    if (this.options && 'clientId' in this.options) {
+      return this.options.clientId;
+    }
+    return process.env.PAYPAL_CLIENT_ID;
   }
 
   private getClientSecret(): string | undefined {
-    return this.options?.clientSecret ?? process.env.PAYPAL_CLIENT_SECRET;
+    if (this.options && 'clientSecret' in this.options) {
+      return this.options.clientSecret;
+    }
+    return process.env.PAYPAL_CLIENT_SECRET;
   }
 
   private getAccessToken(): string | undefined {
-    return this.options?.accessToken ?? process.env.PAYPAL_ACCESS_TOKEN;
+    if (this.options && 'accessToken' in this.options) {
+      return this.options.accessToken;
+    }
+    return process.env.PAYPAL_ACCESS_TOKEN;
   }
 
   public getAppUrl(): string {
@@ -122,7 +132,10 @@ export class PayPalService {
   }
 
   private getWebhookId(): string | undefined {
-    return this.options?.webhookId ?? process.env.PAYPAL_WEBHOOK_ID;
+    if (this.options && 'webhookId' in this.options) {
+      return this.options.webhookId;
+    }
+    return process.env.PAYPAL_WEBHOOK_ID;
   }
 
   private getApiBaseUrl(): string {
@@ -134,6 +147,9 @@ export class PayPalService {
   }
 
   public isLivePayPalConfigured(): boolean {
+    if (this.options?.simulateMode === true) {
+      return false;
+    }
     const directToken = this.getAccessToken();
     if (directToken && directToken.trim().length > 0) {
       return true;
