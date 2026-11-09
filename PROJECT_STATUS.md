@@ -16,22 +16,23 @@
 
 ## Current Phase
 
-**Final Browser-Level Sponsor Demo Acceptance (Completed & Verified)**
+**Live Gemini Integration & Adversarial Validation (Completed & Verified)**
 
-All three sponsor technologies and the full contract-to-settlement lifecycle have undergone real browser-level verification via headless Chrome (Chrome/156.0.8078.81) with zero console errors and zero network failures:
-- **281 / 281 automated tests passing** across 24 test suites with 0 failures and 0 regressions.
-- **Clean TypeScript compilation** (`npm run lint` — `tsc --noEmit` exited 0 with 0 errors).
-- **Clean Vite production bundle** (`npm run build` — `vite build` cleanly bundled in 43.7s).
-- **Phase 1 AG Grid Date-Filter Semantics Remediated:** Implemented explicit UTC calendar week boundaries (Monday 00:00:00Z to Sunday 23:59:59Z) with future timestamp exclusion, rolling 7-day lookback window (`submitted in the last 7 days`), multi-condition instruction merging in AG Grid filter model, and comprehensive unit tests (Test 17 in `ag_grid_intelligence.test.ts`).
-- **Phase 2 Real Browser Route Verification:** Real browser inspected `/developers` (APIMatic portal with 54 operations), `/timeline` (Bryntum Gantt schedule control tower & critical path), `/intelligence` and `/ledger` (AG Grid Community v36 ledger & Master/Detail), `/reviews` (human approval gate), `/trust` (Evidence Passport & audit hash chain), `/disputes` (Dispute Evidence Pack), and `/dashboard`.
-- **Phase 3 Cross-Sponsor Lifecycle Workflow Executed:** 10-step end-to-end workflow executed through the UI, connecting Bryntum timeline planning, genuine delivery evidence ingestion, cryptographic SLSA provenance verification, AG Grid ledger updates, explicit human approval, live PayPal Sandbox authorization/capture under `intent: AUTHORIZE`, and audit replay verification.
-- **Phase 4 Browser Evidence Artifacts Captured:** 9 high-resolution screenshots and raw JSON telemetry recorded in `demo-evidence/`.
-- **5 Acceptance & Verification Reports Published:**
-  1. `BROWSER_DEMO_ACCEPTANCE_REPORT.md`
-  2. `SPONSOR_BROWSER_VERIFICATION_MATRIX.md`
-  3. `CROSS_SPONSOR_UI_WORKFLOW_REPORT.md`
-  4. `DEMO_EVIDENCE_INDEX.md`
-  5. `DEMO_LIMITATIONS_AND_MOCKS.md`
+TrustChain's tri-agent AI evaluation architecture (EvidenceAgent, RiskAgent, Arbitrator Agent) is fully connected to the genuine Google Gemini API using modern `gemini-3.5-flash-lite`:
+- **291 / 291 automated tests passing** across 25 test suites with 0 failures and 0 regressions.
+- **Genuine Google Gemini Live Integration:** Connected to Google Generative Language API endpoint (`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent`) with server-side secrets (`GEMINI_API_KEY`) and bounded 1-shot retry.
+- **Native Schema-Constrained Decoding:** Enforces token-level grammar constraints via `responseSchema` (`EVIDENCE_ANALYSIS_SCHEMA`, `RISK_ASSESSMENT_SCHEMA`, `REVIEW_SYNTHESIS_SCHEMA`) eliminating hallucinated keys and syntax degradation.
+- **Deterministic Fallback Pipeline:** Graceful degradation from `LIVE_GEMINI` to `DETERMINISTIC_FALLBACK` upon transient quota (429), timeout (504), or 503 errors, logging `EVALUATION_FALLBACK_TRIGGERED` in SQLite audit trail.
+- **10-Scenario Adversarial & Security Matrix:** Validated prompt injection interception, financial authority boundary enforcement (`422 AI_FINANCIAL_BOUNDARY_VIOLATION`), canonical citation grounding, and anti-autonomous state invariants (Rule #1).
+- **UI Decision Provenance & Decision Inspector Modal:** Added dynamic `⚡ LIVE GEMINI`, `🔄 FALLBACK`, and `⚙️ MOCK` badges on Review Workbench and AG Grid Financial Ledger, with interactive full-width AI Decision Inspector modal.
+- **Real Browser Verification Artifacts Captured:**
+  - `demo-evidence/10_live_gemini_evaluation_workbench.png` (Review Workbench with Live Gemini Evaluation Provenance)
+  - `demo-evidence/11_live_gemini_decision_inspector.png` (AI Decision Inspector Modal with Gemini 3.5 Flash Lite Telemetry)
+- **4 Comprehensive Technical Reports Published:**
+  1. `GEMINI_LIVE_INTEGRATION_REPORT.md`
+  2. `GEMINI_SECURITY_AND_ADVERSARIAL_TEST_REPORT.md`
+  3. `GEMINI_FALLBACK_AND_FAILURE_RECOVERY_REPORT.md`
+  4. `GEMINI_LIVE_API_TEST_EVIDENCE.md`
 
 ---
 
