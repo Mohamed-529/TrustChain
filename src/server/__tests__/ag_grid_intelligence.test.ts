@@ -5,6 +5,8 @@ import path from 'node:path';
 import { createServerApp } from '../index.ts';
 import {
   interpretNaturalLanguageQuery,
+  getCalendarWeekRangeUtc,
+  getRollingSevenDaysRangeUtc,
   sanitizeCsvCell,
   sanitizeExportData,
   validateAiConfidence,
@@ -495,5 +497,63 @@ test('Prompt 6 — AG Grid Intelligence Control Room & Frontend Engineering', as
     assert.ok(gridSource.includes("'evidenceType'"), 'CSV export must include evidenceType');
     assert.ok(gridSource.includes("'submittedAtIso'"), 'CSV export must include submittedAtIso');
     assert.ok(gridSource.includes("'provenanceStatus'"), 'CSV export must include provenanceStatus');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 17: Disambiguated Date-Filter Semantics & Boundary Verification
+  // --------------------------------------------------------------------------
+  await t.test('17. Disambiguated Date-Filter Semantics: Calendar Week (UTC) vs Rolling 7-Day Window and Future Date Exclusion', () => {
+    // 1. Calendar week boundaries with explicit UTC timezone
+    const mondayRef = new Date('2026-11-09T14:30:00.000Z'); // A Monday
+    const calRange1 = getCalendarWeekRangeUtc(mondayRef);
+    assert.equal(calRange1.startDateIso, '2026-11-09', 'Calendar week start must be Monday');
+    assert.equal(calRange1.endDateIso, '2026-11-16', 'Calendar week end bound must be next Monday (excluding future dates)');
+    assert.equal(calRange1.timezone, 'UTC');
+    assert.equal(calRange1.isCalendarWeek, true);
+
+    // 2. Sunday reference date maps back to preceding Monday in UTC
+    const sundayRef = new Date('2026-11-15T23:59:59.000Z'); // Sunday night
+    const calRange2 = getCalendarWeekRangeUtc(sundayRef);
+    assert.equal(calRange2.startDateIso, '2026-11-09', 'Sunday reference must map back to Monday of same calendar week');
+    assert.equal(calRange2.endDateIso, '2026-11-16');
+
+    // 3. Year turnover boundary (e.g. Jan 1, 2027 is a Friday)
+    const newYearRef = new Date('2027-01-01T12:00:00.000Z');
+    const calRange3 = getCalendarWeekRangeUtc(newYearRef);
+    assert.equal(calRange3.startDateIso, '2026-12-28', 'Week starts on Monday of preceding year');
+    assert.equal(calRange3.endDateIso, '2027-01-04');
+
+    // 4. Rolling 7-day lookback window
+    const rollRange = getRollingSevenDaysRangeUtc(mondayRef);
+    assert.equal(rollRange.startDateIso, '2026-11-02');
+    assert.equal(rollRange.isCalendarWeek, false);
+
+    // 5. Query: 'submitted this calendar week' emits bounded range [Monday, next Monday]
+    const planCal = interpretNaturalLanguageQuery('Show evidence submitted this calendar week', mondayRef);
+    assert.equal(planCal.instructions.length, 2, 'Must generate bounded range (lower + upper bound)');
+    assert.equal(planCal.instructions[0].column, 'submittedAtIso');
+    assert.equal(planCal.instructions[0].operator, 'GREATER_THAN');
+    assert.equal(planCal.instructions[0].value, '2026-11-09');
+    assert.equal(planCal.instructions[1].column, 'submittedAtIso');
+    assert.equal(planCal.instructions[1].operator, 'LESS_THAN');
+    assert.equal(planCal.instructions[1].value, '2026-11-16');
+
+    // 6. Query: 'submitted in the last 7 days' emits rolling range
+    const planRoll = interpretNaturalLanguageQuery('Show evidence submitted in the last 7 days', mondayRef);
+    assert.equal(planRoll.instructions.length, 2);
+    assert.equal(planRoll.instructions[0].column, 'submittedAtIso');
+    assert.equal(planRoll.instructions[0].operator, 'GREATER_THAN');
+    assert.equal(planRoll.instructions[0].value, '2026-11-02');
+
+    // 7. Backward compatibility: 'submitted this week' continues to work seamlessly
+    const planCompat = interpretNaturalLanguageQuery('Show evidence submitted this week', mondayRef);
+    assert.ok(planCompat.instructions.length >= 1);
+    assert.equal(planCompat.instructions[0].column, 'submittedAtIso');
+    assert.equal(planCompat.instructions[0].operator, 'GREATER_THAN');
+    assert.equal(planCompat.instructions[0].value, '2026-11-09');
+
+    // 8. Graceful handling of invalid or empty reference dates
+    const fallbackRange = getCalendarWeekRangeUtc(new Date('invalid-date-string'));
+    assert.match(fallbackRange.startDateIso, /^\d{4}-\d{2}-\d{2}$/);
   });
 });
