@@ -4,6 +4,7 @@ import http from 'node:http';
 import { createServerApp, type HttpApp } from '../index.ts';
 import { DEMO_EVIDENCE_FIXTURES } from '../services/DemoEvidenceFixtures.ts';
 import {
+  DeterministicMockEvaluator,
   GeminiHttpEvaluator,
   type MultiAgentEvaluatorProvider,
 } from '../services/EvaluationService.ts';
@@ -64,6 +65,7 @@ describe('Phase 3 — Evidence Intelligence Engine, Multi-Agent AI Evaluation & 
     const container = createServerApp({
       dbPath: ':memory:',
       authOptions: { enableDemoImpersonation: true },
+      evaluatorProvider: new DeterministicMockEvaluator(),
     });
 
     try {
@@ -164,6 +166,7 @@ describe('Phase 3 — Evidence Intelligence Engine, Multi-Agent AI Evaluation & 
     const container = createServerApp({
       dbPath: ':memory:',
       authOptions: { enableDemoImpersonation: true },
+      evaluatorProvider: new DeterministicMockEvaluator(),
     });
 
     try {
@@ -267,6 +270,7 @@ describe('Phase 3 — Evidence Intelligence Engine, Multi-Agent AI Evaluation & 
     const container = createServerApp({
       dbPath: ':memory:',
       authOptions: { enableDemoImpersonation: true },
+      evaluatorProvider: new DeterministicMockEvaluator(),
     });
 
     try {
@@ -321,6 +325,7 @@ describe('Phase 3 — Evidence Intelligence Engine, Multi-Agent AI Evaluation & 
     const container = createServerApp({
       dbPath: ':memory:',
       authOptions: { enableDemoImpersonation: true },
+      evaluatorProvider: new DeterministicMockEvaluator(),
     });
 
     try {

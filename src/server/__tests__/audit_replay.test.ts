@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { createServerApp, type HttpApp } from '../index.ts';
+import { DeterministicMockEvaluator } from '../services/EvaluationService.ts';
 
 interface ApiResponse<T = any> {
   status: number;
@@ -76,6 +77,7 @@ describe('Prompt 2/8 — Audit Replay Engine & Lifecycle State Reconstruction', 
     tempFilesToClean.push(`${dbPath}-shm`);
     return createServerApp({
       dbPath,
+      evaluatorProvider: new DeterministicMockEvaluator(),
       paypalOptions: {
         simulateMode: true,
       },
