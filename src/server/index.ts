@@ -784,9 +784,26 @@ export function createProductionStaticFallback(distPath: string) {
     res.end(JSON.stringify({ error: { code: 'NOT_FOUND', message: `Not found: ${req.url}` } }));
   };
 }
-
 async function startDevOrProdServer(): Promise<void> {
-  const port = Number(process.env.PORT ?? 3000);
+  const args = process.argv.slice(2);
+  const portArgIndex = args.indexOf('--port');
+  const portFromArgs =
+    portArgIndex !== -1 && args[portArgIndex + 1]
+      ? Number(args[portArgIndex + 1])
+      : null;
+  // In containers with internal reverse proxies (e.g. AI Studio), NGINX occupies NGINX_PORT (8080)
+  // while the Node process must bind to DEFAULT_APP_PORT (3000). In standard cloud deployments,
+  // PORT provided by the environment should be used.
+  const isPortConflictingWithNginx =
+    Boolean(process.env.NGINX_PORT) &&
+    process.env.PORT === process.env.NGINX_PORT;
+
+  const port =
+    portFromArgs && !Number.isNaN(portFromArgs)
+      ? portFromArgs
+      : process.env.PORT && !isPortConflictingWithNginx
+        ? Number(process.env.PORT)
+        : Number(process.env.DEFAULT_APP_PORT ?? 3000);
   const isProd = process.env.NODE_ENV === 'production';
   const { app, db } = createServerApp({
     authOptions: {

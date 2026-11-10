@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node src/server/index.ts",
+    "start": "node src/server/index.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

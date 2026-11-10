@@ -106,12 +106,18 @@ export class PayPalService {
     if (this.options && 'clientId' in this.options) {
       return this.options.clientId;
     }
+    if (this.options?.fetchImpl) {
+      return 'mock_client_id_for_test';
+    }
     return process.env.PAYPAL_CLIENT_ID;
   }
 
   private getClientSecret(): string | undefined {
     if (this.options && 'clientSecret' in this.options) {
       return this.options.clientSecret;
+    }
+    if (this.options?.fetchImpl) {
+      return 'mock_client_secret_for_test';
     }
     return process.env.PAYPAL_CLIENT_SECRET;
   }

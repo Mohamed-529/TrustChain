@@ -315,6 +315,7 @@ export interface CiExecutionReport {
   failedTests: number;
   coveragePct: number;
   changedFiles?: string[];
+  buildDurationSeconds?: number;
   logSummary: string;
 }
 
