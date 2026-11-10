@@ -108,6 +108,7 @@ describe('Prompt 8/8 — Cross-System Failure Recovery Matrix (20 Scenarios)', (
       paypalOptions: {
         fetchImpl: mockFetch,
         webhookId: 'WH-TEST-FAIL-REC',
+        allowSyntheticTestCredentials: true,
       },
       rateLimitOptions: {
         windowMs: 60_000,
@@ -336,6 +337,7 @@ describe('Prompt 8/8 — Cross-System Failure Recovery Matrix (20 Scenarios)', (
       paypalOptions: {
         fetchImpl: createMockFailureRecoveryPayPalFetch({ verifyFails: true }),
         webhookId: 'WH-TEST-FAIL-SIG',
+        allowSyntheticTestCredentials: true,
       },
     });
 
@@ -408,6 +410,7 @@ describe('Prompt 8/8 — Cross-System Failure Recovery Matrix (20 Scenarios)', (
       paypalOptions: {
         fetchImpl: createMockFailureRecoveryPayPalFetch({ captureShouldTimeout: true }),
         webhookId: 'WH-TIMEOUT-TEST',
+        allowSyntheticTestCredentials: true,
       },
     });
 

@@ -1073,7 +1073,7 @@ export class PaymentTransactionRepository {
   public findLatestByMilestoneId(milestoneId: string): PayPalTransactionRecord | null {
     const row = this.rawDb
       .prepare(
-        'SELECT * FROM payment_transactions WHERE milestone_id = ? ORDER BY updated_at DESC LIMIT 1'
+        'SELECT * FROM payment_transactions WHERE milestone_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT 1'
       )
       .get(milestoneId);
     return row ? this.mapRow(row) : null;
@@ -1082,7 +1082,7 @@ export class PaymentTransactionRepository {
   public listByMilestoneId(milestoneId: string): PayPalTransactionRecord[] {
     const rows = this.rawDb
       .prepare(
-        'SELECT * FROM payment_transactions WHERE milestone_id = ? ORDER BY updated_at DESC'
+        'SELECT * FROM payment_transactions WHERE milestone_id = ? ORDER BY updated_at DESC, rowid DESC'
       )
       .all(milestoneId);
     return rows.map((r) => this.mapRow(r));

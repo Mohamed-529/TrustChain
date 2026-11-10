@@ -33,6 +33,7 @@ export interface PayPalServiceOptions {
   webhookId?: string;
   apiBaseUrl?: string;
   simulateMode?: boolean;
+  allowSyntheticTestCredentials?: boolean;
   webhookEventRepo?: WebhookEventRepository;
   beforeWebhookReconcileHook?: (eventId: string, eventType: string) => void;
 }
@@ -89,6 +90,10 @@ export class PayPalService {
     this.settlementPolicyService = settlementPolicyService;
     this.auditService = auditService;
     this.options = options;
+    // Hard defense-in-depth: Never allow synthetic credentials in production regardless of configuration
+    if (process.env.NODE_ENV === 'production' && this.options?.allowSyntheticTestCredentials) {
+      this.options.allowSyntheticTestCredentials = false;
+    }
   }
 
   public setFetchImpl(fetchImpl: typeof fetch): void {
@@ -102,24 +107,57 @@ export class PayPalService {
     return this.options?.fetchImpl ?? fetch;
   }
 
+  /**
+   * Evaluates whether synthetic test credentials may be generated.
+   * STRICT SECURITY INVARIANTS:
+   * 1. Production (NODE_ENV === 'production') must NEVER accept or generate synthetic credentials under any circumstance.
+   * 2. Synthetic credentials are disabled by default in all environments (development, staging, test).
+   * 3. An injected custom fetch implementation (fetchImpl) ALONE does NOT authorize synthetic credentials.
+   * 4. Only an explicit, narrowly scoped test-only flag (allowSyntheticTestCredentials: true) in non-production enables them.
+   */
+  private isSyntheticTestCredentialsPermitted(): boolean {
+    if (process.env.NODE_ENV === 'production') {
+      return false;
+    }
+    return this.options?.allowSyntheticTestCredentials === true;
+  }
+
   private getClientId(): string | undefined {
-    if (this.options && 'clientId' in this.options) {
+    if (this.options && 'clientId' in this.options && this.options.clientId) {
+      if (
+        process.env.NODE_ENV === 'production' &&
+        this.options.clientId === 'mock_client_id_for_test'
+      ) {
+        return undefined;
+      }
       return this.options.clientId;
     }
-    if (this.options?.fetchImpl) {
+    if (process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_ID.trim().length > 0) {
+      return process.env.PAYPAL_CLIENT_ID.trim();
+    }
+    if (this.isSyntheticTestCredentialsPermitted()) {
       return 'mock_client_id_for_test';
     }
-    return process.env.PAYPAL_CLIENT_ID;
+    return undefined;
   }
 
   private getClientSecret(): string | undefined {
-    if (this.options && 'clientSecret' in this.options) {
+    if (this.options && 'clientSecret' in this.options && this.options.clientSecret) {
+      if (
+        process.env.NODE_ENV === 'production' &&
+        this.options.clientSecret === 'mock_client_secret_for_test'
+      ) {
+        return undefined;
+      }
       return this.options.clientSecret;
     }
-    if (this.options?.fetchImpl) {
+    if (process.env.PAYPAL_CLIENT_SECRET && process.env.PAYPAL_CLIENT_SECRET.trim().length > 0) {
+      return process.env.PAYPAL_CLIENT_SECRET.trim();
+    }
+    if (this.isSyntheticTestCredentialsPermitted()) {
       return 'mock_client_secret_for_test';
     }
-    return process.env.PAYPAL_CLIENT_SECRET;
+    return undefined;
   }
 
   private getAccessToken(): string | undefined {
@@ -162,11 +200,22 @@ export class PayPalService {
     }
     const clientId = this.getClientId();
     const clientSecret = this.getClientSecret();
-    return Boolean(
-      clientId &&
-        clientSecret &&
-        clientId !== 'YOUR_PAYPAL_SANDBOX_CLIENT_ID'
-    );
+    if (!clientId || !clientSecret) {
+      return false;
+    }
+    if (
+      clientId === 'YOUR_PAYPAL_SANDBOX_CLIENT_ID' ||
+      clientSecret === 'YOUR_PAYPAL_SANDBOX_CLIENT_SECRET'
+    ) {
+      return false;
+    }
+    if (
+      process.env.NODE_ENV === 'production' &&
+      (clientId === 'mock_client_id_for_test' || clientSecret === 'mock_client_secret_for_test')
+    ) {
+      return false;
+    }
+    return true;
   }
 
   public isWebhookVerificationConfigured(): boolean {
@@ -1096,6 +1145,11 @@ export class PayPalService {
             updatedAt: nowIso,
           };
           this.paymentRepo.insert(timeoutRec);
+          this.paymentRepo.update({
+            ...latestTx,
+            status: 'REQUIRES_RECONCILIATION',
+            updatedAt: nowIso,
+          });
           this.auditService.appendWithinTx({
             actorId: actor.id,
             actorRole: actor.role,
@@ -1143,6 +1197,11 @@ export class PayPalService {
               updatedAt: nowIso,
             };
             this.paymentRepo.insert(timeoutRec);
+            this.paymentRepo.update({
+              ...latestTx,
+              status: 'REQUIRES_RECONCILIATION',
+              updatedAt: nowIso,
+            });
             this.auditService.appendWithinTx({
               actorId: actor.id,
               actorRole: actor.role,

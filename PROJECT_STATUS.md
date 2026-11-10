@@ -1,66 +1,155 @@
-# PROJECT STATUS — MilestoneProof AI
+# PROJECT STATUS — MilestoneProof AI (TrustChain)
 
-## Project Information
+## 1. Executive Summary & System Identity
 
-**Project:** MilestoneProof AI (TrustChain)
+**MilestoneProof AI (TrustChain)** is a production-grade, multi-agent evidence-to-settlement orchestration platform for software development contracts. It bridges the trust gap between software engineering deliverables (Git commits, PRs, CI test runs, and security audits) and milestone payments via PayPal.
 
-**Description:** Multi-Agent Evidence-to-Settlement Orchestrator
-
-**Primary AI Coding Agent:** Google Antigravity
-
-**Development Approach:** Spec-driven development (GSD) with anti-bloat restraint (Ponytail) and test-driven verification.
-
-**Architecture Direction:** Modular monolith initially.
+* **Primary AI Coding Agent**: Google Antigravity
+* **Architecture**: Modular Monolith (Node.js 22 + TypeScript Express Backend + React 19 / Tailwind CSS v4 Frontend)
+* **Core Philosophy**: Spec-driven development (GSD), anti-bloat restraint (Ponytail), and bounded test-driven verification (Ralph Loop).
+* **Test Verification**: **291 / 291 automated tests passing across 25 suites (100% pass rate, 0 failures)**.
+* **Type Safety & Build**: Zero TypeScript compilation errors (`tsc --noEmit`), clean production build (`vite build`).
 
 ---
 
-## Current Phase
+## 2. Core Architectural Invariants & Fiduciary Principles
 
-**Live Gemini Integration & Adversarial Validation (Completed & Verified)**
+The platform enforces five non-negotiable financial and architectural safety rules:
 
-TrustChain's tri-agent AI evaluation architecture (EvidenceAgent, RiskAgent, Arbitrator Agent) is fully connected to the genuine Google Gemini API using modern `gemini-3.5-flash-lite`:
-- **291 / 291 automated tests passing** across 25 test suites with 0 failures and 0 regressions.
-- **Genuine Google Gemini Live Integration:** Connected to Google Generative Language API endpoint (`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent`) with server-side secrets (`GEMINI_API_KEY`) and bounded 1-shot retry.
-- **Native Schema-Constrained Decoding:** Enforces token-level grammar constraints via `responseSchema` (`EVIDENCE_ANALYSIS_SCHEMA`, `RISK_ASSESSMENT_SCHEMA`, `REVIEW_SYNTHESIS_SCHEMA`) eliminating hallucinated keys and syntax degradation.
-- **Deterministic Fallback Pipeline:** Graceful degradation from `LIVE_GEMINI` to `DETERMINISTIC_FALLBACK` upon transient quota (429), timeout (504), or 503 errors, logging `EVALUATION_FALLBACK_TRIGGERED` in SQLite audit trail.
-- **10-Scenario Adversarial & Security Matrix:** Validated prompt injection interception, financial authority boundary enforcement (`422 AI_FINANCIAL_BOUNDARY_VIOLATION`), canonical citation grounding, and anti-autonomous state invariants (Rule #1).
-- **UI Decision Provenance & Decision Inspector Modal:** Added dynamic `⚡ LIVE GEMINI`, `🔄 FALLBACK`, and `⚙️ MOCK` badges on Review Workbench and AG Grid Financial Ledger, with interactive full-width AI Decision Inspector modal.
-- **Real Browser Verification Artifacts Captured:**
-  - `demo-evidence/10_live_gemini_evaluation_workbench.png` (Review Workbench with Live Gemini Evaluation Provenance)
-  - `demo-evidence/11_live_gemini_decision_inspector.png` (AI Decision Inspector Modal with Gemini 3.5 Flash Lite Telemetry)
-- **4 Comprehensive Technical Reports Published:**
-  1. `GEMINI_LIVE_INTEGRATION_REPORT.md`
-  2. `GEMINI_SECURITY_AND_ADVERSARIAL_TEST_REPORT.md`
-  3. `GEMINI_FALLBACK_AND_FAILURE_RECOVERY_REPORT.md`
-  4. `GEMINI_LIVE_API_TEST_EVIDENCE.md`
+1. **No Autonomous Payment Execution**: AI agents (`EvidenceAgent`, `RiskAgent`, `ArbitratorAgent`) produce strictly advisory recommendations and structured risk assessments. They can **never** unilaterally capture, void, or transfer payments.
+2. **Mandatory Human Approval Gate**: An authorized human fiduciary (`REVIEWER` or `CLIENT`) must explicitly review and submit an `APPROVE` decision before PayPal capture can be triggered.
+3. **Deterministic Settlement Policy Engine**: Settlement amounts are calculated by pure TypeScript business logic enforcing contract payment formulas, integer-cent arithmetic (no floating-point rounding errors), CI passing ratios, and zero-critical-vulnerability gates.
+4. **Append-Only Tamper-Evident Audit Trail**: All financial state transitions, AI evaluations, reviewer decisions, and evidence verifications are committed to an immutable SQLite audit log anchored with SHA-256 hash chains.
+5. **Fail-Closed PayPal Lifecycle & Gateway Resilience**:
+   * Authorization holds up to 29 days (`intent: AUTHORIZE`) with explicit non-escrow regulatory disclosures.
+   * Server-side idempotency protection via `PayPal-Request-Id`.
+   * Upstream timeouts transition transactions to `REQUIRES_RECONCILIATION` without creating phantom settlement states.
+   * Webhook verification (`POST /v1/notifications/verify-webhook-signature`) enforces anti-SSRF certificate pinning (`api.paypal.com` / `api.sandbox.paypal.com`) and replay duplicate detection.
 
 ---
 
-## Overall Progress
+## 3. Sponsor Technology Excellence & Integration Matrix
 
-- Prompt 1 — Product requirements (Completed).
-- Prompt 2 — HLD, LLD, Open-Source Research & Phase 1 Security/Persistence Architecture Review (Completed).
-- Phase 1 — Backend foundation, HMAC-SHA256 Auth/RBAC, Native SQLite (`WAL` + `synchronous=FULL` + append-only triggers) ACID Persistence & Hash-Chained Audit Trail (Completed & Verified — 7/7 tests passing).
-- Phase 2 — OpenAPI 3.0.3 contract (`openapi.yaml`), APIMatic metadata (`APIMATIC-META.json`), live spec discovery endpoints, and runtime schema validator (`validateRequest.ts`) (Completed & Verified — 3/3 Phase 2 tests passing).
-- Phase 3 — Evidence Intelligence Engine: GitHub evidence ingestion, canonical reference registry, 3-stage Multi-Agent AI Evaluation (`EvidenceAnalyst`, `RiskAnalyst`, `ReviewSynthesizer`), `<untrusted_evidence>` prompt-injection isolation, and 3-milestone reproducible demo scenario (Completed & Verified — 4/4 Phase 3 tests passing).
-- Phase 4 — Dedicated `SettlementPolicyService`, Human Review & Fiduciary Approval Workflow (`HumanReviewService`, `ReviewController`), Audit-Traceable Financial Decision Ledger (`GET /api/v1/ledger`), and Human-Review Workbench UI (`src/App.tsx`) (Completed & Verified — 4/4 Phase 4 tests passing).
-- Phase 5 — Primary Sponsor Integrations: Bryntum Gantt Backend & APIMatic/PayPal Orders API v2 (Completed & Verified — 4/4 Phase 5 tests passing).
-- Phase 6 — PayPal Security Remediation & Payment Integrity (Completed & Verified — 4/4 Phase 6 tests passing).
-- Phase 7 — Evidence Provenance & Independent GitHub Verification (Completed & Verified — 6/6 Phase 7 tests passing).
-- Phase 8 — Bryntum Gantt Full Integration, UI Resilience & Comprehensive Project-Wide Audit (Completed & Verified — 9/9 Phase 8 tests passing).
-- Phase 9 (Prompt 1/8) — AI Agent Intelligence, Structured Output Schemas & Adversarial Evaluation (Completed & Verified — 12/12 Phase 9 tests passing).
-- Phase 9 (Prompt 2/8 — Replay Engine) — Audit Replay Engine, Hash-Chain Verification & Deterministic State Machine Reconstruction (Completed & Verified — 20/20 Audit Replay tests passing).
-- Phase 9 (Prompt 2/8 — Evidence Passport) — Traceable Engineering Record, Commit Signatures, CI Telemetry, SLSA Provenance, SSRF-Guarded Runtime Preview, Cryptographic Graph, Audit Anchoring, Socket IP-Pinning, Hex IPv4-Mapped IPv6 Parser, Socket Destruction, 18-Point Security Gate & Milestone Workbench Viewer (Completed & Verified — 53/53 Evidence Passport tests passing).
-- Phase 9 (Prompt 4/8 — Dispute Evidence Pack) — Structured, Traceable & Tamper-Evident Dispute Evidence Pack, Version 6 Schema Migration (`dispute_evidence_packs`), Two-Stage Non-Circular SHA-256 Digest Anchoring, Deterministic Chronological Timeline with Sequence Tie-Breaking, AI Advisory Boundary Enforcement, Read-Only Financial Invariants, Portable Sanitized JSON Export & Review Workbench UI (Completed & Verified — 17/17 Dispute Evidence Pack tests passing).
-- Phase 9 (Prompt 5/8 — PayPal Lifecycle Management & Completion) — PayPal Orders API v2 Lifecycle (`intent: AUTHORIZE` holds up to 29 days), Mandatory Non-Escrow Regulatory Notice, AI Advisory Separation Boundary, Server-Side Integer Cents Validation, Human Approval Gate (`APPROVE`), Idempotency Protection (`PayPal-Request-Id`), Authoritative Payment Reconciliation Engine (`GET/POST /api/v1/milestones/:id/paypal/reconcile`), Network Timeout Recovery via `REQUIRES_RECONCILIATION`, Webhook Signature Verification (`/v1/notifications/verify-webhook-signature`) with Anti-SSRF Cert Pinning & Out-of-Order Delivery Protection, Version 7 Schema Migration (`payment_transactions`), 10 Webhook protocol test cases, 11 Failure & Recovery lifecycle test cases with double-credit prevention, and Live Sandbox Verification (Completed & Verified — 12/12 PayPal Lifecycle tests passing).
-- Phase 9 (Prompt 6/8 — AG Grid Intelligence Control Room & Frontend Engineering) — AG Grid v36 Community Edition (`ag-grid-community@36.3.0`, `ag-grid-react@36.3.0`), MIT licensing without trial keys/watermarks, Full-Width Master/Detail Evidence Investigation (`EvidenceDetailPanel`), Deterministic Natural-Language Query Parser with Strict Whitelist (`NaturalLanguageFilterBar`, `queryParser.ts`), Interactive Confirmation Modal, Executive Intelligence Control Room Dashboard with Real-Time Portfolio Metrics, AI Decision Inspector with Multi-Agent Synthesis & Deterministic Settlement Policy Breakdown, Layout Persistence (`localStorage`), and Sanitized CSV Export with CWE-1236 Formula Injection Neutralization (Completed & Verified — 14/14 Prompt 6 tests passing).
-- Phase 9 (Prompt 6/8 Continuation — Cinematic Experience & Multi-Page Architecture) — Deconstructed the 5,600-pixel monolithic single page into 9 dedicated modular routes (`/`, `/onboarding`, `/dashboard`, `/intelligence`, `/timeline`, `/reviews`, `/trust`, `/disputes`, `/settings`), built interactive 3D trust lifecycle visualizer, designed 6-stage guided tour modal with progress indicators and `localStorage` persistence, established unified application shell (`AppShell`) with role-based persona navigation, and validated 100% test pass rate with 0 regressions (Completed & Verified — 12/12 cinematic frontend tests passing).
-- Phase 9 (Prompt 6/8 Enhancement — Google Antigravity-Inspired Cinematic Entry Experience) — Crafted high-DPI HTML5 canvas with sinusoidal luminous blue/cyan wave and dynamic depth particles, minimal logo reveal, choreographed Stage A opening with Play/Skip controls, Stage B product reveal with sequential 6-stage lifecycle animation and fiduciary invariant inspection, Stage C platform capabilities showcase with 7 deep-dive modules and live route jumping, and returning visitor persistence via `tc_cinematic_visited_v1` (Completed & Verified — 17/17 cinematic frontend tests passing).
-- Phase 9 (Prompt 6/8 Design Polish — Modern Minimalist Theme & Concise Workspace Redesign) — Redesigned floating glassmorphic navbar with sleek pills and status indicators, eliminated generic fintech blue in favor of an elegant Obsidian Charcoal, Emerald Jade, Champagne Gold, and Platinum theme with Plus Jakarta Sans typography, reduced UI text bloat to crisp 1-liners across all 9 pages, and expanded workspace breathing room with clean spacious cards (Completed & Verified).
-- Phase 9 (Prompt 7/8 — Backend Hardening, Reliability & Scalability) — Database query optimization with 7 high-performance composite indexes (Schema Version 8), in-memory sliding-window rate limiting with RFC 6585 compliance, defensive security headers, correlation ID distributed tracing, deep `/ready` probe, and graceful SQLite shutdown (Completed & Verified — 223/223 tests passing).
-- Phase 9 (Prompt 8/8 — End-to-End Acceptance, Security Validation & Failure Recovery) — Complete 10-stage contract-to-settlement acceptance suite, 20-scenario cross-system failure recovery matrix, live PayPal Sandbox order and webhook cryptographic signature verification (`SUCCESS`), sub-4.2ms performance benchmarking, API contract gap analysis, and 7 comprehensive operational reports (Completed & Verified — 257/257 tests passing).
-- **AG Grid Sponsor Excellence — Audit & Implementation (Completed & Verified — 260/260 tests passing, 3 comprehensive reports published).**
-- **Bryntum Sponsor Excellence — Intelligent Contract Execution Timeline (Completed & Verified — 269/269 tests passing across 22 suites, 5 comprehensive operational reports published).**
-- **APIMatic Sponsor Excellence — OpenAPI 3.0.3 Contract, SDK & Agent Integration (Completed & Verified — 274/274 tests passing across 23 suites, 6 comprehensive operational reports published).**
-- **Unified APIMatic + Bryntum + AG Grid Forensic Verification & Remediation (Completed & Verified — 280/280 tests passing across 24 suites, 18 comprehensive operational reports published).**
-- **Final Browser-Level Sponsor Demo Acceptance (Completed & Verified — 281/281 tests passing across 24 suites, 9 real browser screenshots captured, 5 acceptance reports published).**
+### 3.1 APIMatic — API Contract Quality, Parity & SDK
+* **OpenAPI 3.0.3 Specification**: Canonical contract maintained in `/openapi.yaml` with 100% route parity against backend routes (`/api/v1/*`).
+* **Metadata & Discovery**: Live discovery endpoints (`GET /openapi.json`, `GET /openapi.yaml`) paired with `/APIMATIC-META.json`.
+* **TypeScript SDK**: Full-featured client (`src/sdk/MilestoneProofClient.ts`) implementing automatic retries, backoff, typed error deserialization, and demo persona switching.
+* **Validation**: Zero broken `$ref` pointers, unique operation IDs, integer monetary cents, and strict schema validation middleware (`validateRequest.ts`).
+
+### 3.2 Bryntum Gantt — Intelligent Execution Timeline
+* **Interactive Schedule Viewer**: Component in `src/components/BryntumGanttViewer.tsx` powered by `@bryntum/gantt-react`.
+* **Work Breakdown Structure (WBS)**: Hierarchical milestone decomposition with dependency linking, Critical Path Method (CPM) calculation, and cycle detection.
+* **Recovery Workflows**: Fiduciary approval window extensions (+7d recovery) without silently altering contractual budgets or acceptance criteria.
+* **Licensing**: Trial execution configured cleanly without broken watermarks or runtime halts.
+
+### 3.3 AG Grid — Financial Decision Intelligence Ledger
+* **Intelligence Grid**: Implemented in `src/components/ag-grid/MilestoneIntelligenceGrid.tsx` using `ag-grid-community` v36.
+* **Master/Detail Evidence Inspection**: Full-width expansion drawer (`EvidenceDetailPanel.tsx`) showing multi-agent AI findings, test summaries, vulnerability scores, and audit hash-chains.
+* **Natural Language Query Bar**: Component in `NaturalLanguageFilterBar.tsx` powered by a strict whitelist AST parser (`queryParser.ts`) enabling intuitive queries (e.g. `status:APPROVED risk:LOW amount>1000`).
+* **Security & Licensing**: Strictly MIT Community-licensed (zero trial keys/watermarks), with CWE-1236 CSV formula injection defense (sanitizing `=`, `+`, `-`, `@` prefixes).
+
+### 3.4 Google Gemini API — Tri-Agent Advisory Consensus
+* **Model**: Google Generative Language API using modern `gemini-3.5-flash-lite`.
+* **Advisory Consensus**:
+  1. `EvidenceAgent`: Validates verifiable repository deliverables (commits, PRs, CI logs). Isolates untrusted submissions within `<untrusted_evidence>` blocks.
+  2. `RiskAgent`: Analyzes actual CVE/CVSS security scan findings and flags prompt injection attempts.
+  3. `ArbitratorAgent`: Evaluates delivery against contractual acceptance criteria and suggests settlement percentages.
+* **Schema-Constrained Decoding**: Native JSON schema grammar enforcement (`responseSchema`) preventing syntax degradation and hallucinated keys.
+* **Resilience Pipeline**: Automatic fallback to deterministic rules upon transient 429 quota exhaustion or timeouts, recording `EVALUATION_FALLBACK_TRIGGERED` in the audit ledger.
+
+### 3.5 PayPal Sandbox — Payment Lifecycle Management
+* **Lifecycle**: Orders v2 `intent: AUTHORIZE` creates pre-authorized holds; capture occurs only after human fiduciary sign-off.
+* **Dispute Evidence Pack**: Generation of tamper-evident dispute bundles with two-stage non-circular SHA-256 digest anchoring (`DisputeEvidencePackService.ts`).
+* **Evidence Passport**: Cryptographic engineering passport (`EvidencePassportService.ts`) packaging commit signatures, SLSA provenance, and audit logs.
+
+---
+
+## 4. Multi-Page Application Architecture
+
+The frontend is organized into 9 modular routes wrapped in an enterprise application shell (`AppShell.tsx`):
+
+| Route | View / Page Component | Core Responsibilities |
+|---|---|---|
+| `/` | `WelcomeLandingPage.tsx` | Cinematic entry, luminous wave canvas, 3D lifecycle preview, and capability showcase |
+| `/onboarding` | `GuidedTourModal.tsx` | 6-stage interactive walkthrough for new fiduciaries and reviewers |
+| `/dashboard` | `DashboardPage.tsx` | Executive control room, real-time KPI metrics, and AI Decision Inspector modal |
+| `/intelligence` | `IntelligencePage.tsx` | AG Grid Financial Decision Intelligence cockpit with NL filter bar and CSV export |
+| `/timeline` | `TimelinePage.tsx` | Bryntum Gantt schedule, CPM dependency chains, and schedule recovery proposals |
+| `/reviews` | `ReviewsPage.tsx` | Human Reviewer Workbench with approval gate, policy formula review, and PayPal capture |
+| `/trust` | `TrustPage.tsx` | Cryptographic Evidence Passport viewer with signature and SLSA provenance checks |
+| `/disputes` | `DisputesPage.tsx` | Dispute Evidence Pack viewer with tamper-evident SHA-256 export |
+| `/settings` | `SettingsPage.tsx` | Role switching (Client, Developer, Reviewer, Auditor) and environment status |
+
+---
+
+## 5. Verification & Test Suite Matrix (291 Tests / 25 Suites)
+
+All test suites execute via `npm test` (`node --test src/server/__tests__/*.test.ts`):
+
+1. `phase1.test.ts`: HMAC authentication, RBAC permissions, and SQLite persistence.
+2. `phase2.test.ts`: OpenAPI 3.0.3 contract and schema validation.
+3. `phase3.test.ts`: Evidence ingestion, untrusted isolation, and multi-agent consensus.
+4. `phase4.test.ts`: Settlement policy formulas and human approval gate.
+5. `phase5.test.ts`: Sponsor integration baseline (Bryntum schedule & PayPal authorizer).
+6. `phase6.test.ts`: PayPal security remediation and integer-cent invariants.
+7. `phase7.test.ts`: GitHub provenance verification and webhook ingestion.
+8. `phase8_foundation.test.ts`: Bryntum Gantt scheduling and component mounting.
+9. `phase8_integration.test.ts`: End-to-end WBS dependency management and progress mapping.
+10. `phase9_agent_integration.test.ts`: Gemini agent consensus and prompt injection defense.
+11. `audit_replay.test.ts`: Audit replay engine, state machine reconstruction, and hash-chain audit.
+12. `evidence_passport.test.ts`: Cryptographic Evidence Passport, commit signatures, and SLSA provenance.
+13. `dispute_evidence_pack.test.ts`: Tamper-evident Dispute Evidence Pack and non-circular digest calculation.
+14. `paypal_lifecycle.test.ts`: Orders v2 authorization holds, capture, void, and status transitions.
+15. `ag_grid_intelligence.test.ts`: AG Grid Community licensing, master/detail panels, and NL query parser.
+16. `bryntum_schedule_intelligence.test.ts`: Bryntum CPM merge, calendar scheduling, and cycle detection.
+17. `cinematic_frontend.test.ts`: Multi-page routing, guided tour, and canvas animation telemetry.
+18. `paypal_application_path_remediation.test.ts`: Route parity and path remediation verification.
+19. `paypal_webhook_live_verification.test.ts`: Webhook signature verification, replay protection, and cert URL pinning.
+20. `prompt7_hardening.test.ts`: Backend hardening, rate limiting, and network timeout recovery.
+21. `prompt8_e2e_acceptance.test.ts`: 10-stage end-to-end contract delivery and settlement acceptance.
+22. `prompt8_failure_recovery.test.ts`: 20-scenario cross-system failure and recovery matrix.
+23. `apimatic_contract_excellence.test.ts`: APIMatic OpenAPI quality, operationId uniqueness, and SDK retries.
+24. `sponsor_excellence_forensic.test.ts`: Unified sponsor compliance (APIMatic + Bryntum + AG Grid).
+25. `gemini_live_and_adversarial.test.ts`: Live Gemini API integration, adversarial injection, and schema compliance.
+
+---
+
+## 6. Demo Evidence & Visual Artifacts
+
+High-resolution visual proof captured in `/demo-evidence/`:
+
+* `01_developers_apimatic_portal.png`: APIMatic Developer Portal with live OpenAPI documentation.
+* `02_timeline_bryntum_gantt.png`: Bryntum Gantt execution schedule with critical path dependencies.
+* `03_intelligence_ag_grid_cockpit.png`: AG Grid Financial Decision Intelligence cockpit with Master/Detail drawer.
+* `04_intelligence_nlp_date_filter.png`: Natural language filter bar executing dynamic range queries.
+* `05_ledger_financial_decisions.png`: Financial Decision Ledger with audit-traceable state transitions.
+* `06_reviews_human_approval_workbench.png`: Human Approval Workbench enforcing the fiduciary gate.
+* `07_trust_evidence_passport.png`: Evidence Passport with cryptographic commit signatures and SLSA status.
+* `08_disputes_evidence_pack.png`: Dispute Evidence Pack viewer with SHA-256 digest verification.
+* `09_dashboard_executive_overview.png`: Executive Dashboard with real-time portfolio health telemetry.
+* `10_live_gemini_evaluation_workbench.png`: Review Workbench with Live Gemini Evaluation Provenance.
+* `11_live_gemini_decision_inspector.png`: AI Decision Inspector modal with token telemetry and policy breakdown.
+* `acceptance_summary.json`: Machine-readable acceptance test results.
+* `cross_sponsor_workflow_execution.json`: End-to-end sponsor workflow validation logs.
+
+---
+
+## 7. Canonical Documentation Index
+
+To maintain documentation hygiene, all detailed system specifications and operational manuals are organized canonically:
+
+* **Repository Overview**: `README.md`
+* **Agent Guidelines & Tooling**: `AGENTS.md`
+* **System Architecture**: `SYSTEM_ARCHITECTURE.md`
+* **High-Level Design**: `HLD.md`
+* **Low-Level Design**: `LLD.md`
+* **API Specification**: `openapi.yaml`
+* **APIMatic Metadata**: `APIMATIC-META.json`
+* **Product Specifications**:
+  * `docs/PRD.md` — Product Requirements Document
+  * `docs/MVP_SCOPE.md` — MVP Boundaries & Constraints
+  * `docs/PRODUCT_WORKFLOWS.md` — Detailed Workflow State Transitions
+  * `docs/SPONSOR_INTEGRATION_PLAN.md` — Sponsor Technology Specifications
+  * `docs/DEVELOPER_PORTAL.md` — Developer Portal & Integration Manual
+  * `docs/product/ACCEPTANCE_CRITERIA.md` — Contract Acceptance Criteria
+  * `docs/product/USER_FLOWS.md` — End-to-End User Journeys

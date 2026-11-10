@@ -139,6 +139,7 @@ describe('Prompt 8/8 — End-to-End Backend Acceptance (Stages 1 through 10)', (
       paypalOptions: {
         fetchImpl: mockFetch,
         webhookId: 'WH-TEST-PROMPT8-ID',
+        allowSyntheticTestCredentials: true,
       },
     });
     server = http.createServer(container.app);

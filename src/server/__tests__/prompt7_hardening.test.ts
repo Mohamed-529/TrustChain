@@ -177,6 +177,7 @@ describe('Prompt 7 — Backend Hardening, Reliability & Scalability Suite', () =
       paypalOptions: {
         fetchImpl: createMockHardeningFetch({ verifyStatus: 'SUCCESS' }),
         webhookId: 'WH-HARDENING-001',
+        allowSyntheticTestCredentials: true,
       },
     });
 
@@ -205,6 +206,7 @@ describe('Prompt 7 — Backend Hardening, Reliability & Scalability Suite', () =
       paypalOptions: {
         fetchImpl: createMockHardeningFetch({ verifyStatus: 'SUCCESS' }),
         webhookId: 'WH-HARDENING-001',
+        allowSyntheticTestCredentials: true,
       },
     });
 
@@ -251,6 +253,7 @@ describe('Prompt 7 — Backend Hardening, Reliability & Scalability Suite', () =
       paypalOptions: {
         fetchImpl: createMockHardeningFetch({ verifyStatus: 'FAILURE' }),
         webhookId: 'WH-HARDENING-001',
+        allowSyntheticTestCredentials: true,
       },
     });
 
@@ -284,6 +287,7 @@ describe('Prompt 7 — Backend Hardening, Reliability & Scalability Suite', () =
       paypalOptions: {
         fetchImpl: createMockHardeningFetch({ verifyStatus: 'SUCCESS' }),
         webhookId: 'WH-HARDENING-001',
+        allowSyntheticTestCredentials: true,
       },
     });
 
@@ -312,6 +316,7 @@ describe('Prompt 7 — Backend Hardening, Reliability & Scalability Suite', () =
       paypalOptions: {
         fetchImpl: createMockHardeningFetch({ verifyStatus: 'SUCCESS' }),
         webhookId: 'WH-HARDENING-001',
+        allowSyntheticTestCredentials: true,
       },
     });
 
@@ -366,6 +371,7 @@ describe('Prompt 7 — Backend Hardening, Reliability & Scalability Suite', () =
       paypalOptions: {
         fetchImpl: createMockHardeningFetch({ verifyStatus: 'FAILURE' }),
         webhookId: 'WH-HARDENING-001',
+        allowSyntheticTestCredentials: true,
       },
     });
 
