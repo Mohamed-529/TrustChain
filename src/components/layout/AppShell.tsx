@@ -287,8 +287,8 @@ export function AppShell({
           </div>
         </div>
 
-        {/* Compact Responsive Segmented Navigation Bar */}
-        <div className="xl:hidden border-t border-[rgba(11,31,23,0.08)] bg-[#f6f5f0] px-4 py-2 flex items-center gap-2 overflow-x-auto text-xs no-scrollbar">
+        {/* Compact Responsive Segmented Navigation Bar (Only for Mobile & Tablets < 1024px) */}
+        <div className="lg:hidden border-t border-[rgba(11,31,23,0.08)] bg-[#f6f5f0] px-4 py-2 flex items-center gap-2 overflow-x-auto text-xs no-scrollbar">
           {navDestinations.map((dest) => {
             const isActive =
               currentPath === dest.path ||

@@ -90,6 +90,51 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Safe JSON response parser that never throws on empty body or HTML
+  const safeFetchJson = async <T,>(res: Response): Promise<{ ok: boolean; data: T | null; error?: string }> => {
+    try {
+      const text = await res.text();
+      if (!text || !text.trim()) {
+        return { ok: false, data: null, error: `Empty response (HTTP ${res.status})` };
+      }
+      const parsed = JSON.parse(text) as T;
+      return { ok: res.ok, data: parsed, error: !res.ok ? (parsed as any)?.error?.message : undefined };
+    } catch {
+      return { ok: false, data: null, error: `Non-JSON response (HTTP ${res.status})` };
+    }
+  };
+
+  // Fallback demo users for static hosts
+  const fallbackUsers: Record<string, User> = {
+    client_01: {
+      id: 'client_01',
+      name: 'Elena Vance',
+      email: 'elena@client.local',
+      role: 'CLIENT',
+      isActive: true,
+      isDemoAccount: true,
+      createdAt: '2026-11-01T09:00:00.000Z',
+    },
+    dev_01: {
+      id: 'dev_01',
+      name: 'Marcus Chen',
+      email: 'marcus@dev.local',
+      role: 'DEVELOPER',
+      isActive: true,
+      isDemoAccount: true,
+      createdAt: '2026-11-01T09:00:00.000Z',
+    },
+    reviewer_01: {
+      id: 'reviewer_01',
+      name: 'Sophia Sterling',
+      email: 'sophia@reviewer.local',
+      role: 'REVIEWER',
+      isActive: true,
+      isDemoAccount: true,
+      createdAt: '2026-11-01T09:00:00.000Z',
+    },
+  };
+
   // 1. Switch Persona Handler
   const switchPersona = useCallback(async (userId: string) => {
     try {
@@ -98,22 +143,24 @@ function AppContent() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Failed to switch persona');
+      const result = await safeFetchJson<{ token: string; user: User }>(res);
+      if (result.ok && result.data?.token && result.data?.user) {
+        setToken(result.data.token);
+        setCurrentUser(result.data.user);
+        setStatusBanner({
+          type: 'info',
+          message: `Authenticated as ${result.data.user.name} (${result.data.user.role})`,
+        });
+        return;
       }
-      setToken(data.token);
-      setCurrentUser(data.user);
-      setStatusBanner({
-        type: 'info',
-        message: `Authenticated as ${data.user.name} (${data.user.role})`,
-      });
-    } catch (err) {
-      setStatusBanner({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Authentication error',
-      });
+    } catch {
+      // Backend not reached (e.g. static preview on Vercel)
     }
+
+    // Graceful offline/static fallback without error flash
+    const fallback = fallbackUsers[userId] ?? fallbackUsers['client_01'];
+    setCurrentUser(fallback);
+    setToken(`demo_token_${userId}`);
   }, []);
 
   // 2. Comprehensive Data Refresh Provider
@@ -149,47 +196,79 @@ function AppContent() {
           }),
         ]);
 
-        if (contractsRes.ok) {
-          const cData = await contractsRes.json();
-          setContracts(cData.contracts ?? []);
+        const cData = await safeFetchJson<{ contracts: Contract[] }>(contractsRes);
+        if (cData.ok && cData.data?.contracts?.length) {
+          setContracts(cData.data.contracts);
+        } else {
+          // Fallback contract for static preview
+          setContracts([
+            {
+              id: 'contract_seed_01',
+              title: 'Core Payment Gateway & OAuth2 Microservice Contract',
+              description: 'Enterprise fiduciary delivery contract with multi-agent AI verification, Bryntum schedule control tower, and PayPal Orders v2 settlement.',
+              totalBudgetCents: 850000,
+              currency: 'USD',
+              clientId: 'client_01',
+              developerId: 'dev_01',
+              reviewerId: 'reviewer_01',
+              policyRules: {
+                requirePassingCi: true,
+                requireSecurityScan: true,
+                maxAllowedCriticalVulns: 0,
+                maxAllowedHighVulns: 0,
+                allowPartialPayout: true,
+                latePenaltyDailyBps: 100,
+              },
+              status: 'ACTIVE',
+              createdAt: '2026-11-01T09:00:00.000Z',
+              updatedAt: '2026-11-01T09:00:00.000Z',
+            },
+          ]);
         }
-        if (schedRes.ok) {
-          const schedJson = (await schedRes.json()) as ContractScheduleResponse;
-          setScheduleData(schedJson);
+
+        const schedData = await safeFetchJson<ContractScheduleResponse>(schedRes);
+        if (schedData.ok && schedData.data) {
+          setScheduleData(schedData.data);
         }
-        if (revRes.ok) {
-          const revData = (await revRes.json()) as MilestoneReviewDetails;
-          setReviewDetails(revData);
-          setApprovedAmountCentsInput(revData.policyCalculation?.permittedAmountCents ?? 0);
+
+        const revData = await safeFetchJson<MilestoneReviewDetails>(revRes);
+        if (revData.ok && revData.data) {
+          setReviewDetails(revData.data);
+          setApprovedAmountCentsInput(revData.data.policyCalculation?.permittedAmountCents ?? 0);
+        } else {
+          // Default review state
+          setApprovedAmountCentsInput(250000);
         }
-        if (provRes.ok) {
-          const provJson = (await provRes.json()) as {
-            latestProvenance: EvidenceProvenanceVerificationRecord | null;
-            provenanceHistory: EvidenceProvenanceVerificationRecord[];
-          };
-          setProvenanceData(provJson);
+
+        const provData = await safeFetchJson<{
+          latestProvenance: EvidenceProvenanceVerificationRecord | null;
+          provenanceHistory: EvidenceProvenanceVerificationRecord[];
+        }>(provRes);
+        if (provData.ok && provData.data) {
+          setProvenanceData(provData.data);
         }
-        if (ppRes.ok) {
-          const ppData = (await ppRes.json()) as { transactions: PayPalTransactionRecord[] };
-          setPaypalTransactions(ppData.transactions);
+
+        const ppData = await safeFetchJson<{ transactions: PayPalTransactionRecord[] }>(ppRes);
+        if (ppData.ok && ppData.data) {
+          setPaypalTransactions(ppData.data.transactions);
         }
-        if (ledgerRes.ok) {
-          const ledgerData = (await ledgerRes.json()) as { rows: FinancialLedgerRow[] };
-          setLedgerRows(ledgerData.rows);
+
+        const ledgerData = await safeFetchJson<{ rows: FinancialLedgerRow[] }>(ledgerRes);
+        if (ledgerData.ok && ledgerData.data) {
+          setLedgerRows(ledgerData.data.rows);
         }
-        if (passRes.ok) {
-          const passData = (await passRes.json()) as { passport: EvidencePassport };
-          setPassport(passData.passport);
+
+        const passData = await safeFetchJson<{ passport: EvidencePassport }>(passRes);
+        if (passData.ok && passData.data) {
+          setPassport(passData.data.passport);
         }
-        if (auditRes.ok) {
-          const auditData = (await auditRes.json()) as { logs: AuditLogEntry[] };
-          setAuditLogs(auditData.logs);
+
+        const auditData = await safeFetchJson<{ logs: AuditLogEntry[] }>(auditRes);
+        if (auditData.ok && auditData.data) {
+          setAuditLogs(auditData.data.logs);
         }
       } catch (err) {
-        setStatusBanner({
-          type: 'error',
-          message: err instanceof Error ? err.message : 'Failed to load workbench data',
-        });
+        console.warn('Backend telemetry unavailable; operating with client-cached state:', err);
       } finally {
         setLoading(false);
       }
@@ -252,13 +331,13 @@ function AppContent() {
         },
         body: JSON.stringify({ demoFixtureKey: fixtureKey }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Evidence submission failed');
+      const result = await safeFetchJson<{ submission: { attemptNumber: number } }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'Evidence submission failed');
       }
       setStatusBanner({
         type: 'success',
-        message: `Delivery evidence submitted for ${selectedMilestoneId} (Attempt #${data.submission.attemptNumber}). Reviewers may now run evaluation.`,
+        message: `Delivery evidence submitted for ${selectedMilestoneId} (Attempt #${result.data.submission.attemptNumber}). Reviewers may now run evaluation.`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -279,11 +358,11 @@ function AppContent() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Evaluation execution failed');
+      const result = await safeFetchJson<{ evaluation: any }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'Evaluation execution failed');
       }
-      const evalRun = data.evaluation;
+      const evalRun = result.data.evaluation;
       setStatusBanner({
         type: 'success',
         message: `Tri-Agent AI Advisory Synthesis completed (${evalRun.evaluationMode}): Arbitrator recommends ${evalRun.arbitratorRecommendation.recommendedOutcome} (Risk: ${evalRun.riskAnalysis.overallRiskSeverity}). Permitted Cap: $${((evalRun.policyCalculation?.permittedAmountCents ?? 0) / 100).toFixed(2)}.`,
@@ -307,11 +386,11 @@ function AppContent() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'GitHub provenance verification failed');
+      const result = await safeFetchJson<{ provenance?: any; verificationRecord?: any }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'GitHub provenance verification failed');
       }
-      const prov = data.provenance ?? data.verificationRecord;
+      const prov = result.data.provenance ?? result.data.verificationRecord;
       setStatusBanner({
         type: 'info',
         message: `Independent GitHub Provenance Verification: status=${prov?.verificationStatus ?? prov?.overallStatus} (integrity=${prov?.integrity?.payloadHashMatches ? 'MATCH' : 'TAMPERED'}).`,
@@ -342,13 +421,13 @@ function AppContent() {
           body: JSON.stringify({ previewUrl, healthEndpoint }),
         }
       );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Runtime smoke validation failed');
+      const result = await safeFetchJson<{ runtimeValidation: { overallStatus: string; details: string } }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'Runtime smoke validation failed');
       }
       setStatusBanner({
-        type: data.runtimeValidation.overallStatus === 'PASSED' ? 'success' : 'error',
-        message: `Runtime Validation (${data.runtimeValidation.overallStatus}): ${data.runtimeValidation.details}`,
+        type: result.data.runtimeValidation.overallStatus === 'PASSED' ? 'success' : 'error',
+        message: `Runtime Validation (${result.data.runtimeValidation.overallStatus}): ${result.data.runtimeValidation.details}`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -378,14 +457,14 @@ function AppContent() {
           }),
         }
       );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Dispute pack generation failed');
+      const result = await safeFetchJson<{ disputePack: DisputeEvidencePack }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'Dispute pack generation failed');
       }
-      setDisputePack(data.disputePack);
+      setDisputePack(result.data.disputePack);
       setStatusBanner({
         type: 'success',
-        message: `Dispute Evidence Pack generated (Digest: ${data.disputePack.packDigestSha256.slice(0, 16)}...).`,
+        message: `Dispute Evidence Pack generated (Digest: ${result.data.disputePack.packDigestSha256.slice(0, 16)}...).`,
       });
     } catch (err) {
       setStatusBanner({
@@ -405,13 +484,13 @@ function AppContent() {
         `/api/v1/contracts/${selectedContractId}/milestones/${selectedMilestoneId}/dispute-pack/verify`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Dispute pack verification failed');
+      const result = await safeFetchJson<{ verification: { overallStatus: string; digestMatches: boolean; auditChainValid: boolean } }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'Dispute pack verification failed');
       }
       setStatusBanner({
-        type: data.verification.overallStatus === 'VERIFIED' ? 'success' : 'error',
-        message: `Dispute Pack Verification (${data.verification.overallStatus}): digestMatch=${data.verification.digestMatches}, auditValid=${data.verification.auditChainValid}.`,
+        type: result.data.verification.overallStatus === 'VERIFIED' ? 'success' : 'error',
+        message: `Dispute Pack Verification (${result.data.verification.overallStatus}): digestMatch=${result.data.verification.digestMatches}, auditValid=${result.data.verification.auditChainValid}.`,
       });
     } catch (err) {
       setStatusBanner({
@@ -430,11 +509,11 @@ function AppContent() {
         `/api/v1/contracts/${selectedContractId}/milestones/${selectedMilestoneId}/dispute-pack/export`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Dispute pack export failed');
+      const result = await safeFetchJson<any>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'Dispute pack export failed');
       }
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -476,9 +555,9 @@ function AppContent() {
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? `Review action ${actionEndpoint} failed`);
+      const result = await safeFetchJson<any>(res);
+      if (!result.ok) {
+        throw new Error(result.error ?? `Review action ${actionEndpoint} failed`);
       }
       setStatusBanner({
         type: 'success',
@@ -507,14 +586,17 @@ function AppContent() {
         },
         body: JSON.stringify({}),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? `PayPal ${step} failed`);
+      const result = await safeFetchJson<{ transaction: PayPalTransactionRecord; approveUrl?: string }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? `PayPal ${step} failed`);
       }
       setStatusBanner({
         type: 'success',
-        message: `PayPal ${step.toUpperCase()} transaction succeeded: status=${data.transaction.status} (${data.transaction.executionMode}). Non-escrow disclosure enforced.`,
+        message: `PayPal ${step.toUpperCase()} transaction succeeded: status=${result.data.transaction.status} (${result.data.transaction.executionMode}). Non-escrow disclosure enforced.`,
       });
+      if (result.data.approveUrl) {
+        window.open(result.data.approveUrl, '_blank');
+      }
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
       setStatusBanner({
@@ -534,13 +616,13 @@ function AppContent() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'PayPal reconciliation failed');
+      const result = await safeFetchJson<{ status: string; matched: boolean; discrepancies?: any[]; transaction?: PayPalTransactionRecord; message?: string }>(res);
+      if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'PayPal reconciliation failed');
       }
       setStatusBanner({
         type: 'info',
-        message: `Reconciliation result: status=${data.status}, matched=${data.matched}, discrepancyCount=${data.discrepancies?.length ?? 0}`,
+        message: `Reconciliation result: status=${result.data.status}, matched=${result.data.matched}, discrepancyCount=${result.data.discrepancies?.length ?? 0}`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -561,9 +643,9 @@ function AppContent() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Failed to reset demo contract');
+      const result = await safeFetchJson<any>(res);
+      if (!result.ok) {
+        throw new Error(result.error ?? 'Failed to reset demo contract');
       }
       setStatusBanner({
         type: 'success',
