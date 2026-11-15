@@ -16,9 +16,9 @@
 
 ## 🌐 Live Deployment & Demo
 
-- **Live Application:** [https://trustchain.onrender.com](https://trustchain.onrender.com) *(or [https://trustchain.vercel.app](https://trustchain.vercel.app))*
-- **API Documentation (APIMatic OpenAPI):** [https://trustchain.onrender.com/openapi](https://trustchain.onrender.com/openapi)
 - **GitHub Repository:** [https://github.com/Mohamed-529/TrustChain](https://github.com/Mohamed-529/TrustChain)
+- **Live Deployment Guide:** See [Cloud Deployment](#-cloud-deployment) below to launch your own 1-click instance on Render or Vercel.
+- **Local Interactive Demo:** `http://localhost:3000` (Clone & run `npm start`)
 
 ### 👥 Pre-Configured Demo Personas
 Switch personas instantly via the top-right profile badge in the floating navbar:
