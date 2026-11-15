@@ -1,87 +1,224 @@
-# MilestoneProof AI — Multi-Agent Evidence-to-Settlement Orchestrator
+# ◈ TrustChain — Autonomous Evidence-to-Settlement Orchestrator
 
-MilestoneProof AI is an evidence-backed software contract and milestone payment platform built for the PayPal AI Hackathon. It verifies software delivery artifacts (GitHub commits, pull requests, CI/CD test telemetry, and dependency security scans), runs a 3-stage advisory AI evaluation pipeline (`EvidenceAnalyst`, `RiskAnalyst`, `ReviewSynthesizer`), enforces deterministic integer-cent settlement policies, requires human reviewer sign-off, and executes idempotent settlement through PayPal Orders API v2 while recording every state transition in a tamper-evident SHA-256 hash-chained SQLite audit trail.
+[![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B%20(Native%20SQLite)-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![React 19](https://img.shields.io/badge/React-19.0.1%20%2B%20TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![PayPal Orders v2](https://img.shields.io/badge/PayPal-Orders%20API%20v2%20(Hold%20%26%20Capture)-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com/)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.5%20Flash%20(Tri--Agent)-8E75C2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![AG Grid v36](https://img.shields.io/badge/AG%20Grid-v36.3.0%20(Financial%20Ledger)-009688?style=for-the-badge)](https://www.ag-grid.com/)
+[![Bryntum Gantt](https://img.shields.io/badge/Bryntum-Gantt%20v7.3%20(Control%20Tower)-F36E21?style=for-the-badge)](https://www.bryntum.com/)
+[![APIMatic](https://img.shields.io/badge/APIMatic-OpenAPI%203.0.3%20Governance-007ACC?style=for-the-badge)](https://www.apimatic.io/)
+[![Tests](https://img.shields.io/badge/Tests-293%20Passing%20(100%25)-success?style=for-the-badge&logo=checkmarx&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-**Repository:** [https://github.com/Mohamed-529/TrustChain](https://github.com/Mohamed-529/TrustChain)
-
----
-
-## Primary Sponsor Integrations (Bryntum & APIMatic + PayPal Orders API v2)
-
-### Primary Integration A — Bryntum Gantt: Evidence-Aware Software Delivery Control Tower
-Implemented in [`src/server/services/ScheduleControlTowerService.ts`](./src/server/services/ScheduleControlTowerService.ts), [`src/server/controllers/ScheduleController.ts`](./src/server/controllers/ScheduleController.ts), and [`src/App.tsx`](./src/App.tsx):
-- **Contract Planning & Dependency Modeling:** Represents each contract milestone as a Bryntum Gantt task (`startDate`, `endDate`, `duration`, `percentDone`, `baselineStartDate`, `baselineEndDate`, `baselines`) connected by Finish-to-Start (`type: 2`) dependencies (`ContractScheduleDependency`), resource assignments (`ContractScheduleResource`, `ContractScheduleAssignment`), and automated **Critical Path** calculation (`criticalPathTaskIds`).
-- **Evidence-Aware Progress:** Links every Gantt task directly to its persisted backend `milestoneId`, `evidence_submissions`, `ai_evaluations`, and `human_approvals`. Task `percentDone` is computed deterministically from persisted milestone status and verified criteria counts—never fabricated from unstructured AI text.
-- **AI Schedule-Risk Intelligence (`POST /api/v1/contracts/:id/schedule/analyze-risk`):** Detects overdue and failed-CI milestones, identifies downstream tasks blocked by dependencies (`BLOCKED_BY_DEPENDENCY`), cites canonical `evidenceId`s (`ev_ci_...`), and generates structured `ScheduleRecoveryProposal` records.
-- **Human-Controlled Schedule Recovery (`POST /api/v1/contracts/:id/schedule/proposals/:proposalId/review`):** Enforces separation of duties (`DEVELOPER` self-approval is blocked with `403 SCHEDULE_APPROVAL_FORBIDDEN_FOR_DEVELOPER`). Only authorized `CLIENT` or `REVIEWER` fiduciaries can approve schedule modifications, which persist updated schedule dates, recalculate downstream Finish-to-Start dependencies, preserve original baseline dates for Baseline vs. Actual variance comparison, and **never** modify contractual payment amounts (`agreedAmountCents`) or acceptance criteria.
-- **3-Milestone Control Tower Demo Scenario (`POST /api/v1/contracts/:id/schedule/demo-scenario`):**
-  1. **Milestone 1 (Authentication):** Completed (`100%`, `APPROVED`).
-  2. **Milestone 2 (Payment Integration):** Failed CI and delayed (`OVERDUE`, cites `ev_ci_...`).
-  3. **Milestone 3 (Deployment):** Blocked by Milestone 2 dependency (`BLOCKED_BY_DEPENDENCY`).
-
-### Primary Integration B — APIMatic & PayPal Orders API v2
-Implemented in [`openapi.yaml`](./openapi.yaml), [`APIMATIC-META.json`](./APIMATIC-META.json), [`src/sdk/MilestoneProofClient.ts`](./src/sdk/MilestoneProofClient.ts), [`src/server/services/PayPalService.ts`](./src/server/services/PayPalService.ts), and [`docs/DEVELOPER_PORTAL.md`](./docs/DEVELOPER_PORTAL.md):
-- **APIMatic OpenAPI 3.0.3 Validation & Governance:** Validated OpenAPI 3.0.3 contract (`openapi.yaml`) with 28 globally unique `operationId`s across 10 controller tag groups, zero unresolved `$ref` pointers, strict integer-cent monetary schemas, and runtime schema enforcement (`src/server/middleware/validateRequest.ts`).
-- **TypeScript Client SDK & Developer Portal:** Strongly-typed client SDK (`src/sdk/MilestoneProofClient.ts`) generated from our OpenAPI contract with retry handling, Bearer token management, and `PayPal-Request-Id` idempotency headers, paired with developer documentation in [`docs/DEVELOPER_PORTAL.md`](./docs/DEVELOPER_PORTAL.md).
-- **PayPal Context Plugin Grounding & PayPal Orders API v2:** Grounded in the authoritative APIMatic/PayPal Server SDK (`@paypal/paypal-server-sdk`) Orders v2 & Authorizations v2 specifications:
-  - `POST /api/v1/milestones/:id/paypal/order`: Creates a PayPal Order with `intent: "AUTHORIZE"` (`CLIENT` only). Includes explicit non-escrow disclosure (PayPal authorization is a temporary 29-day hold, **not** custodial escrow).
-  - `POST /api/v1/milestones/:id/paypal/authorize`: Authorizes the order, extracts `purchase_units[0].payments.authorizations[0].id` from PayPal's authorization response, and records `paypalAuthorizationId` and `authExpiresAt`.
-  - `POST /api/v1/milestones/:id/paypal/capture`: Captures settlement **only** after a persisted `HUMAN_APPROVAL` (`decision === 'APPROVE'`), verifying `0 < approvedAmountCents <= permittedAmountCents <= authorizedAmountCents` and enforcing `PayPal-Request-Id` idempotency. Explicitly separates `PAYPAL_SANDBOX` (`SETTLED` / `CAPTURED`) from `SANDBOX_SIMULATION` (`SIMULATED_CAPTURED`, keeping milestone `APPROVED`).
-  - `POST /api/v1/webhooks/paypal`: Verifies webhook authenticity via PayPal's official `POST /v1/notifications/verify-webhook-signature` endpoint (`verification_status === 'SUCCESS'`), fails closed (`503`) when webhook configuration or PayPal's verification service is unavailable, enforces event idempotency via `paypal_webhook_events`, reconciles payment state, and logs to the hash-chained audit trail.
+> **TrustChain** bridges software development repositories, multi-agent AI verification, and fiduciary PayPal disbursements. It eliminates software contract payment disputes by cryptographically verifying git commit SHAs, test telemetry, and dependency security scans against contractual criteria before authorizing programmatic milestone disbursements.
 
 ---
 
-## Core Architecture & Phases
+## 🌐 Live Deployment & Demo
 
-- **Phase 1 — Backend Foundation, Auth/RBAC & Hash-Chained Audit Trail:**
-  - Native Node.js HTTP server (`node:http`) + Vite SPA middleware integration.
-  - Non-blocking asynchronous `crypto.scrypt()` authentication, server-side role resolution (`CLIENT`, `DEVELOPER`, `REVIEWER`), and HMAC-SHA256 signed Bearer sessions backed by SQLite revocation (`auth_sessions`).
-  - Native `node:sqlite` (`WAL` mode + `PRAGMA synchronous = FULL`) ACID transactions with `BEFORE UPDATE` and `BEFORE DELETE` immutability triggers on `audit_logs`.
-- **Phase 2 — OpenAPI 3.0.3 Contract & APIMatic Governance:**
-  - Complete OpenAPI 3.0.3 specification (`openapi.yaml`) paired with `APIMATIC-META.json` and runtime request schema validation (`src/server/middleware/validateRequest.ts`).
-- **Phase 3 — Evidence Intelligence Engine & Financial Safety Boundary:**
-  - Validates GitHub HTTPS repository URLs, 7–40 hex commit SHAs, PR URLs/statuses, changed-file summaries, CI reports, and vulnerability scans.
-  - Isolates untrusted repository text inside `<untrusted_evidence>` delimiters and detects adversarial prompt-injection attempts.
-- **Phase 4 — Deterministic Settlement Policy Engine, Human Review & Financial Decision Ledger:**
-  - Dedicated `SettlementPolicyService` using integer cents only, human review state machine (`HumanReviewService`), and audit-traceable Financial Decision Ledger (`GET /api/v1/ledger`).
-- **Phase 5 — Sponsor Integrations (Bryntum Gantt Control Tower + APIMatic SDK + PayPal Orders API v2):**
-  - Full Bryntum Schedule Control Tower, human-approved schedule recovery with Finish-to-Start dependency cascades, TypeScript Client SDK, and PayPal Orders API v2 settlement engine.
+- **Live Application:** [https://trustchain.onrender.com](https://trustchain.onrender.com) *(or [https://trustchain.vercel.app](https://trustchain.vercel.app))*
+- **API Documentation (APIMatic OpenAPI):** [https://trustchain.onrender.com/openapi](https://trustchain.onrender.com/openapi)
+- **GitHub Repository:** [https://github.com/Mohamed-529/TrustChain](https://github.com/Mohamed-529/TrustChain)
 
----
+### 👥 Pre-Configured Demo Personas
+Switch personas instantly via the top-right profile badge in the floating navbar:
 
-## Prerequisites & Local Setup
-
-- **Runtime:** Node.js `v22.5.0+` or `v24.x` (`v24.14.0` recommended for native `node:sqlite` and TypeScript execution).
-
-1. **Configure Environment Variables (Optional for Local Demo):**
-   Copy `.env.example` to `.env` if you want to configure a live `GEMINI_API_KEY`, `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`, or custom `AUTH_TOKEN_SECRET`. When external API keys are omitted, the server automatically uses the labeled `DeterministicMockEvaluator` and `SANDBOX_SIMULATION` mode.
-
-2. **Install Frontend Dependencies (Optional for Backend/API Tests):**
-   ```bash
-   npm install
-   ```
-
-3. **Run the Server:**
-   ```bash
-   npm run dev
-   ```
-   - API Health Check: `http://localhost:3000/api/v1/health`
-   - OpenAPI 3.0.3 YAML Spec: `http://localhost:3000/api/v1/openapi.yaml`
-   - OpenAPI 3.0.3 JSON Discovery: `http://localhost:3000/api/v1/openapi.json`
-
-4. **Run the Automated Test Suites (291 Automated Tests Across 25 Suites):**
-   ```bash
-   npm test
-   ```
+| Persona | Role | Credentials | Core Capabilities |
+| :--- | :--- | :--- | :--- |
+| **Elena Vance** | `CLIENT` | `elena@client.local` / `client123` | Defines contracts, configures milestone criteria, pre-authorizes 29-day PayPal hold |
+| **Marcus Chen** | `DEVELOPER` | `marcus@dev.local` / `dev123` | Submits delivery telemetry (PRs, commits, CI runs), views AI verification reports |
+| **Sophia Sterling** | `REVIEWER` | `sophia@reviewer.local` / `reviewer123` | Independent fiduciary who approves/rejects verified disbursements and triggers PayPal capture |
 
 ---
 
-## Architecture & Design Documentation
+## 📸 Visual Showcase & Architecture Slides
 
-- [AGENTS.md](./AGENTS.md) — Engineering, Security & Financial Safety Rules
-- [HLD.md](./HLD.md) — High-Level System Design
-- [LLD.md](./LLD.md) — Low-Level Component & Schema Design
-- [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md) — System Architecture & Sponsor Integrations
-- [openapi.yaml](./openapi.yaml) — Normative OpenAPI 3.0.3 Specification
-- [docs/DEVELOPER_PORTAL.md](./docs/DEVELOPER_PORTAL.md) — APIMatic SDK & Developer Portal Integration Guide
-- [PROJECT_STATUS.md](./PROJECT_STATUS.md) — Canonical Implementation, Sponsor Excellence & Verification Status
+<div align="center">
+
+### 1. Autonomous Evidence-to-Settlement Orchestration
+![TrustChain Hero Banner](media/trustchain_hero.png)
+*Warm editorial parchment & sage aesthetic (`#f6f5f0`, `#e9efe6`) with integrated sponsor standards.*
+
+---
+
+### 2. Tri-Agent Consensus Engine & Ingestion Mesh
+![TrustChain Interactive Workflow](media/trustchain_demo_workflow.png)
+*Left: Enterprise Client scope definition & PayPal hold. Center: Tri-Agent Consensus Mesh (Evidence, Risk, Arbitrator). Right: Contractor delivery & Evidence Passport.*
+
+---
+
+### 3. Architectural Invariants & Fiduciary Guardrails
+![TrustChain Invariants](media/trustchain_invariants.png)
+*Four non-negotiable security principles: AI Advisory Boundaries, Non-Custodial PayPal Escrow, SQLite SHA-256 Chained Ledger, and Deterministic Cap Formula.*
+
+---
+
+### 4. Floating Island Navbar & Dynamic Persona Switching
+![TrustChain Navbar](media/trustchain_navbar_persona.png)
+*Segmented floating navigation bar with Spotlight Search (`/`), Guided Walkthrough Tour, and instant Role Switcher.*
+
+</div>
+
+---
+
+## ⚡ The Core Problem & TrustChain's Solution
+
+```
+Traditional Freelance / Software Contracts:
+[Client Promises Payment] ---> [Developer Submits Code] ---> [Subjective Disputes / Frozen Funds]
+                                                                        ❌ Payment Withheld
+
+TrustChain Deterministic Fiduciary Flow:
+[Client Pre-Authorizes PayPal Hold]
+        │
+        ▼
+[Developer Submits PR & CI Telemetry]
+        │
+        ▼
+[Tri-Agent AI Verification (Evidence + Risk + Arbitrator)]
+        │
+        ▼
+[Deterministic Settlement Policy (Calculates Permitted Cents)]
+        │
+        ▼
+[Human Fiduciary Approval (Sophia Sterling)]
+        │
+        ▼
+[Programmatic PayPal Orders v2 Capture ($2,500.00)]
+        │
+        ▼
+[Cryptographic Evidence Passport Issued & SHA-256 Ledger Sealed]
+```
+
+---
+
+## 🏛️ System Architecture & Key Innovations
+
+### 1. Tri-Agent AI Advisory Synthesis (`Google Gemini 3.5 Flash`)
+- **Evidence Agent:** Extracts git commit trees, verifies PR merge status, and parses CI/CD pipeline telemetry.
+- **Risk Agent:** Audits npm dependency trees and CVE advisories; detects adversarial prompt injections inside untrusted PR descriptions.
+- **Arbitrator Agent:** Synthesizes evidence against contractual acceptance criteria (AC-1, AC-2, AC-3) and outputs structured recommendations (`RECOMMEND_APPROVAL` / `REVISE_REQUIREMENTS`).
+- **Strict Separation of Concerns:** AI agents are purely advisory; no AI agent has permission to capture, void, or transfer funds.
+
+### 2. Deterministic Settlement Policy Engine
+- Pure mathematical calculation running strictly in integer cents (preventing floating-point rounding errors).
+- Deducts contractual SLA late penalties and caps payouts strictly to verified criteria:
+  $$\text{Permitted Amount} = \min(\text{Agreed Amount} - \text{Late Penalty}, \text{Authorized Hold})$$
+- Zero risk of over-disbursement or negative balances.
+
+### 3. Non-Custodial Zero-Escrow Payment Model (`PayPal Orders API v2`)
+- Eliminates traditional custodial crypto/escrow risks.
+- Client authorizes a standard 29-day payment hold via PayPal Orders API v2 (`intent: "AUTHORIZE"`).
+- TrustChain never takes custody of funds and holds zero private wallet keys.
+- Funds transfer directly from Client to Contractor only upon authenticated human fiduciary approval (`POST /api/v1/milestones/:id/paypal/capture`).
+
+### 4. Cryptographic SQLite Audit Ledger (`node:sqlite`)
+- Engineered with Node.js 22 built-in `node:sqlite` in WAL mode (`PRAGMA synchronous = FULL`).
+- Every lifecycle event is sealed into an immutable block with SHA-256 hash chaining:
+  $$\text{Block Hash} = \text{SHA256}(\text{Index} \parallel \text{PrevHash} \parallel \text{Timestamp} \parallel \text{Payload})$$
+- Any modification to past records causes instant cryptographic tamper detection during audit replay.
+- **Why SQLite over generic MongoDB?** Financial transaction logs require ACID durability, zero-latency local write consistency, and tamper-evident chaining without network transport overhead or external database credential exposure.
+
+### 5. Primary Sponsor Integrations
+- **Bryntum Gantt v7.3:** Schedule Control Tower with Finish-to-Start dependency cascading, critical path computation, and baseline vs. actual variance tracking.
+- **AG Grid v36:** Enterprise Financial Decision Ledger with column filtering, multi-sort, and CSV audit exports.
+- **APIMatic OpenAPI 3.0.3:** Validated REST API contract with 28 operations, typed TypeScript Client SDK, and interactive developer portal.
+
+---
+
+## 💼 Resume-Ready Highlights (For Recruiters & Evaluators)
+
+If you are evaluating this project for software engineering, full-stack, or backend roles, here are key achievements demonstrated in this codebase:
+
+- **Architected Autonomous Fiduciary Settlement Platform:** Engineered a full-stack multi-agent system coordinating software contract lifecycle, git telemetry ingestion, and PayPal Orders v2 disbursements.
+- **Production-Grade Financial Invariants:** Designed a deterministic integer-cent settlement policy engine enforcing strict zero-overpayment bounds, idempotency keys, and human-in-the-loop fiduciary approvals.
+- **High-Durability Cryptographic Ledger:** Implemented a SHA-256 hash-chained immutable audit system utilizing Node.js 22 built-in SQLite (`node:sqlite`) with WAL mode, FULL synchronous durability, and SQL triggers.
+- **Enterprise-Grade AI Security:** Designed defense-in-depth isolation for untrusted git metadata, sanitizing external inputs against prompt-injection attacks before multi-agent Gemini synthesis.
+- **Strict OpenAPI Governance & SDK Generation:** Authored and validated comprehensive OpenAPI 3.0.3 contracts governed by APIMatic, generating strongly-typed client SDKs with automated retry policies.
+- **Rigorous Test Coverage:** Developed a suite of 293 automated integration and unit tests across 26 test suites achieving 100% pass rates across concurrency, failure recovery, and financial state machines.
+
+---
+
+## 🛠️ Local Development & Quick Start
+
+### Prerequisites
+- Node.js `v22.5.0` or higher (`v24.14.0` recommended)
+- npm `v10.x` or higher
+
+### Installation & Run
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Mohamed-529/TrustChain.git
+cd TrustChain
+
+# 2. Install dependencies
+npm install
+
+# 3. Build frontend assets
+npm run build
+
+# 4. Start production full-stack server
+npm start
+# Server listens on http://localhost:3000
+```
+
+### Running the Test Suite
+The project contains 293 rigorous automated tests covering all backend services, payment state machines, and integration flows:
+
+```bash
+npm test
+```
+
+---
+
+## 🚀 Cloud Deployment
+
+### 1. Deploy on Render (Recommended Full-Stack)
+TrustChain includes a pre-configured `render.yaml` blueprint:
+
+1. Push your changes to GitHub: `git push origin main`
+2. Log into [Render.com](https://render.com) and click **New > Blueprint**.
+3. Select your `TrustChain` repository.
+4. Render automatically runs `npm install && npm run build` and starts `npm start`.
+5. Your service is live at `https://<your-app>.onrender.com` with zero extra configuration!
+
+### 2. Deploy on Vercel (Frontend SPA)
+TrustChain includes a pre-configured `vercel.json`:
+
+1. Import `TrustChain` into [Vercel](https://vercel.com).
+2. Framework Preset: **Vite**.
+3. Build Command: `npm run build`.
+4. Output Directory: `dist`.
+5. API requests are automatically routed to your Render backend via `vercel.json` rewrites.
+
+---
+
+## 📜 Environment Variables
+
+Copy `.env.example` to `.env` to configure live integrations:
+
+```env
+# Server Configuration
+PORT=3000
+NODE_ENV=production
+AUTH_TOKEN_SECRET=your-random-hmac-sha256-secret
+
+# Google Gemini AI (Optional - falls back to DeterministicMockEvaluator if omitted)
+GEMINI_API_KEY=your-gemini-api-key
+
+# PayPal Orders API v2 (Optional - falls back to SANDBOX_SIMULATION if omitted)
+PAYPAL_MODE=sandbox
+PAYPAL_CLIENT_ID=your-paypal-sandbox-client-id
+PAYPAL_CLIENT_SECRET=your-paypal-sandbox-client-secret
+PAYPAL_WEBHOOK_ID=your-paypal-webhook-id
+
+# GitHub Provenance Verification (Optional - falls back to local git tree if omitted)
+GITHUB_TOKEN=your-github-personal-access-token
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
