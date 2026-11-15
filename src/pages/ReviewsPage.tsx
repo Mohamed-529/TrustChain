@@ -74,6 +74,8 @@ export function ReviewsPage({
     reviewDetails?.milestone.status === 'APPROVED' &&
     latestApproval?.decision === 'APPROVE';
 
+  const isReviewer = currentUser?.role === 'REVIEWER';
+
   const rawLinks = Array.isArray(latestTx?.rawPaypalResponse?.links)
     ? (latestTx?.rawPaypalResponse?.links as Array<{ rel: string; href: string }>)
     : null;
@@ -81,53 +83,57 @@ export function ReviewsPage({
 
   return (
     <div className="space-y-6 font-sans">
-      {/* 1-Line Clean Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+      {/* Cascrow Editorial Kicker & Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[rgba(11,31,23,0.08)] pb-5">
         <div>
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">◈</span>
-            <h1 className="text-xl font-bold text-white tracking-tight">
-              Milestone Review & Settlement Workbench
-            </h1>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="w-5 h-[1.5px] bg-[#2f7a50] inline-block" />
+            <span className="text-[11px] font-mono tracking-wider uppercase text-[#2f7a50] font-semibold">
+              Fiduciary Review Workbench
+            </span>
           </div>
-          {/* EXACTLY 1 LINE DESCRIPTION */}
-          <p className="text-xs text-zinc-400 mt-1">
+          <h1 className="text-2xl sm:text-3xl text-[#0b1f17] tracking-tight font-normal">
+            Milestone Review & Settlement
+          </h1>
+          <p className="text-xs text-[#3d5248] mt-1 max-w-2xl leading-relaxed">
             Four-stage fiduciary workflow: Evidence Ingestion → AI Advisory Synthesis → Deterministic Settlement Cap → Human Review & PayPal Settlement.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenPassport}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-emerald-400 transition"
+            className="px-4 py-2 rounded-full bg-white hover:bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-xs font-medium text-[#0b1f17] transition shadow-sm flex items-center gap-1.5"
           >
-            🛡️ View Passport
+            <span>🛡️</span> <span>View Passport</span>
           </button>
           <button
             onClick={onOpenDisputePack}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-amber-400 transition"
+            className="px-4 py-2 rounded-full bg-white hover:bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-xs font-medium text-[#0b1f17] transition shadow-sm flex items-center gap-1.5"
           >
-            📂 View Dispute Pack
+            <span>📂</span> <span>Dispute Pack</span>
           </button>
         </div>
       </div>
 
-      {/* Milestone Selector Tabs */}
-      <div className="flex items-center gap-2 border-b border-zinc-800 pb-3 overflow-x-auto">
-        <span className="text-xs text-zinc-500 font-mono mr-2">MILESTONE:</span>
+      {/* Cascrow Milestone Selector Pill Tabs */}
+      <div className="flex items-center gap-2 border-b border-[rgba(11,31,23,0.08)] pb-3.5 overflow-x-auto">
+        <span className="text-[11px] text-[#6b7f75] font-mono mr-2 tracking-wide uppercase">
+          Milestone:
+        </span>
         {[
-          { id: 'ms_seed_01', label: 'Milestone 1 (OAuth2 Auth)' },
-          { id: 'ms_seed_02', label: 'Milestone 2 (Settlement Engine)' },
-          { id: 'ms_seed_03', label: 'Milestone 3 (Audit Replay & E2E)' },
+          { id: 'ms_seed_01', label: 'Milestone 1 · OAuth2 Microservice (Complete)' },
+          { id: 'ms_seed_02', label: 'Milestone 2 · Settlement Policy Engine (Case B)' },
+          { id: 'ms_seed_03', label: 'Milestone 3 · Audit Replay & Security' },
         ].map((m) => {
           const isSelected = selectedMilestoneId === m.id;
           return (
             <button
               key={m.id}
               onClick={() => setSelectedMilestoneId(m.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
                 isSelected
-                  ? 'bg-zinc-800 text-emerald-400 font-bold border border-emerald-500/40 shadow-sm'
-                  : 'bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-[#0b1f17] text-white shadow-sm'
+                  : 'bg-white border border-[rgba(11,31,23,0.12)] text-[#3d5248] hover:bg-[#f6f5f0] hover:text-[#0b1f17]'
               }`}
             >
               {m.label}
@@ -136,69 +142,68 @@ export function ReviewsPage({
         })}
       </div>
 
-      {/* 4-Column Operational Workbench */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Column 1: Evidence Summary */}
-        <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-4 font-mono text-xs flex flex-col justify-between shadow-lg">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-white text-sm">1. Delivery Evidence</span>
-              <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-950 text-emerald-400 border border-zinc-800">
-                {reviewDetails?.milestone.status ?? 'PENDING'}
+      {/* 4-Column Operational Workbench in Cascrow Warm Editorial Containers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Column 1: Submitted Evidence Details */}
+        <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+              <span className="font-normal text-[#0b1f17] text-sm tracking-tight">1. Delivery Evidence</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
+                {selectedMilestoneId}
               </span>
             </div>
 
             <div>
-              <div className="text-zinc-500 text-[11px]">Milestone Title:</div>
-              <div className="text-white font-sans text-xs font-semibold pt-0.5">
+              <div className="text-[#6b7f75] text-[11px]">Milestone Title:</div>
+              <div className="text-[#0b1f17] text-xs font-semibold pt-0.5">
                 {reviewDetails?.milestone.title ?? 'Loading...'}
               </div>
             </div>
 
             <div>
-              <div className="text-zinc-500 text-[11px]">Agreed Budget:</div>
-              <div className="text-emerald-400 font-bold text-sm pt-0.5">
+              <div className="text-[#6b7f75] text-[11px]">Agreed Budget:</div>
+              <div className="text-[#0b1f17] font-semibold text-base pt-0.5 font-mono">
                 {formatUsdCents(reviewDetails?.milestone.agreedAmountCents)}
               </div>
             </div>
 
             {latestSub ? (
-              <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1 text-[11px]">
-                <div className="text-zinc-400">Attempt #{latestSub.attemptNumber}</div>
-                <div className="text-zinc-300 truncate">Repo: {latestSub.repoUrl}</div>
-                <div className="text-zinc-300">Commit: {latestSub.commitSha.slice(0, 10)}</div>
-                <div className="text-zinc-300">PR: {latestSub.prStatus}</div>
-                <div className="text-zinc-300">
-                  CI: {latestSub.ciReport.passedTests}/{latestSub.ciReport.totalTests} passed (
-                  {latestSub.ciReport.coveragePct}%)
+              <div className="p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] space-y-1.5 text-[11px] font-mono">
+                <div className="text-[#2f7a50] font-semibold">Attempt #{latestSub.attemptNumber}</div>
+                <div className="text-[#3d5248] truncate">Repo: {latestSub.repoUrl}</div>
+                <div className="text-[#3d5248]">Commit: {latestSub.commitSha.slice(0, 10)}</div>
+                <div className="text-[#3d5248]">PR: {latestSub.prStatus}</div>
+                <div className="text-[#0b1f17] font-medium">
+                  CI: {latestSub.ciReport.passedTests}/{latestSub.ciReport.totalTests} passed ({latestSub.ciReport.coveragePct}%)
                 </div>
               </div>
             ) : (
-              <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-400">
+              <div className="p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-[11px] text-[#6b7f75]">
                 No delivery evidence submitted for this milestone yet.
               </div>
             )}
           </div>
 
-          <div className="space-y-2 pt-3 border-t border-zinc-800">
+          <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
             <button
               disabled={loading}
               onClick={() => void onSubmitDemoEvidence()}
-              className="w-full px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 transition disabled:opacity-50"
+              className="w-full px-3.5 py-2 rounded-full bg-[#f6f5f0] hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.12)] transition disabled:opacity-50"
             >
               Submit Demo Evidence
             </button>
             <button
               disabled={loading}
               onClick={() => void onVerifyGithubProvenance()}
-              className="w-full px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-emerald-400 text-xs font-medium border border-zinc-800 transition disabled:opacity-50"
+              className="w-full px-3.5 py-2 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] text-[#2f7a50] text-xs font-medium border border-[rgba(47,122,80,0.2)] transition disabled:opacity-50"
             >
               Verify GitHub Telemetry
             </button>
             <button
               disabled={loading}
               onClick={() => void onRunAiEvaluation()}
-              className="w-full px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-bold shadow transition disabled:opacity-50"
+              className="w-full px-3.5 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-medium shadow-sm transition disabled:opacity-50"
             >
               Run AI Evaluation
             </button>
@@ -206,32 +211,32 @@ export function ReviewsPage({
         </div>
 
         {/* Column 2: Multi-Agent AI Advisory Findings */}
-        <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-4 font-mono text-xs flex flex-col justify-between shadow-lg">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-white text-sm">2. AI Advisory</span>
-              <span className="px-2 py-0.5 rounded text-[10px] bg-amber-950/80 text-amber-300 border border-amber-800 font-bold">
+        <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+              <span className="font-normal text-[#0b1f17] text-sm tracking-tight">2. AI Advisory</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#fbf7ed] text-[#8a681c] border border-[#e8dcb8] font-mono font-medium">
                 ADVISORY ONLY
               </span>
             </div>
 
             {latestEval ? (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-zinc-500 text-[11px]">Arbitrator Recommendation:</div>
-                    <div className="text-amber-400 font-bold text-sm pt-0.5">
+                    <div className="text-[#6b7f75] text-[11px]">Arbitrator Recommendation:</div>
+                    <div className="text-[#0b1f17] font-semibold text-sm pt-0.5">
                       {latestEval.arbitratorRecommendation.recommendedOutcome}
                     </div>
                   </div>
                   <div>
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium border ${
                         latestEval.evaluationMode === 'LIVE_GEMINI'
-                          ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700'
+                          ? 'bg-[#e9efe6] text-[#2f7a50] border-[rgba(47,122,80,0.25)]'
                           : latestEval.evaluationMode === 'DETERMINISTIC_FALLBACK'
-                          ? 'bg-amber-950/90 text-amber-300 border-amber-700'
-                          : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                          ? 'bg-[#fbf7ed] text-[#8a681c] border-[#e8dcb8]'
+                          : 'bg-[#f6f5f0] text-[#3d5248] border-[rgba(11,31,23,0.1)]'
                       }`}
                     >
                       {latestEval.evaluationMode === 'LIVE_GEMINI'
@@ -243,22 +248,22 @@ export function ReviewsPage({
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1 text-[11px]">
-                  <div className="text-zinc-300">
+                <div className="p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] space-y-1.5 text-[11px] font-mono">
+                  <div className="text-[#3d5248]">
                     Evidence:{' '}
-                    <span className="text-emerald-400 font-bold">
+                    <span className="text-[#2f7a50] font-semibold">
                       {latestEval.evidenceAnalysis.verifiedCount}/{latestEval.evidenceAnalysis.totalCount} Verified
                     </span>
                   </div>
-                  <div className="text-zinc-300">
+                  <div className="text-[#3d5248]">
                     Risk Severity:{' '}
                     <span
-                      className={`font-bold ${
+                      className={`font-semibold ${
                         latestEval.riskAnalysis.overallRiskSeverity === 'CRITICAL'
-                          ? 'text-rose-400'
+                          ? 'text-[#a62b2b]'
                           : latestEval.riskAnalysis.overallRiskSeverity === 'HIGH'
-                          ? 'text-amber-400'
-                          : 'text-emerald-400'
+                          ? 'text-[#a66a1c]'
+                          : 'text-[#2f7a50]'
                       }`}
                     >
                       {latestEval.riskAnalysis.overallRiskSeverity}
@@ -266,160 +271,184 @@ export function ReviewsPage({
                   </div>
                 </div>
 
-                <p className="text-[11px] text-zinc-300 font-sans leading-relaxed line-clamp-3">
+                <p className="text-[11px] text-[#3d5248] leading-relaxed line-clamp-3">
                   {latestEval.arbitratorRecommendation.rationale}
                 </p>
               </div>
             ) : (
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-400">
+              <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-[11px] text-[#6b7f75]">
                 Evaluation has not been executed yet. Click &quot;Run AI Evaluation&quot; to synthesize evidence.
               </div>
             )}
           </div>
 
-          <div className="pt-3 border-t border-zinc-800">
+          <div className="pt-3 border-t border-[rgba(11,31,23,0.08)]">
             <button
               onClick={() => {
                 setIsInspectorOpen(true);
                 onOpenAiInspector();
               }}
-              className="w-full px-3 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-amber-400 text-xs font-semibold transition"
+              className="w-full px-3.5 py-2 rounded-full bg-[#f6f5f0] hover:bg-[#ecebe4] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs font-medium transition"
             >
-              Open AI Inspector →
+              🔍 Inspect AI Reasoning
             </button>
           </div>
         </div>
 
         {/* Column 3: Deterministic Policy & Human Review */}
-        <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-4 font-mono text-xs flex flex-col justify-between shadow-lg">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-white text-sm">3. Policy & Approval</span>
-              <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-950 text-zinc-300 border border-zinc-800">
+        <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+              <span className="font-normal text-[#0b1f17] text-sm tracking-tight">3. Policy & Approval</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
                 FIDUCIARY GATE
               </span>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] font-mono">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-zinc-400">Agreed Budget:</span>
-                <span className="text-white">{formatUsdCents(policy?.agreedAmountCents)}</span>
+                <span className="text-[#6b7f75]">Agreed Budget:</span>
+                <span className="text-[#0b1f17] font-semibold">{formatUsdCents(policy?.agreedAmountCents)}</span>
               </div>
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-zinc-400">Late Penalty:</span>
-                <span className="text-rose-400">-{formatUsdCents(policy?.latePenaltyCents)}</span>
+                <span className="text-[#6b7f75]">Late Penalty:</span>
+                <span className="text-[#a62b2b]">-{formatUsdCents(policy?.latePenaltyCents)}</span>
               </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-zinc-400">Permitted Cap:</span>
-                <span className="text-emerald-400 font-bold text-sm">
+              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[rgba(11,31,23,0.08)]">
+                <span className="text-[#6b7f75] font-sans">Permitted Cap:</span>
+                <span className="text-[#2f7a50] font-bold text-sm">
                   {formatUsdCents(policy?.permittedAmountCents)}
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-zinc-800">
-              <div>
-                <label className="text-[11px] text-zinc-400 block mb-1">
-                  Disbursement Amount (Cents):
-                </label>
-                <input
-                  type="number"
-                  value={approvedAmountCentsInput}
-                  onChange={(e) => setApprovedAmountCentsInput(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-xs"
-                />
+            {isApprovedByHuman ? (
+              <div className="p-3.5 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5 text-[#1c4b31]">
+                <div className="flex items-center gap-1.5 font-semibold text-xs">
+                  <span>✓</span> <span>Milestone Approved by Fiduciary</span>
+                </div>
+                <div className="text-[11px]">
+                  Decision: <strong>{latestApproval?.decision}</strong> • Amount: <strong>{formatUsdCents(latestApproval?.approvedAmountCents)}</strong>
+                </div>
+                <div className="text-[10px] text-[#3d5248] italic truncate">
+                  &quot;{latestApproval?.justification}&quot;
+                </div>
               </div>
+            ) : (
+              <div className="space-y-2.5 pt-1">
+                <div>
+                  <label className="text-[11px] text-[#6b7f75] block mb-1">
+                    Disbursement Amount (Cents):
+                  </label>
+                  <input
+                    type="number"
+                    value={approvedAmountCentsInput}
+                    onChange={(e) => setApprovedAmountCentsInput(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2f7a50]"
+                  />
+                </div>
 
-              <div>
-                <label className="text-[11px] text-zinc-400 block mb-1">
-                  Fiduciary Justification (Required):
-                </label>
-                <textarea
-                  value={justification}
-                  onChange={(e) => setJustification(e.target.value)}
-                  placeholder="Document fiduciary rationale for audit record..."
-                  rows={2}
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-xs font-sans"
-                />
+                <div>
+                  <label className="text-[11px] text-[#6b7f75] block mb-1">
+                    Fiduciary Justification (Required):
+                  </label>
+                  <textarea
+                    value={justification}
+                    onChange={(e) => setJustification(e.target.value)}
+                    placeholder="Document fiduciary rationale for audit record..."
+                    rows={2}
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs outline-none focus:border-[#2f7a50]"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          <div className="space-y-2 pt-3 border-t border-zinc-800">
-            <div className="grid grid-cols-3 gap-1.5">
-              <button
-                disabled={loading || !justification.trim()}
-                onClick={() => void onReviewAction('approve')}
-                className="px-2 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-zinc-950 text-xs transition disabled:opacity-40"
-              >
-                Approve
-              </button>
-              <button
-                disabled={loading || !justification.trim()}
-                onClick={() => void onReviewAction('request-changes')}
-                className="px-2 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 font-semibold text-zinc-950 text-xs transition disabled:opacity-40"
-              >
-                Revise
-              </button>
-              <button
-                disabled={loading || !justification.trim()}
-                onClick={() => void onReviewAction('reject')}
-                className="px-2 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-600 font-semibold text-white text-xs transition disabled:opacity-40"
-              >
-                Reject
-              </button>
-            </div>
+          <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
+            {!isApprovedByHuman && (
+              <>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    disabled={loading || !justification.trim() || !isReviewer}
+                    onClick={() => void onReviewAction('approve')}
+                    title={!isReviewer ? 'Reviewer role required (switch persona in top right)' : !justification.trim() ? 'Enter justification' : 'Approve Milestone'}
+                    className="px-2 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] font-medium text-white text-xs transition disabled:opacity-40"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    disabled={loading || !justification.trim() || !isReviewer}
+                    onClick={() => void onReviewAction('request-changes')}
+                    className="px-2 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] font-medium text-[#8a681c] text-xs transition disabled:opacity-40"
+                  >
+                    Revise
+                  </button>
+                  <button
+                    disabled={loading || !justification.trim() || !isReviewer}
+                    onClick={() => void onReviewAction('reject')}
+                    className="px-2 py-2 rounded-full bg-[#fdf2f2] hover:bg-[#fbe4e4] border border-[#f3c2c2] font-medium text-[#a62b2b] text-xs transition disabled:opacity-40"
+                  >
+                    Reject
+                  </button>
+                </div>
+                {!isReviewer && (
+                  <div className="text-[10px] text-[#8a681c] text-center font-mono">
+                    Switch to Reviewer persona (top right) to approve.
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
         {/* Column 4: PayPal Orders API v2 Lifecycle */}
-        <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-4 font-mono text-xs flex flex-col justify-between shadow-lg">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-white text-sm">4. PayPal Settlement</span>
-              <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-950 text-emerald-400 border border-zinc-800 font-mono">
+        <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+              <span className="font-normal text-[#0b1f17] text-sm tracking-tight">4. PayPal Settlement</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
                 ORDERS V2
               </span>
             </div>
 
-            {/* Regulatory Non-Escrow Notice: 1 line */}
-            <div className="p-2.5 rounded-xl bg-zinc-950 border border-amber-900/60 text-[10px] text-amber-300 space-y-0.5">
-              <div className="font-bold uppercase tracking-wider">⚠️ Non-Escrow Notice</div>
-              <p className="text-[10px] text-zinc-300 font-sans leading-tight">
+            {/* Regulatory Non-Escrow Notice */}
+            <div className="p-3 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] text-[10px] text-[#8a681c] space-y-0.5">
+              <div className="font-semibold uppercase tracking-wider font-mono">⚠️ Non-Escrow Notice</div>
+              <p className="text-[10px] text-[#3d5248] leading-tight">
                 29-day authorization hold via PayPal Orders API v2. TrustChain never takes fund custody.
               </p>
             </div>
 
-            <div className="space-y-1 text-[11px]">
+            <div className="space-y-1.5 p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] font-mono text-[11px]">
               <div>
                 Payment State:{' '}
-                <span className="text-emerald-400 font-bold">
+                <span className="text-[#2f7a50] font-semibold">
                   {latestTx?.status ?? reviewDetails?.milestone.paymentStatus ?? 'NOT_READY'}
                 </span>
               </div>
               {latestTx && (
-                <div className="space-y-0.5 text-zinc-400 text-[10px]">
-                  {latestTx.paypalOrderId && <div>Order: <span className="font-mono text-zinc-200">{latestTx.paypalOrderId}</span></div>}
-                  <div>Auth ID: <span className="font-mono text-zinc-200">{latestTx.paypalAuthorizationId ?? '—'}</span></div>
-                  <div>Capture ID: <span className="font-mono text-zinc-200">{latestTx.paypalCaptureId ?? '—'}</span></div>
+                <div className="space-y-0.5 text-[#6b7f75] text-[10px] pt-1 border-t border-[rgba(11,31,23,0.06)]">
+                  {latestTx.paypalOrderId && <div>Order: <span className="text-[#0b1f17]">{latestTx.paypalOrderId}</span></div>}
+                  <div>Auth ID: <span className="text-[#0b1f17]">{latestTx.paypalAuthorizationId ?? '—'}</span></div>
+                  <div>Capture ID: <span className="text-[#0b1f17]">{latestTx.paypalCaptureId ?? '—'}</span></div>
                 </div>
               )}
             </div>
 
             {/* Buyer Approval Action Card */}
             {approveLink && (latestTx?.status === 'ORDER_CREATED' || latestTx?.status === 'SIMULATED_ORDER_CREATED') && (
-              <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/40 space-y-2">
-                <div className="text-[10px] text-amber-300 font-bold flex items-center gap-1">
+              <div className="p-3 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] space-y-2">
+                <div className="text-[10px] text-[#8a681c] font-semibold flex items-center gap-1">
                   <span>👉</span> <span>Action: Buyer Sandbox Approval</span>
                 </div>
-                <p className="text-[10px] text-zinc-400 font-sans leading-tight">
+                <p className="text-[10px] text-[#3d5248] leading-tight">
                   PayPal Order created. Open Sandbox checkout to authenticate and approve the hold.
                 </p>
                 <a
                   href={approveLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center w-full px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs shadow transition text-center"
+                  className="inline-flex items-center justify-center w-full px-3 py-1.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white font-medium text-xs shadow-sm transition text-center"
                 >
                   Open PayPal Checkout ↗
                 </a>
@@ -427,18 +456,18 @@ export function ReviewsPage({
             )}
           </div>
 
-          <div className="space-y-2 pt-3 border-t border-zinc-800">
+          <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
             <button
               disabled={loading}
               onClick={() => void onPayPalAction('order')}
-              className="w-full px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700 transition disabled:opacity-50"
+              className="w-full px-3.5 py-2 rounded-full bg-[#f6f5f0] hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.12)] transition disabled:opacity-50"
             >
               1. Create Order (AUTHORIZE)
             </button>
             <button
               disabled={loading}
               onClick={() => void onPayPalAction('authorize')}
-              className="w-full px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-zinc-950 text-xs font-bold transition disabled:opacity-50"
+              className="w-full px-3.5 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] text-[#8a681c] text-xs font-medium transition disabled:opacity-50"
             >
               2. Authorize Hold (29 Days)
             </button>
@@ -446,12 +475,12 @@ export function ReviewsPage({
               <button
                 disabled={loading || !isApprovedByHuman || (latestTx?.status !== 'AUTHORIZED' && latestTx?.status !== 'SIMULATED_AUTHORIZED')}
                 onClick={() => void onPayPalAction('capture')}
-                className="w-full px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-bold transition disabled:opacity-40"
+                className="w-full px-3.5 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-medium transition disabled:opacity-30"
               >
                 3. Capture Settlement
               </button>
               {!isApprovedByHuman && (
-                <div className="text-[9px] text-zinc-500 text-center mt-1">
+                <div className="text-[9px] text-[#6b7f75] text-center mt-1">
                   🔒 Fiduciary gate: human review approval required in Column 3
                 </div>
               )}
@@ -459,7 +488,7 @@ export function ReviewsPage({
             <button
               disabled={loading}
               onClick={() => void onPayPalReconcile()}
-              className="w-full px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-850 text-amber-400 text-[11px] border border-zinc-800 transition"
+              className="w-full px-3 py-1.5 rounded-full bg-white hover:bg-[#f6f5f0] text-[#2f7a50] text-[11px] border border-[rgba(47,122,80,0.2)] transition"
             >
               🔄 Reconcile with Sandbox
             </button>

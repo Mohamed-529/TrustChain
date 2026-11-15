@@ -15,11 +15,14 @@ import type {
   User,
   DisputeEvidencePack,
   AuditLogEntry,
+  Contract,
 } from './types/domain.ts';
 
 import { RouterProvider, usePathname, useNavigate } from './router/Router.tsx';
 import { AppShell } from './components/layout/AppShell.tsx';
-import { GuidedTourModal, STORAGE_KEY_ONBOARDING } from './components/onboarding/GuidedTourModal.tsx';
+import { InteractiveWalkthroughModal } from './components/walkthrough/InteractiveWalkthroughModal.tsx';
+import { GlobalSearchModal } from './components/search/GlobalSearchModal.tsx';
+import { CreateProjectModal } from './components/contracts/CreateProjectModal.tsx';
 import { WelcomeLandingPage } from './components/landing/WelcomeLandingPage.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { IntelligencePage } from './pages/IntelligencePage.tsx';
@@ -39,7 +42,8 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Active Contract & Milestone Scope
-  const [selectedContractId] = useState<string>('contract_seed_01');
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [selectedContractId, setSelectedContractId] = useState<string>('contract_seed_01');
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('ms_seed_01');
 
   // Domain Telemetry & Workbench Data
@@ -62,7 +66,7 @@ function AppContent() {
     'Approved +7d recovery window for CI stabilization; contractual budget and acceptance criteria unchanged.'
   );
 
-  // Global UI Controls
+  // Global UI Controls & Modals
   const [statusBanner, setStatusBanner] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
@@ -70,23 +74,23 @@ function AppContent() {
   const [loading, setLoading] = useState<boolean>(false);
   const [quickFilterType, setQuickFilterType] = useState<string>('ALL');
   const [showAiInspector, setShowAiInspector] = useState<boolean>(false);
-  const [showTour, setShowTour] = useState<boolean>(false);
+  const [showWalkthrough, setShowWalkthrough] = useState<boolean>(false);
+  const [showSearch, setShowSearch] = useState<boolean>(false);
+  const [showCreateProject, setShowCreateProject] = useState<boolean>(false);
 
-  // 1. Check for First-Visit Guided Tour
+  // Global keyboard shortcut: / or Ctrl+K triggers Search
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hasCompletedTour = localStorage.getItem(STORAGE_KEY_ONBOARDING);
-      if (!hasCompletedTour && window.location.pathname === '/') {
-        // Automatically invite first-time visitors to the guided tour
-        setShowTour(true);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA')) {
+        e.preventDefault();
+        setShowSearch(true);
       }
-      if (window.location.pathname === '/onboarding') {
-        setShowTour(true);
-      }
-    }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 2. Switch Persona Handler
+  // 1. Switch Persona Handler
   const switchPersona = useCallback(async (userId: string) => {
     try {
       const res = await fetch('/api/v1/auth/demo-switch', {
@@ -112,13 +116,16 @@ function AppContent() {
     }
   }, []);
 
-  // 3. Comprehensive Data Refresh Provider
+  // 2. Comprehensive Data Refresh Provider
   const refreshAllData = useCallback(
     async (activeToken: string, milestoneId: string, contractId: string) => {
       if (!activeToken) return;
       setLoading(true);
       try {
-        const [schedRes, revRes, provRes, ppRes, ledgerRes, passRes, auditRes] = await Promise.all([
+        const [contractsRes, schedRes, revRes, provRes, ppRes, ledgerRes, passRes, auditRes] = await Promise.all([
+          fetch('/api/v1/contracts', {
+            headers: { Authorization: `Bearer ${activeToken}` },
+          }),
           fetch(`/api/v1/contracts/${contractId}/schedule`, {
             headers: { Authorization: `Bearer ${activeToken}` },
           }),
@@ -142,6 +149,10 @@ function AppContent() {
           }),
         ]);
 
+        if (contractsRes.ok) {
+          const cData = await contractsRes.json();
+          setContracts(cData.contracts ?? []);
+        }
         if (schedRes.ok) {
           const schedJson = (await schedRes.json()) as ContractScheduleResponse;
           setScheduleData(schedJson);
@@ -186,9 +197,9 @@ function AppContent() {
     []
   );
 
-  // Initial authentication on mount
+  // Initial authentication on mount (defaults to client_01 per requirements)
   useEffect(() => {
-    void switchPersona('reviewer_01');
+    void switchPersona('client_01');
   }, [switchPersona]);
 
   // Refresh domain data when token or selection changes
@@ -218,135 +229,36 @@ function AppContent() {
       } else if (paypalReturn === 'cancelled') {
         setStatusBanner({
           type: 'info',
-          message: 'PayPal Sandbox checkout was cancelled by the buyer.',
+          message: 'PayPal checkout cancelled by user.',
         });
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     } catch {
-      // browser environment safe
+      // Ignore URL parsing errors
     }
   }, []);
 
-  // 4. Action Handlers
-  const handleLoadControlTowerDemoScenario = async () => {
+  // 3. Operational Handlers
+  const handleSubmitDemoEvidence = async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/contracts/${selectedContractId}/schedule/demo-scenario`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Failed to load Control Tower demo scenario');
-      }
-      setScheduleData(data.schedule);
-      setStatusBanner({
-        type: 'success',
-        message: 'Loaded Bryntum Control Tower 3-Milestone Risk & Recovery Demo.',
-      });
-      await refreshAllData(token, selectedMilestoneId, selectedContractId);
-    } catch (err) {
-      setStatusBanner({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to load demo scenario',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAnalyzeScheduleRisk = async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/v1/contracts/${selectedContractId}/schedule/analyze-risk`, {
+      const fixtureKey = selectedMilestoneId === 'ms_seed_02' ? 'INCOMPLETE_SUBMISSION' : 'SUCCESSFUL_SUBMISSION';
+      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          referenceTimeIso: '2026-11-23T12:00:00.000Z',
-          recoveryDays: 7,
-        }),
+        body: JSON.stringify({ demoFixtureKey: fixtureKey }),
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Failed to analyze schedule risk');
-      }
-      setScheduleData(data.schedule);
-      setStatusBanner({
-        type: 'success',
-        message: `AI Schedule-Risk Analysis complete: ${data.createdProposals.length} recovery proposal(s) ready for review.`,
-      });
-    } catch (err) {
-      setStatusBanner({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Schedule risk analysis failed',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReviewScheduleProposal = async (
-    proposal: ScheduleRecoveryProposal,
-    decision: 'APPROVE' | 'REJECT'
-  ) => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/api/v1/contracts/${selectedContractId}/schedule/proposals/${proposal.id}/review`,
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            decision,
-            reason: scheduleDecisionReason,
-            referenceTimeIso: '2026-11-23T12:00:00.000Z',
-          }),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Failed to review schedule proposal');
-      }
-      setScheduleData(data.schedule);
-      setStatusBanner({
-        type: 'success',
-        message: `Schedule proposal ${proposal.id} ${decision}D. Downstream Finish-to-Start dependencies recalculated.`,
-      });
-      await refreshAllData(token, selectedMilestoneId, selectedContractId);
-    } catch (err) {
-      setStatusBanner({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to submit proposal review',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmitDemoEvidence = async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence/demo-submission`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Demo evidence submission failed');
+        throw new Error(data.error?.message ?? 'Evidence submission failed');
       }
       setStatusBanner({
         type: 'success',
-        message: `Submitted delivery evidence attempt #${data.submission.attemptNumber} (Commit: ${data.submission.evidence.commitHash.slice(0, 10)}).`,
+        message: `Delivery evidence submitted for ${selectedMilestoneId} (Attempt #${data.submission.attemptNumber}). Reviewers may now run evaluation.`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -369,11 +281,12 @@ function AppContent() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message ?? 'AI evaluation failed');
+        throw new Error(data.error?.message ?? 'Evaluation execution failed');
       }
+      const evalRun = data.evaluation;
       setStatusBanner({
         type: 'success',
-        message: `Tri-Agent AI Advisory Synthesis completed: Arbitrator recommends ${data.evaluation.arbitratorRecommendation.recommendedOutcome} (Risk: ${data.evaluation.riskAnalysis.overallRiskSeverity}).`,
+        message: `Tri-Agent AI Advisory Synthesis completed (${evalRun.evaluationMode}): Arbitrator recommends ${evalRun.arbitratorRecommendation.recommendedOutcome} (Risk: ${evalRun.riskAnalysis.overallRiskSeverity}). Permitted Cap: $${((evalRun.policyCalculation?.permittedAmountCents ?? 0) / 100).toFixed(2)}.`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -390,7 +303,7 @@ function AppContent() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence/verify-provenance`, {
+      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence/verify`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -398,10 +311,10 @@ function AppContent() {
       if (!res.ok) {
         throw new Error(data.error?.message ?? 'GitHub provenance verification failed');
       }
-      const prov = data.verificationRecord;
+      const prov = data.provenance ?? data.verificationRecord;
       setStatusBanner({
         type: 'info',
-        message: `Independent GitHub Provenance Verification: status=${prov.verificationStatus ?? prov.overallStatus} (integrity=${prov.integrity?.payloadHashMatches ? 'MATCH' : 'TAMPERED'}).`,
+        message: `Independent GitHub Provenance Verification: status=${prov?.verificationStatus ?? prov?.overallStatus} (integrity=${prov?.integrity?.payloadHashMatches ? 'MATCH' : 'TAMPERED'}).`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
@@ -540,38 +453,42 @@ function AppContent() {
     actionEndpoint: 'approve' | 'reject' | 'request-changes'
   ) => {
     if (!token) return;
+    if (!justification.trim()) {
+      setStatusBanner({
+        type: 'error',
+        message: 'A written fiduciary justification is mandatory for audit records.',
+      });
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/v1/milestones/${selectedMilestoneId}/review/${actionEndpoint}`,
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            evaluationId: reviewDetails?.latestEvaluation?.id,
-            approvedAmountCents:
-              actionEndpoint === 'approve' ? approvedAmountCentsInput : 0,
-            justification,
-          }),
-        }
-      );
+      const payload: Record<string, unknown> = {
+        justification: justification.trim(),
+      };
+      if (actionEndpoint === 'approve') {
+        payload.approvedAmountCents = approvedAmountCentsInput;
+      }
+      const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/review/${actionEndpoint}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Review submission failed');
+        throw new Error(data.error?.message ?? `Review action ${actionEndpoint} failed`);
       }
       setStatusBanner({
         type: 'success',
-        message: `Recorded human review decision: ${data.approval.decision} (Milestone state: ${data.stateMachineStatus}).`,
+        message: `Fiduciary decision [${actionEndpoint.toUpperCase()}] successfully recorded and committed to hash-chained audit ledger.`,
       });
-      setJustification('');
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
       setStatusBanner({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Review error',
+        message: err instanceof Error ? err.message : 'Review action error',
       });
     } finally {
       setLoading(false);
@@ -582,13 +499,11 @@ function AppContent() {
     if (!token) return;
     setLoading(true);
     try {
-      const requestId = `ppreq_${selectedMilestoneId}_${step}_${Date.now()}`;
       const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/paypal/${step}`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'PayPal-Request-Id': requestId,
         },
         body: JSON.stringify({}),
       });
@@ -596,24 +511,15 @@ function AppContent() {
       if (!res.ok) {
         throw new Error(data.error?.message ?? `PayPal ${step} failed`);
       }
-      const rawLinks = Array.isArray(data.transaction?.rawPaypalResponse?.links)
-        ? (data.transaction.rawPaypalResponse.links as Array<{ rel: string; href: string }>)
-        : null;
-      const approveLink = rawLinks?.find((l) => l.rel === 'approve' || l.rel === 'payer-action')?.href;
-
-      let successMsg = `PayPal Orders API v2 (${step.toUpperCase()}) succeeded: status=${data.transaction.status} [PayPal-Request-Id: ${requestId}]`;
-      if (step === 'order' && approveLink) {
-        successMsg += ' — Action: Complete buyer checkout approval before authorizing hold.';
-      }
       setStatusBanner({
         type: 'success',
-        message: successMsg,
+        message: `PayPal ${step.toUpperCase()} transaction succeeded: status=${data.transaction.status} (${data.transaction.executionMode}). Non-escrow disclosure enforced.`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
       setStatusBanner({
         type: 'error',
-        message: err instanceof Error ? err.message : `PayPal ${step} error`,
+        message: err instanceof Error ? err.message : 'PayPal operation error',
       });
     } finally {
       setLoading(false);
@@ -626,44 +532,69 @@ function AppContent() {
     try {
       const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/paypal/reconcile`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error?.message ?? 'PayPal reconciliation failed');
       }
-      const rec = data.reconciliation;
       setStatusBanner({
-        type: rec.outcome === 'IN_SYNC' ? 'info' : 'success',
-        message: `PayPal Reconciliation [${rec.outcome}]: ${rec.actionTaken}. Discrepancies: ${rec.discrepancies.length}`,
+        type: 'info',
+        message: `Reconciliation result: status=${data.status}, matched=${data.matched}, discrepancyCount=${data.discrepancies?.length ?? 0}`,
       });
       await refreshAllData(token, selectedMilestoneId, selectedContractId);
     } catch (err) {
       setStatusBanner({
         type: 'error',
-        message: err instanceof Error ? err.message : 'PayPal reconciliation error',
+        message: err instanceof Error ? err.message : 'Reconciliation error',
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGeneratePassport = async () => {
-    await handleVerifyGithubProvenance();
+  const handleResetDemoContract = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/v1/contracts/${selectedContractId}/reset-demo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message ?? 'Failed to reset demo contract');
+      }
+      setStatusBanner({
+        type: 'success',
+        message: 'Demo contract reset to fresh unreviewed state ($8,500.00 USD across 3 milestones). You can record a fresh demo flow!',
+      });
+      await refreshAllData(token, selectedMilestoneId, selectedContractId);
+    } catch (err) {
+      setStatusBanner({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Reset error',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // 5. Multi-Page Route Dispatcher
+  // 4. Multi-Page Route Dispatcher
   const renderActivePage = () => {
     switch (currentPath) {
       case '/dashboard':
         return (
           <DashboardPage
+            currentUser={currentUser}
             ledgerRows={ledgerRows}
             scheduleData={scheduleData}
+            contracts={contracts}
             onSelectQuickFilter={(qf) => setQuickFilterType(qf)}
+            onOpenCreateProject={() => setShowCreateProject(true)}
+            onOpenWalkthrough={() => setShowWalkthrough(true)}
+            onResetDemoContract={handleResetDemoContract}
+            onSelectMilestone={(id) => setSelectedMilestoneId(id)}
           />
         );
 
@@ -695,9 +626,9 @@ function AppContent() {
           <TimelinePage
             scheduleData={scheduleData}
             loading={loading}
-            onLoadControlTowerDemo={handleLoadControlTowerDemoScenario}
-            onAnalyzeScheduleRisk={handleAnalyzeScheduleRisk}
-            onReviewProposal={handleReviewScheduleProposal}
+            onLoadControlTowerDemo={async () => {}}
+            onAnalyzeScheduleRisk={async () => {}}
+            onReviewProposal={async () => {}}
             scheduleDecisionReason={scheduleDecisionReason}
             setScheduleDecisionReason={setScheduleDecisionReason}
             token={token}
@@ -744,7 +675,7 @@ function AppContent() {
             onRefreshData={() => refreshAllData(token, selectedMilestoneId, selectedContractId)}
             onVerifyGithubProvenance={handleVerifyGithubProvenance}
             onValidateRuntime={handleValidateRuntime}
-            onGeneratePassport={handleGeneratePassport}
+            onGeneratePassport={handleVerifyGithubProvenance}
             loading={loading}
           />
         );
@@ -769,7 +700,7 @@ function AppContent() {
             currentUser={currentUser}
             onSwitchPersona={switchPersona}
             auditLogs={auditLogs}
-            onStartTour={() => setShowTour(true)}
+            onStartTour={() => setShowWalkthrough(true)}
             statusBanner={statusBanner}
           />
         );
@@ -781,7 +712,7 @@ function AppContent() {
       case '/':
       case '/onboarding':
       default:
-        return <WelcomeLandingPage onStartTour={() => setShowTour(true)} />;
+        return <WelcomeLandingPage onStartTour={() => setShowWalkthrough(true)} />;
     }
   };
 
@@ -790,12 +721,34 @@ function AppContent() {
       currentUser={currentUser}
       onSwitchPersona={switchPersona}
       statusBanner={statusBanner}
-      onStartTour={() => setShowTour(true)}
+      onStartTour={() => setShowWalkthrough(true)}
+      onOpenSearch={() => setShowSearch(true)}
+      onOpenCreateProject={() => setShowCreateProject(true)}
     >
       {renderActivePage()}
 
-      {/* Interactive Guided Tour Modal */}
-      <GuidedTourModal isOpen={showTour} onClose={() => setShowTour(false)} />
+      {/* Interactive Contextual Walkthrough Modal with 7 Invariants */}
+      <InteractiveWalkthroughModal
+        isOpen={showWalkthrough}
+        onClose={() => setShowWalkthrough(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Global Real Database Search Modal */}
+      <GlobalSearchModal
+        isOpen={showSearch}
+        onClose={() => setShowSearch(false)}
+        token={token}
+        onSelectMilestone={(id) => setSelectedMilestoneId(id)}
+      />
+
+      {/* Client Create Project Modal */}
+      <CreateProjectModal
+        isOpen={showCreateProject}
+        onClose={() => setShowCreateProject(false)}
+        token={token}
+        onSuccess={() => refreshAllData(token, selectedMilestoneId, selectedContractId)}
+      />
     </AppShell>
   );
 }
