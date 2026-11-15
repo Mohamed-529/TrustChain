@@ -443,4 +443,62 @@ export class ContractService {
       return this.getContractById(contractId);
     });
   }
+
+  /**
+   * Resets demo contract state (specifically contract_seed_01) back to fresh clean state.
+   * Safe for demo reproducibility; only allowed for demo seed contracts in non-production environments.
+   */
+  public resetDemoContract(actor: User, contractId: string): Contract {
+    if (contractId !== 'contract_seed_01') {
+      throw new AppError(400, 'CANNOT_RESET_NON_DEMO_CONTRACT', 'Only the demo seed contract (contract_seed_01) can be reset.');
+    }
+
+    const now = new Date().toISOString();
+    return this.db.withTransaction(() => {
+      // 1. Delete transactions, approvals, evaluations, and evidence submissions for ms_seed_01, ms_seed_02, ms_seed_03
+      const milestoneIds = ['ms_seed_01', 'ms_seed_02', 'ms_seed_03'];
+      for (const msId of milestoneIds) {
+        this.db.raw.prepare('DELETE FROM payment_transactions WHERE milestone_id = ?').run(msId);
+        this.db.raw.prepare('DELETE FROM human_approvals WHERE milestone_id = ?').run(msId);
+        this.db.raw.prepare('DELETE FROM ai_evaluations WHERE milestone_id = ?').run(msId);
+        this.db.raw.prepare('DELETE FROM evidence_provenance_verifications WHERE milestone_id = ?').run(msId);
+        this.db.raw.prepare('DELETE FROM evidence_submissions WHERE milestone_id = ?').run(msId);
+        this.db.raw.prepare('DELETE FROM evidence_passports WHERE milestone_id = ?').run(msId);
+        this.db.raw.prepare('DELETE FROM dispute_evidence_packs WHERE milestone_id = ?').run(msId);
+      }
+
+      // 2. Reset milestones back to ACTIVE / NOT_READY
+      this.db.raw.prepare(`
+        UPDATE milestones
+        SET status = 'ACTIVE', payment_status = 'NOT_READY', updated_at = ?
+        WHERE contract_id = ?
+      `).run(now, contractId);
+
+      // 3. Reset contract status
+      this.db.raw.prepare(`
+        UPDATE contracts
+        SET status = 'ACTIVE', updated_at = ?
+        WHERE id = ?
+      `).run(now, contractId);
+
+      this.auditSvc.appendWithinTx({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'DEMO_CONTRACT_RESET',
+        entityType: 'CONTRACT',
+        entityId: contractId,
+        contractId,
+        previousState: 'VARIOUS',
+        newState: 'ACTIVE',
+        payload: {
+          resetBy: actor.id,
+          resetAt: now,
+          contractId,
+        },
+        timestamp: now,
+      });
+
+      return this.getContractById(contractId);
+    });
+  }
 }

@@ -202,6 +202,11 @@ export function createApiRouter(params: {
     requireRole(['CLIENT']),
     contractController.activateContract
   );
+  router.post(
+    '/contracts/:id/reset-demo',
+    authenticate,
+    contractController.resetDemoContract
+  );
   router.get(
     '/contracts/:id/audit/replay',
     authenticate,
@@ -256,6 +261,11 @@ export function createApiRouter(params: {
   router.get('/milestones/:id/evidence', authenticate, evidenceController.listEvidence);
   router.post(
     '/milestones/:id/evidence/verify',
+    authenticate,
+    evidenceController.verifyProvenance
+  );
+  router.post(
+    '/milestones/:id/evidence/verify-provenance',
     authenticate,
     evidenceController.verifyProvenance
   );
@@ -316,10 +326,97 @@ export function createApiRouter(params: {
     authenticate,
     disputeController.exportDisputePack
   );
+  router.get(
+    '/contracts/:contractId/milestones/:milestoneId/dispute-pack/verify',
+    authenticate,
+    (req, res, next) => {
+      // Alias that looks up the latest pack for the milestone and verifies it
+      try {
+        const { contractId, milestoneId } = req.params;
+        const pack = db?.raw.prepare('SELECT id FROM dispute_evidence_packs WHERE contract_id = ? AND milestone_id = ? ORDER BY created_at DESC LIMIT 1').get(contractId, milestoneId) as { id?: string } | undefined;
+        if (!pack || !pack.id) {
+          res.status(404).json({ error: { code: 'DISPUTE_PACK_NOT_FOUND', message: 'No dispute pack found for this milestone. Please generate one first.' } });
+          return;
+        }
+        req.params.packId = pack.id;
+        disputeController.verifyDisputePack(req, res, next);
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+  router.get(
+    '/contracts/:contractId/milestones/:milestoneId/dispute-pack/export',
+    authenticate,
+    (req, res, next) => {
+      try {
+        const { contractId, milestoneId } = req.params;
+        const pack = db?.raw.prepare('SELECT id FROM dispute_evidence_packs WHERE contract_id = ? AND milestone_id = ? ORDER BY created_at DESC LIMIT 1').get(contractId, milestoneId) as { id?: string } | undefined;
+        if (!pack || !pack.id) {
+          res.status(404).json({ error: { code: 'DISPUTE_PACK_NOT_FOUND', message: 'No dispute pack found for this milestone. Please generate one first.' } });
+          return;
+        }
+        req.params.packId = pack.id;
+        disputeController.exportDisputePack(req, res, next);
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
 
   // Protected Phase 4 Human Review Workflow & Financial Decision Ledger endpoints
   router.get('/milestones/:id/review', authenticate, reviewController.getReviewDetails);
   router.post('/milestones/:id/review', authenticate, reviewController.submitReview);
+
+  // Global search endpoint for projects, milestones, evidence, and audit logs
+  router.get('/search', authenticate, (req, res) => {
+    try {
+      const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+      if (!q || !db) {
+        res.status(200).json({ results: { contracts: [], milestones: [], evidence: [], auditLogs: [] } });
+        return;
+      }
+
+      // Contracts matching query
+      const contracts = db.raw.prepare(`
+        SELECT id, title, description, total_budget_cents as totalBudgetCents, status
+        FROM contracts
+        WHERE LOWER(title) LIKE ? OR LOWER(description) LIKE ? OR LOWER(id) LIKE ?
+        LIMIT 10
+      `).all(`%${q}%`, `%${q}%`, `%${q}%`);
+
+      // Milestones matching query
+      const milestones = db.raw.prepare(`
+        SELECT id, contract_id as contractId, title, description, agreed_amount_cents as agreedAmountCents, status, payment_status as paymentStatus
+        FROM milestones
+        WHERE LOWER(title) LIKE ? OR LOWER(description) LIKE ? OR LOWER(id) LIKE ?
+        LIMIT 10
+      `).all(`%${q}%`, `%${q}%`, `%${q}%`);
+
+      // Evidence submissions matching query
+      const evidence = db.raw.prepare(`
+        SELECT id, milestone_id as milestoneId, attempt_number as attemptNumber, commit_sha as commitSha, pr_url as prUrl, submitted_at as submittedAt
+        FROM evidence_submissions
+        WHERE LOWER(commit_sha) LIKE ? OR LOWER(pr_url) LIKE ? OR LOWER(developer_notes) LIKE ?
+        LIMIT 10
+      `).all(`%${q}%`, `%${q}%`, `%${q}%`);
+
+      // Audit logs matching query
+      const auditLogs = db.raw.prepare(`
+        SELECT id, timestamp, actor_id as actorId, actor_role as actorRole, action, entity_type as entityType, entity_id as entityId, entry_hash as entryHash
+        FROM audit_logs
+        WHERE LOWER(action) LIKE ? OR LOWER(actor_id) LIKE ? OR LOWER(entry_hash) LIKE ?
+        LIMIT 10
+      `).all(`%${q}%`, `%${q}%`, `%${q}%`);
+
+      res.status(200).json({
+        query: q,
+        results: { contracts, milestones, evidence, auditLogs }
+      });
+    } catch (err) {
+      res.status(500).json({ error: { code: 'SEARCH_FAILED', message: err instanceof Error ? err.message : 'Search error' } });
+    }
+  });
   router.post(
     '/milestones/:id/review/approve',
     authenticate,

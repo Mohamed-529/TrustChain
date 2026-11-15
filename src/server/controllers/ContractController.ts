@@ -77,6 +77,18 @@ export class ContractController {
     }
   };
 
+  public resetDemoContract = (req: ApiRequest, res: ApiResponse, next: NextFunction): void => {
+    try {
+      if (!req.actor) {
+        throw new AppError(401, 'AUTH_TOKEN_REQUIRED', 'Authentication required.');
+      }
+      const contract = this.contractService.resetDemoContract(req.actor, req.params.id);
+      res.status(200).json({ contract, message: 'Demo contract reset to fresh unreviewed state.' });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   public listAuditLogs = (req: ApiRequest, res: ApiResponse, next: NextFunction): void => {
     try {
       const contractId =
