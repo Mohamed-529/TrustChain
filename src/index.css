@@ -22,13 +22,37 @@
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
     overflow-x: hidden;
+    /* Safe-area insets for notched iPhones and gesture home indicators */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Touch optimization: remove 300ms tap delay & gray tap highlight */
+  button, a, input, select, textarea {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Headings: Cascrow style - regular weight 400 with tight tracking */
   h1, h2, h3, h4 {
     letter-spacing: -0.035em;
     font-weight: 400;
+  }
+
+  /* Smooth momentum scrolling for mobile viewports */
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Hide scrollbar utility for clean mobile swipeable bars */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   /* Minimal custom scrollbar in Cascrow sage palette */

@@ -122,9 +122,9 @@ export function CreateProjectModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1f17]/40 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col font-sans text-[#0b1f17]">
-        <div className="px-6 py-5 border-b border-[rgba(11,31,23,0.08)] bg-white flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#0b1f17]/40 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col font-sans text-[#0b1f17]">
+        <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-[rgba(11,31,23,0.08)] bg-white flex items-center justify-between sticky top-0 z-10">
           <div>
             <span className="text-[10px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.15)] uppercase">
               CLIENT ACTION

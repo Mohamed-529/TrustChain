@@ -170,7 +170,7 @@ export function EvidencePassportViewer({
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap border-b border-[rgba(11,31,23,0.08)] gap-2 text-xs font-medium">
+      <div className="flex overflow-x-auto no-scrollbar touch-pan-x touch-scroll border-b border-[rgba(11,31,23,0.08)] gap-2 text-xs font-medium pb-0.5">
         <button
           onClick={() => setActiveTab('matrix')}
           className={`pb-2.5 px-3 border-b-2 transition ${

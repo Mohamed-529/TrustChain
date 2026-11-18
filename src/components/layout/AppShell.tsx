@@ -172,7 +172,7 @@ export function AppShell({
             {/* ZONE 3: SEARCH, TOUR, PERSONA SWITCHER & PRIMARY ACTION */}
             <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
               
-              {/* Universal Spotlight Search Pill */}
+              {/* Universal Spotlight Search Pill (Desktop) */}
               <button
                 onClick={onOpenSearch}
                 className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-full bg-white hover:bg-[#e9efe6] border border-[rgba(11,31,23,0.1)] text-xs text-[#3d5248] hover:text-[#0b1f17] transition shadow-sm"
@@ -185,10 +185,20 @@ export function AppShell({
                 </kbd>
               </button>
 
+              {/* Mobile Search Button (Phones) */}
+              <button
+                onClick={onOpenSearch}
+                className="sm:hidden flex items-center justify-center w-8 h-8 rounded-full bg-white hover:bg-[#e9efe6] border border-[rgba(11,31,23,0.1)] text-xs text-[#3d5248] transition shadow-sm"
+                title="Search"
+                aria-label="Universal Search"
+              >
+                <span>🔍</span>
+              </button>
+
               {/* Guided Tour Launcher */}
               <button
                 onClick={onStartTour}
-                className="px-3.5 py-2 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] border border-[rgba(11,31,23,0.1)] text-xs font-medium text-[#2f7a50] flex items-center gap-1.5 transition shadow-sm"
+                className="px-2.5 sm:px-3.5 py-2 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] border border-[rgba(11,31,23,0.1)] text-xs font-medium text-[#2f7a50] flex items-center gap-1.5 transition shadow-sm"
                 title="Interactive 7-Step Fiduciary Product Walkthrough"
               >
                 <span>✨</span>
@@ -199,7 +209,7 @@ export function AppShell({
               <div className="relative" ref={personaRef}>
                 <button
                   onClick={() => setPersonaMenuOpen((prev) => !prev)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white hover:bg-[#e9efe6] border border-[rgba(11,31,23,0.1)] transition shadow-sm text-left"
+                  className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-white hover:bg-[#e9efe6] border border-[rgba(11,31,23,0.1)] transition shadow-sm text-left"
                 >
                   <div
                     className={`w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${currentPersonaData.color}`}
@@ -219,7 +229,7 @@ export function AppShell({
 
                 {/* Persona Switcher Popup Menu */}
                 {personaMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-3xl shadow-xl border border-[rgba(11,31,23,0.1)] p-2 z-50 animate-fadeIn">
+                  <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-24px)] bg-white rounded-3xl shadow-xl border border-[rgba(11,31,23,0.1)] p-2 z-50 animate-fadeIn">
                     <div className="px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-[#6b7f75] border-b border-[rgba(11,31,23,0.06)] mb-1">
                       Switch Role Persona
                     </div>
@@ -260,7 +270,7 @@ export function AppShell({
               {/* Primary Action Button (Tailored to Role) */}
               <button
                 onClick={handleActionClick}
-                className="px-4 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-medium transition shadow-sm flex items-center gap-1.5"
+                className="px-3 sm:px-4 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-medium transition shadow-sm flex items-center gap-1.5"
               >
                 {role === 'CLIENT' && (
                   <>
@@ -288,7 +298,7 @@ export function AppShell({
         </div>
 
         {/* Compact Responsive Segmented Navigation Bar (Only for Mobile & Tablets < 1024px) */}
-        <div className="lg:hidden border-t border-[rgba(11,31,23,0.08)] bg-[#f6f5f0] px-4 py-2 flex items-center gap-2 overflow-x-auto text-xs no-scrollbar">
+        <div className="lg:hidden border-t border-[rgba(11,31,23,0.08)] bg-[#f6f5f0] px-3 sm:px-4 py-2 flex items-center gap-2 overflow-x-auto text-xs no-scrollbar touch-pan-x touch-scroll">
           {navDestinations.map((dest) => {
             const isActive =
               currentPath === dest.path ||
@@ -298,7 +308,7 @@ export function AppShell({
               <Link
                 key={dest.path}
                 to={dest.path}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition flex items-center gap-1.5 shrink-0 ${
                   isActive
                     ? 'bg-[#0b1f17] text-white shadow-sm'
                     : 'bg-[#e9efe6] text-[#3d5248] hover:text-[#0b1f17]'
@@ -347,8 +357,8 @@ export function AppShell({
         className={`flex-1 w-full mx-auto ${
           currentPath === '/'
             ? 'px-0 py-0 max-w-full'
-            : 'max-w-7xl px-4 sm:px-6 lg:px-8 py-8'
-        }`}
+            : 'max-w-7xl px-3 sm:px-6 lg:px-8 py-6 sm:py-8'
+        } pb-[calc(1.5rem+env(safe-area-inset-bottom))]`}
       >
         {children}
       </main>

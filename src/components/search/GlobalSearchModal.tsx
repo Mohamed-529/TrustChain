@@ -107,10 +107,10 @@ export function GlobalSearchModal({
       results.auditLogs.length > 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-[#0b1f17]/40 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-20 p-3 sm:p-4 bg-[#0b1f17]/40 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[88vh] sm:max-h-[80vh]">
         {/* Search Input Bar */}
-        <div className="px-6 py-4 border-b border-[rgba(11,31,23,0.08)] bg-white flex items-center gap-3">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[rgba(11,31,23,0.08)] bg-white flex items-center gap-3">
           <span className="text-[#2f7a50] text-base">🔍</span>
           <input
             ref={inputRef}

@@ -99,16 +99,16 @@ export function ReviewsPage({
             Four-stage fiduciary workflow: Evidence Ingestion → AI Advisory Synthesis → Deterministic Settlement Cap → Human Review & PayPal Settlement.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
             onClick={onOpenPassport}
-            className="px-4 py-2 rounded-full bg-white hover:bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-xs font-medium text-[#0b1f17] transition shadow-sm flex items-center gap-1.5"
+            className="flex-1 sm:flex-initial px-4 py-2 rounded-full bg-white hover:bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-xs font-medium text-[#0b1f17] transition shadow-sm flex items-center justify-center gap-1.5 active:scale-[0.98]"
           >
             <span>🛡️</span> <span>View Passport</span>
           </button>
           <button
             onClick={onOpenDisputePack}
-            className="px-4 py-2 rounded-full bg-white hover:bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-xs font-medium text-[#0b1f17] transition shadow-sm flex items-center gap-1.5"
+            className="flex-1 sm:flex-initial px-4 py-2 rounded-full bg-white hover:bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-xs font-medium text-[#0b1f17] transition shadow-sm flex items-center justify-center gap-1.5 active:scale-[0.98]"
           >
             <span>📂</span> <span>Dispute Pack</span>
           </button>
@@ -116,7 +116,7 @@ export function ReviewsPage({
       </div>
 
       {/* Cascrow Milestone Selector Pill Tabs */}
-      <div className="flex items-center gap-2 border-b border-[rgba(11,31,23,0.08)] pb-3.5 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-[rgba(11,31,23,0.08)] pb-3.5 overflow-x-auto no-scrollbar touch-pan-x touch-scroll py-1">
         <span className="text-[11px] text-[#6b7f75] font-mono mr-2 tracking-wide uppercase">
           Milestone:
         </span>

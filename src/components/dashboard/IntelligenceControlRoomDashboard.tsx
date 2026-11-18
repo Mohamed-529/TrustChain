@@ -46,7 +46,7 @@ export function IntelligenceControlRoomDashboard({
   ).length;
 
   return (
-    <div className="bg-[#e9efe6] border border-[#0b1f17]/10 rounded-[28px] p-6 space-y-5 font-sans shadow-[0_1px_rgba(11,31,23,0.05),0_18px_36px_-24px_rgba(11,31,23,0.12)]">
+    <div className="bg-[#e9efe6] border border-[#0b1f17]/10 rounded-[28px] p-4 sm:p-6 space-y-5 font-sans shadow-[0_1px_rgba(11,31,23,0.05),0_18px_36px_-24px_rgba(11,31,23,0.12)]">
       {/* Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#0b1f17]/10 pb-4">
         <div>
@@ -63,7 +63,7 @@ export function IntelligenceControlRoomDashboard({
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <span className="text-[#3d5248] font-mono text-[11px]">Filter:</span>
           <button
             onClick={() => onSelectQuickFilter?.('ALL')}
@@ -93,7 +93,7 @@ export function IntelligenceControlRoomDashboard({
       </div>
 
       {/* 4 Clean Pure White Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 font-mono">
         {/* Card 1: Agreed Budget vs Settled */}
         <div className="p-5 rounded-[22px] bg-white border border-[#0b1f17]/10 space-y-1.5 shadow-[0_1px_rgba(11,31,23,0.04),0_10px_20px_-14px_rgba(11,31,23,0.08)]">
           <div className="text-[#3d5248] text-[11px] uppercase tracking-wide">Total Contract Budget</div>

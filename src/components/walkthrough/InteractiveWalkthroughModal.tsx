@@ -279,10 +279,10 @@ export function InteractiveWalkthroughModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b1f17]/40 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] rounded-3xl w-full max-w-2xl overflow-hidden shadow-[0_20px_60px_-15px_rgba(11,31,23,0.25)] flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#0b1f17]/40 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] rounded-3xl w-full max-w-2xl overflow-hidden shadow-[0_20px_60px_-15px_rgba(11,31,23,0.25)] flex flex-col max-h-[92vh] sm:max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-[rgba(11,31,23,0.08)] bg-white flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[rgba(11,31,23,0.08)] bg-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="w-8 h-8 rounded-full bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] flex items-center justify-center text-sm font-semibold font-mono">
               {currentStep.stepNumber}

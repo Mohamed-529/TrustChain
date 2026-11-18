@@ -39,27 +39,27 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
           </div>
 
           {/* Main Headline */}
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-normal text-[#0b1f17] tracking-[-0.035em] max-w-4xl mx-auto leading-[1.08]">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-normal text-[#0b1f17] tracking-[-0.035em] max-w-4xl mx-auto leading-[1.08] break-words">
             Cryptographic Proof for Milestone Disbursements
           </h1>
 
           {/* Subheading */}
-          <p className="text-base sm:text-lg text-[#3d5248] max-w-2xl mx-auto leading-relaxed font-normal">
+          <p className="text-sm sm:text-base md:text-lg text-[#3d5248] max-w-2xl mx-auto leading-relaxed font-normal px-2">
             TrustChain bridges git repositories, automated test telemetry, and PayPal Orders v2 holds.
             Tri-agent AI verifies milestone criteria before human reviewers approve programmatic settlement.
           </p>
 
           {/* Twin Pill Action Buttons */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 w-full max-w-md mx-auto sm:max-w-none">
             <button
               onClick={() => navigate('/reviews')}
-              className="px-8 py-3.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-sm font-medium transition shadow-sm"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-sm font-medium transition shadow-sm active:scale-[0.98]"
             >
               Inspect Live Evaluation
             </button>
             <button
               onClick={onStartTour}
-              className="px-8 py-3.5 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] text-[#0b1f17] text-sm font-medium border border-[rgba(11,31,23,0.08)] transition"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] text-[#0b1f17] text-sm font-medium border border-[rgba(11,31,23,0.08)] transition active:scale-[0.98]"
             >
               Explore Interactive Walkthrough
             </button>
@@ -613,27 +613,27 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
           {/* Right Visual Stack */}
           <div className="space-y-4">
             {/* Terminal Card 1 */}
-            <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-sm space-y-3">
+            <div className="p-4 sm:p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-sm space-y-3 overflow-hidden">
               <div className="flex items-center justify-between text-[11px] font-mono text-[#6b7f75]">
-                <span>CLI &amp; Webhook Verification Pipeline</span>
+                <span>CLI &amp; Webhook Pipeline</span>
                 <span className="px-2 py-0.5 rounded-full bg-[#f6f5f0] text-[#0b1f17]">v1.0.0</span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-[#f6f5f0] text-xs font-mono text-[#3d5248] flex items-center justify-between">
-                <span>Check PR #42 against AC-1 &amp; AC-2</span>
-                <span className="w-6 h-6 rounded-full bg-[#0b1f17] text-white flex items-center justify-center text-[10px]">
+              <div className="p-3.5 rounded-2xl bg-[#f6f5f0] text-xs font-mono text-[#3d5248] flex items-center justify-between overflow-x-auto">
+                <span className="truncate mr-2">Check PR #42 against AC-1 &amp; AC-2</span>
+                <span className="w-6 h-6 rounded-full bg-[#0b1f17] text-white flex items-center justify-center text-[10px] shrink-0">
                   ↑
                 </span>
               </div>
-              <div className="p-3 rounded-xl bg-[#e9efe6] text-[11px] font-mono text-[#2f7a50] flex items-center justify-between">
-                <span>trustchain_verification: 3 of 3 criteria met • Arbitrator PASS</span>
-                <span className="text-[10px] text-[#6b7f75]">Verified</span>
+              <div className="p-3 rounded-xl bg-[#e9efe6] text-[11px] font-mono text-[#2f7a50] flex items-center justify-between overflow-x-auto">
+                <span className="truncate mr-2">trustchain_verification: 3 criteria met • Arbitrator PASS</span>
+                <span className="text-[10px] text-[#6b7f75] shrink-0">Verified</span>
               </div>
             </div>
 
             {/* Code Block Card 2 */}
-            <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-sm space-y-2 font-mono text-xs text-[#3d5248]">
+            <div className="p-4 sm:p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-sm space-y-2 font-mono text-xs text-[#3d5248] overflow-x-auto">
               <div className="text-[#6b7f75]"># ingest delivery telemetry via TrustChain CLI</div>
-              <div className="text-[#0b1f17]">
+              <div className="text-[#0b1f17] whitespace-pre sm:whitespace-normal">
                 $ npx @trustchain/cli verify-milestone \<br />
                 &nbsp;&nbsp;--contract &quot;contract_seed_01&quot; \<br />
                 &nbsp;&nbsp;--milestone &quot;ms_seed_01&quot; \<br />
@@ -652,23 +652,23 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
           SECTION 6: CALL TO ACTION
       ───────────────────────────────────────────────────────────── */}
       <section className="px-4 sm:px-6 max-w-6xl mx-auto pb-20">
-        <div className="bg-gradient-to-br from-[#e9efe6] via-[#f0f4ee] to-[#edf6ea] rounded-[36px] p-10 sm:p-20 text-center border border-[rgba(11,31,23,0.08)] space-y-6 shadow-sm">
-          <h2 className="text-3xl sm:text-5xl font-normal text-[#0b1f17] tracking-tight max-w-2xl mx-auto leading-tight">
+        <div className="bg-gradient-to-br from-[#e9efe6] via-[#f0f4ee] to-[#edf6ea] rounded-[36px] p-6 sm:p-12 md:p-20 text-center border border-[rgba(11,31,23,0.08)] space-y-6 shadow-sm">
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-normal text-[#0b1f17] tracking-tight max-w-2xl mx-auto leading-tight">
             Ready to Eliminate Software Payment Disputes?
           </h2>
           <p className="text-xs sm:text-sm text-[#3d5248] max-w-lg mx-auto leading-relaxed">
             Explore our live $8,500.00 reference contract, trigger multi-agent AI telemetry verification, examine the cryptographic Evidence Passport, and test PayPal sandbox capture.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 w-full max-w-md mx-auto sm:max-w-none">
             <button
               onClick={() => navigate('/reviews')}
-              className="px-8 py-3.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-sm font-medium transition shadow-sm"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-sm font-medium transition shadow-sm active:scale-[0.98]"
             >
               Inspect Live Evaluation
             </button>
             <button
               onClick={onStartTour}
-              className="px-8 py-3.5 rounded-full bg-white hover:bg-[#f6f5f0] text-[#0b1f17] text-sm font-medium border border-[rgba(11,31,23,0.1)] transition shadow-sm"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-white hover:bg-[#f6f5f0] text-[#0b1f17] text-sm font-medium border border-[rgba(11,31,23,0.1)] transition shadow-sm active:scale-[0.98]"
             >
               Start Guided Walkthrough
             </button>
@@ -681,7 +681,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
           SECTION 7: EDITORIAL FOOTER
       ───────────────────────────────────────────────────────────── */}
       <footer className="border-t border-[rgba(11,31,23,0.08)] py-14 px-4 sm:px-6 max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 text-xs text-[#6b7f75]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 text-xs text-[#6b7f75]">
           
           {/* Col 1: Brand */}
           <div className="md:col-span-2 space-y-3">
