@@ -1,8 +1,35 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { AuditService } from '../services/AuditService.ts';
+
+function getDefaultDbPath(): string {
+  if (process.env.DATA_DIR) {
+    try {
+      if (!fs.existsSync(process.env.DATA_DIR)) {
+        fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
+      }
+      return path.resolve(process.env.DATA_DIR, 'milestoneproof.sqlite');
+    } catch {
+      // Fallback
+    }
+  }
+  const defaultDir = path.resolve(process.cwd(), 'data');
+  try {
+    if (!fs.existsSync(defaultDir)) {
+      fs.mkdirSync(defaultDir, { recursive: true });
+    }
+    const testFile = path.resolve(defaultDir, '.write_test');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    return path.resolve(defaultDir, 'milestoneproof.sqlite');
+  } catch {
+    // If current directory /app/data is read-only in cloud containers (e.g. Embarko), use os.tmpdir()
+    return path.resolve(os.tmpdir(), 'milestoneproof.sqlite');
+  }
+}
 
 /**
  * Generates a deterministic scrypt password hash string (`salt_hex:derived_hex`)
@@ -17,19 +44,37 @@ function createSeedPasswordHash(password: string, saltHex: string): string {
 
 export class AppDatabase {
   public readonly raw: DatabaseSync;
-  public readonly filePath: string;
+  public filePath: string;
   private inTransaction = false;
 
-  constructor(filePath = path.resolve(process.cwd(), 'data', 'milestoneproof.sqlite')) {
+  constructor(filePath = getDefaultDbPath()) {
     this.filePath = filePath;
     if (filePath !== ':memory:') {
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        try {
+          fs.mkdirSync(dir, { recursive: true });
+        } catch {
+          this.filePath = path.resolve(os.tmpdir(), 'milestoneproof.sqlite');
+        }
       }
     }
 
-    this.raw = new DatabaseSync(filePath);
+    try {
+      this.raw = new DatabaseSync(this.filePath);
+    } catch (err) {
+      if (this.filePath !== ':memory:') {
+        try {
+          this.filePath = path.resolve(os.tmpdir(), 'milestoneproof.sqlite');
+          this.raw = new DatabaseSync(this.filePath);
+        } catch {
+          this.filePath = ':memory:';
+          this.raw = new DatabaseSync(':memory:');
+        }
+      } else {
+        throw err;
+      }
+    }
     this.configurePragmas();
     this.runMigrations();
     this.seedIfEmpty();
