@@ -28,7 +28,6 @@ interface NavDestination {
   path: string;
   label: string;
   tag?: string;
-  sponsor?: string;
 }
 
 export function AppShell({
@@ -61,11 +60,11 @@ export function AppShell({
   const navDestinations: NavDestination[] = [
     { path: '/', label: 'Overview' },
     { path: '/dashboard', label: 'Projects' },
-    { path: '/reviews', label: 'Review & Pay', sponsor: 'PayPal' },
-    { path: '/timeline', label: 'Timeline', sponsor: 'Bryntum' },
-    { path: '/intelligence', label: 'Ledger', sponsor: 'AG Grid' },
+    { path: '/reviews', label: 'Review & Settle', tag: 'Escrow' },
+    { path: '/timeline', label: 'Timeline', tag: 'Gantt' },
+    { path: '/intelligence', label: 'Decision Ledger', tag: 'Live' },
     { path: '/trust', label: 'Evidence Passport' },
-    { path: '/developers', label: 'API Studio', sponsor: 'APIMatic' },
+    { path: '/developers', label: 'API Engine', tag: 'v1.0' },
   ];
 
   const personas = [
@@ -153,7 +152,7 @@ export function AppShell({
                     }`}
                   >
                     <span>{dest.label}</span>
-                    {dest.sponsor && (
+                    {dest.tag && (
                       <span
                         className={`text-[8px] px-1.5 py-0.2 rounded-full font-mono font-semibold tracking-tight transition ${
                           isActive
@@ -161,7 +160,7 @@ export function AppShell({
                             : 'bg-white/80 text-[#3d5248] border border-[rgba(11,31,23,0.08)]'
                         }`}
                       >
-                        {dest.sponsor}
+                        {dest.tag}
                       </span>
                     )}
                   </Link>
@@ -315,13 +314,13 @@ export function AppShell({
                 }`}
               >
                 <span>{dest.label}</span>
-                {dest.sponsor && (
+                {dest.tag && (
                   <span
                     className={`text-[8px] px-1.5 py-0.2 rounded-full font-mono ${
                       isActive ? 'bg-[#c8f542] text-[#0b1f17]' : 'bg-white text-[#3d5248]'
                     }`}
                   >
-                    {dest.sponsor}
+                    {dest.tag}
                   </span>
                 )}
               </Link>

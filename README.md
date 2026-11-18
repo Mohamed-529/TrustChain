@@ -1,23 +1,26 @@
-# ◈ TrustChain — Autonomous Evidence-to-Settlement Orchestrator
+# ◈ TrustChain — Autonomous AI-Fiduciary Software Escrow & Verification Engine
 
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B%20(Native%20SQLite)-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React 19](https://img.shields.io/badge/React-19.0.1%20%2B%20TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![PayPal Orders v2](https://img.shields.io/badge/PayPal-Orders%20API%20v2%20(Hold%20%26%20Capture)-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com/)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.5%20Flash%20(Tri--Agent)-8E75C2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
-[![AG Grid v36](https://img.shields.io/badge/AG%20Grid-v36.3.0%20(Financial%20Ledger)-009688?style=for-the-badge)](https://www.ag-grid.com/)
-[![Bryntum Gantt](https://img.shields.io/badge/Bryntum-Gantt%20v7.3%20(Control%20Tower)-F36E21?style=for-the-badge)](https://www.bryntum.com/)
-[![APIMatic](https://img.shields.io/badge/APIMatic-OpenAPI%203.0.3%20Governance-007ACC?style=for-the-badge)](https://www.apimatic.io/)
+[![Pre-Auth Escrow](https://img.shields.io/badge/Smart%20Escrow-Non--Custodial%20Pre--Auth-00457C?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
+[![OpenAPI 3.0.3](https://img.shields.io/badge/OpenAPI-3.0.3%20Governed%20Contract-007ACC?style=for-the-badge&logo=openapiinitiative&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
+[![Decision Ledger](https://img.shields.io/badge/Decision%20Ledger-v36%20Grid%20Cockpit-009688?style=for-the-badge)](https://github.com/Mohamed-529/TrustChain)
+[![Timeline Gantt](https://img.shields.io/badge/Critical%20Path-Gantt%20v7.3-F36E21?style=for-the-badge)](https://github.com/Mohamed-529/TrustChain)
 [![Tests](https://img.shields.io/badge/Tests-293%20Passing%20(100%25)-success?style=for-the-badge&logo=checkmarx&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-> **TrustChain** bridges software development repositories, multi-agent AI verification, and fiduciary PayPal disbursements. It eliminates software contract payment disputes by cryptographically verifying git commit SHAs, test telemetry, and dependency security scans against contractual criteria before authorizing programmatic milestone disbursements.
+> **TrustChain** solves the **$100B+ freelance, agency, and software delivery milestone dispute crisis**. Clients fear paying upfront for broken deliverables or AI-hallucinated code; developers fear spending weeks implementing features only to be ghosted or denied payment. 
+> 
+> TrustChain creates the world's first **autonomous, non-custodial software escrow and verification engine**. It bridges git repositories, automated test telemetry, and payment pre-authorization holds. A tri-agent AI verification mesh evaluates deliverables against agreed acceptance criteria before an authenticated human fiduciary approves programmatic settlement.
 
 ---
 
 ## 🌐 Live Deployment & Demo
 
 - **GitHub Repository:** [https://github.com/Mohamed-529/TrustChain](https://github.com/Mohamed-529/TrustChain)
-- **Live Deployment Guide:** See [Cloud Deployment](#-cloud-deployment) below to launch your own 1-click instance on Render or Vercel.
+- **Live Vercel Frontend:** [https://trust-chain-3h8nywf6w-yusuffa968-9131s-projects.vercel.app/](https://trust-chain-3h8nywf6w-yusuffa968-9131s-projects.vercel.app/)
+- **Live Deployment Guide:** See [Cloud Deployment](#-cloud-deployment) below to launch your own 1-click instance on Embarko, Render, or Vercel.
 - **Local Interactive Demo:** `http://localhost:3000` (Clone & run `npm start`)
 
 ### 👥 Pre-Configured Demo Personas
@@ -119,10 +122,11 @@ TrustChain Deterministic Fiduciary Flow:
 - Any modification to past records causes instant cryptographic tamper detection during audit replay.
 - **Why SQLite over generic MongoDB?** Financial transaction logs require ACID durability, zero-latency local write consistency, and tamper-evident chaining without network transport overhead or external database credential exposure.
 
-### 5. Primary Sponsor Integrations
-- **Bryntum Gantt v7.3:** Schedule Control Tower with Finish-to-Start dependency cascading, critical path computation, and baseline vs. actual variance tracking.
-- **AG Grid v36:** Enterprise Financial Decision Ledger with column filtering, multi-sort, and CSV audit exports.
-- **APIMatic OpenAPI 3.0.3:** Validated REST API contract with 28 operations, typed TypeScript Client SDK, and interactive developer portal.
+### 5. Core Architectural Pillars
+- **Critical-Path Milestone Timeline:** Schedule Control Tower with Finish-to-Start dependency cascading, critical path computation, and baseline vs. actual variance tracking.
+- **Institutional Decision Ledger:** Enterprise Financial Decision Ledger with column filtering, multi-sort, natural language query filters, and CSV audit exports.
+- **OpenAPI 3.0.3 Contract Studio:** Validated REST API contract with 54 operations, typed TypeScript Client SDK, and interactive developer portal.
+- **Non-Custodial Escrow Lifecycle:** Pre-authorization holds ensuring capital protection with mandatory server-side human fiduciary approval gates.
 
 ---
 
@@ -130,11 +134,11 @@ TrustChain Deterministic Fiduciary Flow:
 
 If you are evaluating this project for software engineering, full-stack, or backend roles, here are key achievements demonstrated in this codebase:
 
-- **Architected Autonomous Fiduciary Settlement Platform:** Engineered a full-stack multi-agent system coordinating software contract lifecycle, git telemetry ingestion, and PayPal Orders v2 disbursements.
+- **Architected Autonomous Fiduciary Settlement Platform:** Engineered a full-stack multi-agent system coordinating software contract lifecycle, git telemetry ingestion, and smart escrow disbursements.
 - **Production-Grade Financial Invariants:** Designed a deterministic integer-cent settlement policy engine enforcing strict zero-overpayment bounds, idempotency keys, and human-in-the-loop fiduciary approvals.
 - **High-Durability Cryptographic Ledger:** Implemented a SHA-256 hash-chained immutable audit system utilizing Node.js 22 built-in SQLite (`node:sqlite`) with WAL mode, FULL synchronous durability, and SQL triggers.
 - **Enterprise-Grade AI Security:** Designed defense-in-depth isolation for untrusted git metadata, sanitizing external inputs against prompt-injection attacks before multi-agent Gemini synthesis.
-- **Strict OpenAPI Governance & SDK Generation:** Authored and validated comprehensive OpenAPI 3.0.3 contracts governed by APIMatic, generating strongly-typed client SDKs with automated retry policies.
+- **Strict OpenAPI Governance & SDK Generation:** Authored and validated comprehensive OpenAPI 3.0.3 contracts, generating strongly-typed client SDKs with automated retry policies.
 - **Rigorous Test Coverage:** Developed a suite of 293 automated integration and unit tests across 26 test suites achieving 100% pass rates across concurrency, failure recovery, and financial state machines.
 
 ---
@@ -174,7 +178,17 @@ npm test
 
 ## 🚀 Cloud Deployment
 
-### 1. Deploy on Render (Recommended Full-Stack)
+### 1. Deploy on Embarko (Embarko.ai Challenge #DeployWithEmbarko)
+1. Sign up on [Embarko.ai](https://embarko.ai) and click **Create Project**.
+2. Connect your GitHub repository: `https://github.com/Mohamed-529/TrustChain`.
+3. Set Build & Run Commands:
+   - **Build Command:** `npm run build`
+   - **Start Command:** `npm start`
+   - **Environment Variables:** `PORT=3000`, `NODE_ENV=production`
+4. Click **Deploy Live**. Embarko provides an instant SSL live URL!
+5. Record your demo video showcasing the live mobile-responsive app and post with `#DeployWithEmbarko`.
+
+### 2. Deploy on Render (Full-Stack Blueprint)
 TrustChain includes a pre-configured `render.yaml` blueprint:
 
 1. Push your changes to GitHub: `git push origin main`
@@ -183,14 +197,14 @@ TrustChain includes a pre-configured `render.yaml` blueprint:
 4. Render automatically runs `npm install && npm run build` and starts `npm start`.
 5. Your service is live at `https://<your-app>.onrender.com` with zero extra configuration!
 
-### 2. Deploy on Vercel (Frontend SPA)
+### 3. Deploy on Vercel (Frontend SPA)
 TrustChain includes a pre-configured `vercel.json`:
 
 1. Import `TrustChain` into [Vercel](https://vercel.com).
 2. Framework Preset: **Vite**.
 3. Build Command: `npm run build`.
 4. Output Directory: `dist`.
-5. API requests are automatically routed to your Render backend via `vercel.json` rewrites.
+5. Live frontend is instantly served on Vercel's global edge CDN.
 
 ---
 

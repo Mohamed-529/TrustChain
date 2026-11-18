@@ -148,18 +148,18 @@ console.log('Evidence Passport Digest:', passport.passportDigest);`;
                 OpenAPI 3.0.3 Specification
               </span>
               <span className="px-2.5 py-1 text-xs font-mono font-medium rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                APIMatic CodeGen Ready
+                Typed SDK Ready
               </span>
               <span className="px-2.5 py-1 text-xs font-mono font-medium rounded-full bg-zinc-800 text-zinc-300">
                 54 Operations
               </span>
             </div>
             <h1 className="mt-3 text-3xl font-extrabold text-zinc-100 tracking-tight">
-              Developer Ecosystem & API Control Tower
+              Developer Ecosystem &amp; API Control Tower
             </h1>
             <p className="mt-2 text-sm text-zinc-400 max-w-2xl leading-relaxed">
               Standardized, type-safe API contract connecting software development deliverables,
-              multi-agent AI advisory evaluation, and PayPal Orders API v2 settlement.
+              multi-agent AI advisory evaluation, and pre-authorized escrow settlement.
             </p>
           </div>
 
@@ -195,7 +195,7 @@ console.log('Evidence Passport Digest:', passport.passportDigest);`;
             { id: 'catalog', label: 'API Route Catalog (54)', icon: '◈' },
             { id: 'sdk', label: 'TypeScript Client SDK', icon: '⚡' },
             { id: 'agent', label: 'AI Agent Tool Manifest', icon: '🤖' },
-            { id: 'apimatic', label: 'APIMatic Metadata & Governance', icon: '⚙' },
+            { id: 'apimatic', label: 'Contract Schema & Governance', icon: '⚙' },
             { id: 'security', label: 'Financial Safety Invariants', icon: '🛡' },
           ].map((tab) => (
             <button

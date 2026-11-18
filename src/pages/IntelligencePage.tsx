@@ -35,7 +35,7 @@ export function IntelligencePage({
         <div>
           <div className="flex items-center gap-2.5">
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/80 font-mono">
-              AG GRID v36 COMMUNITY
+              DECISION INTELLIGENCE LEDGER v36
             </span>
             <h1 className="text-xl font-bold text-white tracking-tight">
               Milestone Intelligence Control Room

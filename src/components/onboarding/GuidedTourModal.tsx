@@ -45,13 +45,13 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     step: 3,
-    title: 'AG Grid Milestone Intelligence Cockpit',
-    category: 'SPONSOR INTEGRATION: AG GRID',
-    badge: 'AG GRID COMMUNITY V36',
+    title: 'Milestone Decision Intelligence Ledger',
+    category: 'FINANCIAL DECISION SUPPORT',
+    badge: 'DECISION LEDGER V36',
     targetRoute: '/intelligence',
     icon: '📑',
     summary:
-      'An investigation-first decision support cockpit powered by AG Grid v36 Community Edition. Explore multi-column sorting, floating filters, column layout persistence, CWE-1236 sanitized CSV export, and safe Natural Language Query parsing.',
+      'An investigation-first decision support cockpit. Explore multi-column sorting, floating filters, column layout persistence, CWE-1236 sanitized CSV export, and safe Natural Language Query parsing.',
     keyHighlights: [
       'Master/Detail full-width expandable rows isolating Git, PR, and CI telemetry',
       'Safe natural language search with interactive user confirmation modal',
@@ -60,8 +60,8 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     step: 4,
-    title: 'Bryntum Gantt Software Delivery Control Tower',
-    category: 'SPONSOR INTEGRATION: BRYNTUM',
+    title: 'Software Delivery Critical-Path Timeline',
+    category: 'SCHEDULE & RECOVERY',
     badge: 'GANTT SCHEDULE ENGINE',
     targetRoute: '/timeline',
     icon: '📅',
@@ -75,15 +75,15 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     step: 5,
-    title: 'Human Review Workbench & PayPal Settlement',
+    title: 'Human Review Workbench & Escrow Settlement',
     category: 'FINANCIAL INTEGRITY',
-    badge: 'PAYPAL ORDERS API V2',
+    badge: 'SMART ESCROW SETTLEMENT',
     targetRoute: '/reviews',
     icon: '⚖️',
     summary:
-      'The 4-column operational core enforcing the non-bypassable human approval gate. AI agents provide advisory synthesis, but only an authenticated human fiduciary can authorize release of PayPal Sandbox funds.',
+      'The 4-column operational core enforcing the non-bypassable human approval gate. AI agents provide advisory synthesis, but only an authenticated human fiduciary can authorize release of pre-authorized funds.',
     keyHighlights: [
-      'PayPal intent: AUTHORIZE holds funds on hold up to 29 days',
+      'Non-custodial pre-authorization holds funds safely on hold up to 29 days',
       'Deterministic policy engine strictly caps disbursement to contractual terms',
       'Mandatory regulatory non-escrow notice and server-side integer cents validation',
     ],

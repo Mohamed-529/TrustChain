@@ -34,7 +34,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
           <div className="flex items-center justify-center gap-2 mb-2">
             <span className="w-5 h-[1.5px] bg-[#2f7a50] inline-block" />
             <span className="text-[13px] text-[#2f7a50] tracking-tight font-normal">
-              Autonomous Evidence-to-Settlement Orchestration
+              Autonomous Software Escrow &amp; Verification Engine
             </span>
           </div>
 
@@ -45,7 +45,8 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
 
           {/* Subheading */}
           <p className="text-sm sm:text-base md:text-lg text-[#3d5248] max-w-2xl mx-auto leading-relaxed font-normal px-2">
-            TrustChain bridges git repositories, automated test telemetry, and PayPal Orders v2 holds.
+            Eliminate freelance ghosting, broken deliverables, and software milestone disputes.
+            TrustChain bridges git repositories, automated test telemetry, and non-custodial payment holds.
             Tri-agent AI verifies milestone criteria before human reviewers approve programmatic settlement.
           </p>
 
@@ -65,29 +66,29 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
             </button>
           </div>
 
-          {/* Integrated Standards Bar */}
-          <div className="mt-20 pt-8 border-t border-[rgba(11,31,23,0.08)] flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs text-[#6b7f75]">
+          {/* Core Architecture Standards Bar */}
+          <div className="mt-20 pt-8 border-t border-[rgba(11,31,23,0.08)] flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-xs text-[#6b7f75]">
             <span className="font-mono text-[11px] uppercase tracking-wider text-[#2f7a50] font-semibold">
-              Integrated Standards:
+              Core Architecture:
             </span>
-            <span className="hover:text-[#0b1f17] transition cursor-pointer" onClick={() => navigate('/openapi')}>
-              APIMatic (OpenAPI Specs)
+            <span className="hover:text-[#0b1f17] transition cursor-pointer" onClick={() => navigate('/developers')}>
+              OpenAPI 3.0 Contract Specification
             </span>
             <span>•</span>
             <span className="hover:text-[#0b1f17] transition cursor-pointer" onClick={() => navigate('/timeline')}>
-              Bryntum Gantt v7.3
+              Critical-Path Execution Gantt
             </span>
             <span>•</span>
             <span className="hover:text-[#0b1f17] transition cursor-pointer" onClick={() => navigate('/intelligence')}>
-              AG Grid Ledger v36
+              Cryptographic Decision Ledger
             </span>
             <span>•</span>
             <span className="hover:text-[#0b1f17] transition cursor-pointer" onClick={() => navigate('/reviews')}>
-              PayPal Orders API v2
+              Multi-Agent AI Verification Mesh
             </span>
             <span>•</span>
-            <span className="hover:text-[#0b1f17] transition cursor-pointer" onClick={() => navigate('/reviews')}>
-              Google Gemini 3.5 Flash
+            <span className="hover:text-[#0b1f17] transition cursor-pointer" onClick={() => navigate('/trust')}>
+              Immutable Evidence Passport
             </span>
           </div>
         </div>
@@ -141,14 +142,14 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
                 </div>
               </div>
 
-              {/* Card 2: 29-Day PayPal Hold */}
+              {/* Card 2: Pre-Authorization Hold */}
               <div className="p-5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[rgba(11,31,23,0.06)] space-y-2 shadow-sm text-xs">
                 <div className="text-[#6b7f75] text-[11px]">Fiduciary Capital Protection</div>
                 <div className="font-semibold text-[#0b1f17]">
-                  PayPal Orders API v2 Pre-Authorization Hold
+                  Non-Custodial Pre-Authorization Escrow Hold
                 </div>
                 <p className="text-[11px] text-[#3d5248] leading-relaxed">
-                  29-day non-escrow financial guarantee. Funds stay securely in the client&apos;s PayPal account until formal milestone sign-off.
+                  29-day financial guarantee. Funds stay securely in the client&apos;s pre-authorized hold until formal milestone sign-off.
                 </p>
               </div>
             </div>
@@ -312,7 +313,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
                   Disbursed $2,500.00 USD
                 </div>
                 <p className="text-[11px] text-[#1c4b31] leading-relaxed">
-                  Captured from pre-authorized PayPal hold following authenticated human reviewer approval.
+                  Captured from pre-authorized escrow hold following authenticated human reviewer approval.
                 </p>
               </div>
 
@@ -336,7 +337,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
               <div className="p-4 rounded-2xl bg-white flex items-center gap-3 shadow-sm">
                 <span className="w-8 h-8 rounded-full bg-[#f6f5f0] text-sm flex items-center justify-center">💳</span>
                 <div>
-                  <div className="text-xs font-semibold text-[#0b1f17]">Client PayPal Account</div>
+                  <div className="text-xs font-semibold text-[#0b1f17]">Client Funding Account</div>
                   <div className="text-[11px] text-[#6b7f75]">pre-authorizes 29-day financial hold</div>
                 </div>
               </div>
@@ -352,7 +353,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
               <div className="p-4 rounded-2xl bg-white flex items-center gap-3 shadow-sm">
                 <span className="w-8 h-8 rounded-full bg-[#f6f5f0] text-sm flex items-center justify-center">💼</span>
                 <div>
-                  <div className="text-xs font-semibold text-[#0b1f17]">Contractor PayPal Account</div>
+                  <div className="text-xs font-semibold text-[#0b1f17]">Contractor Settlement Account</div>
                   <div className="text-[11px] text-[#6b7f75]">receives verified funds on human sign-off</div>
                 </div>
               </div>
@@ -424,13 +425,13 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
           {/* Capability 4 */}
           <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-[0_4px_20px_-2px_rgba(11,31,23,0.04)] space-y-4 hover:shadow-md transition">
             <span className="px-2.5 py-0.5 rounded-full bg-[#e9efe6] text-[#2f7a50] text-[10px] font-mono font-semibold">
-              Payment Gateway
+              Smart Escrow
             </span>
             <h3 className="text-lg font-normal text-[#0b1f17] tracking-tight">
-              PayPal Orders v2 Lifecycle
+              Pre-Authorized Settlement Holds
             </h3>
             <p className="text-xs text-[#3d5248] leading-relaxed">
-              29-day authorization hold ensuring non-custodial capital protection with mandatory server-side human fiduciary approval gates.
+              Non-custodial payment pre-authorization ensuring client funds are secured while guaranteeing developers automated release upon verified milestone completion.
             </p>
           </div>
         </div>
@@ -503,14 +504,14 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
                 Non-Custodial Zero-Escrow Architecture
               </h3>
               <p className="text-xs text-[#3d5248] leading-relaxed">
-                A 29-day authorization hold is placed via PayPal Orders API v2. TrustChain holds no funds, no private keys, and no wallet escrow.
+                A 29-day authorization hold is placed via banking payment gateway. TrustChain holds no funds, no private keys, and no custodial wallet.
               </p>
             </div>
 
             {/* Inner Visual Widget */}
             <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] space-y-2 text-[11px] font-mono">
               <div className="flex justify-between text-[#6b7f75]">
-                <span>PayPal Authorization</span>
+                <span>Pre-Authorized Escrow</span>
                 <span className="text-[#8a681c] font-semibold">Active Hold</span>
               </div>
               <div className="text-base font-semibold text-[#0b1f17]">$2,500.00 USD</div>
@@ -597,11 +598,11 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
               Engineered for Modern Engineering Toolchains
             </h2>
             <p className="text-xs sm:text-sm text-[#3d5248] leading-relaxed">
-              Trigger milestone verifications from GitHub Actions webhooks, inspect cryptographic proof via the TrustChain CLI, or integrate typed clients generated from our APIMatic OpenAPI schema.
+              Trigger milestone verifications from GitHub Actions webhooks, inspect cryptographic proof via the TrustChain CLI, or integrate typed clients generated from our OpenAPI 3.0 schema.
             </p>
             <div className="flex items-center gap-4 text-xs font-medium text-[#0b1f17]">
-              <span onClick={() => navigate('/openapi')} className="underline cursor-pointer">
-                Explore APIMatic API Specification
+              <span onClick={() => navigate('/developers')} className="underline cursor-pointer">
+                Explore OpenAPI 3.0 Specification
               </span>
               <span>•</span>
               <span onClick={() => navigate('/reviews')} className="underline cursor-pointer">
@@ -639,7 +640,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
                 &nbsp;&nbsp;--milestone &quot;ms_seed_01&quot; \<br />
                 &nbsp;&nbsp;--repo &quot;https://github.com/milestoneproof/core&quot;
               </div>
-              <div className="pt-2 text-[#6b7f75]"># or install typed SDK generated via APIMatic</div>
+              <div className="pt-2 text-[#6b7f75]"># or install typed TypeScript client SDK</div>
               <div className="text-[#0b1f17]">$ npm install @trustchain/sdk</div>
             </div>
           </div>
@@ -657,7 +658,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
             Ready to Eliminate Software Payment Disputes?
           </h2>
           <p className="text-xs sm:text-sm text-[#3d5248] max-w-lg mx-auto leading-relaxed">
-            Explore our live $8,500.00 reference contract, trigger multi-agent AI telemetry verification, examine the cryptographic Evidence Passport, and test PayPal sandbox capture.
+            Explore our live $8,500.00 reference contract, trigger multi-agent AI telemetry verification, examine the cryptographic Evidence Passport, and test sandbox milestone capture.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 w-full max-w-md mx-auto sm:max-w-none">
             <button
@@ -707,8 +708,8 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
             <div className="space-y-1.5">
               <div onClick={() => navigate('/reviews')} className="hover:text-[#0b1f17] cursor-pointer">Fiduciary Review Workbench</div>
               <div onClick={() => navigate('/trust')} className="hover:text-[#0b1f17] cursor-pointer">Cryptographic Evidence Passport</div>
-              <div onClick={() => navigate('/timeline')} className="hover:text-[#0b1f17] cursor-pointer">Bryntum Gantt Timeline</div>
-              <div onClick={() => navigate('/intelligence')} className="hover:text-[#0b1f17] cursor-pointer">AG Grid Decision Ledger</div>
+              <div onClick={() => navigate('/timeline')} className="hover:text-[#0b1f17] cursor-pointer">Critical-Path Gantt Timeline</div>
+              <div onClick={() => navigate('/intelligence')} className="hover:text-[#0b1f17] cursor-pointer">Decision Intelligence Ledger</div>
             </div>
           </div>
 
@@ -718,8 +719,8 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
               Ecosystem
             </div>
             <div className="space-y-1.5">
-              <div onClick={() => navigate('/openapi')} className="hover:text-[#0b1f17] cursor-pointer">APIMatic OpenAPI Studio</div>
-              <div onClick={() => navigate('/reviews')} className="hover:text-[#0b1f17] cursor-pointer">PayPal Orders API v2</div>
+              <div onClick={() => navigate('/developers')} className="hover:text-[#0b1f17] cursor-pointer">OpenAPI Contract Studio</div>
+              <div onClick={() => navigate('/reviews')} className="hover:text-[#0b1f17] cursor-pointer">Smart Settlement Gateway</div>
               <div onClick={() => navigate('/settings')} className="hover:text-[#0b1f17] cursor-pointer">SQLite Audit Ledger</div>
               <div onClick={() => navigate('/developers')} className="hover:text-[#0b1f17] cursor-pointer">Developer Documentation</div>
             </div>
@@ -742,7 +743,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
 
         <div className="mt-12 pt-6 border-t border-[rgba(11,31,23,0.06)] flex flex-wrap items-center justify-between gap-4 text-[11px] text-[#6b7f75]">
           <div>© 2026 TrustChain · MilestoneProof AI. All rights reserved.</div>
-          <div className="font-mono">SQLite ACID Persistence • SLSA Level 2 Provenance • PayPal Orders v2 Sandbox</div>
+          <div className="font-mono">SQLite ACID Persistence • SLSA Level 2 Provenance • Multi-Agent Fiduciary Mesh</div>
         </div>
       </footer>
 

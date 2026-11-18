@@ -119,7 +119,7 @@ export function TimelinePage({
         <div>
           <div className="flex items-center gap-2.5">
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-950/80 text-teal-300 border border-teal-800/80 font-mono">
-              BRYNTUM GANTT v7.3.8
+              CRITICAL PATH ENGINE v7.3
             </span>
             <h1 className="text-xl font-bold text-white tracking-tight">
               Intelligent Contract Execution Timeline
