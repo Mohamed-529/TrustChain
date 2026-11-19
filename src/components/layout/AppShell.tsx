@@ -22,6 +22,7 @@ interface AppShellProps {
   onOpenSearch: () => void;
   onOpenCreateProject: () => void;
   onOpenAuthPortal?: () => void;
+  onSignOut?: () => void;
   children: React.ReactNode;
 }
 
@@ -39,6 +40,7 @@ export function AppShell({
   onOpenSearch,
   onOpenCreateProject,
   onOpenAuthPortal,
+  onSignOut,
   children,
 }: AppShellProps) {
   const currentPath = usePathname();
@@ -207,18 +209,6 @@ export function AppShell({
                 <span className="hidden md:inline">Guided Tour</span>
               </button>
 
-              {/* Innovative Auth Gateway Trigger */}
-              {onOpenAuthPortal && (
-                <button
-                  onClick={onOpenAuthPortal}
-                  className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
-                  title="Open Innovative Login / Registration Portal"
-                >
-                  <span>🔑</span>
-                  <span className="hidden sm:inline">Sign In / Join</span>
-                </button>
-              )}
-
               {/* Persona Switcher Dropdown */}
               <div className="relative" ref={personaRef}>
                 <button
@@ -277,6 +267,20 @@ export function AppShell({
                         </button>
                       );
                     })}
+                    {onSignOut && (
+                      <div className="pt-1 mt-1 border-t border-[rgba(11,31,23,0.06)]">
+                        <button
+                          onClick={() => {
+                            onSignOut();
+                            setPersonaMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-left text-xs text-[#c5221f] hover:bg-[#fce8e6] transition font-medium"
+                        >
+                          <span>🚪</span>
+                          <span>Sign Out (Lock Console)</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

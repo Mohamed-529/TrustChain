@@ -33,7 +33,7 @@ import { DisputesPage } from './pages/DisputesPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { DeveloperPortalPage } from './pages/DeveloperPortalPage.tsx';
 import { MarketplacePage } from './pages/MarketplacePage.tsx';
-import { InnovativeAuthPortalModal } from './components/auth/InnovativeAuthPortalModal.tsx';
+import { FullScreenLoginPage } from './components/auth/FullScreenLoginPage.tsx';
 
 function AppContent() {
   const currentPath = usePathname();
@@ -79,7 +79,6 @@ function AppContent() {
   const [showWalkthrough, setShowWalkthrough] = useState<boolean>(false);
   const [showSearch, setShowSearch] = useState<boolean>(false);
   const [showCreateProject, setShowCreateProject] = useState<boolean>(false);
-  const [showAuthPortal, setShowAuthPortal] = useState<boolean>(true);
 
   // Global keyboard shortcut: / or Ctrl+K triggers Search
   useEffect(() => {
@@ -279,10 +278,8 @@ function AppContent() {
     []
   );
 
-  // Initial authentication on mount (defaults to client_01 per requirements)
-  useEffect(() => {
-    void switchPersona('client_01');
-  }, [switchPersona]);
+  // Authentication gate: Full-screen login page is shown on first visit until authenticated
+  // Users enter details or select a sandbox account at the bottom to enter the project.
 
   // Refresh domain data when token or selection changes
   useEffect(() => {
@@ -809,22 +806,11 @@ function AppContent() {
     }
   };
 
-  return (
-    <AppShell
-      currentUser={currentUser}
-      onSwitchPersona={switchPersona}
-      statusBanner={statusBanner}
-      onStartTour={() => setShowWalkthrough(true)}
-      onOpenSearch={() => setShowSearch(true)}
-      onOpenCreateProject={() => setShowCreateProject(true)}
-      onOpenAuthPortal={() => setShowAuthPortal(true)}
-    >
-      {renderActivePage()}
-
-      {/* Innovative First-Open Authentication & Registration Portal */}
-      <InnovativeAuthPortalModal
-        isOpen={showAuthPortal}
-        onClose={() => setShowAuthPortal(false)}
+  // GATEWAY: Full-Screen Login Page (No Cross X) is the initial landing page
+  // Users must enter details or select a sandbox account first before accessing the project.
+  if (!currentUser || !token) {
+    return (
+      <FullScreenLoginPage
         onAuthenticated={(newToken, newUser) => {
           setToken(newToken);
           setCurrentUser(newUser);
@@ -836,6 +822,24 @@ function AppContent() {
         }}
         onDemoSwitch={switchPersona}
       />
+    );
+  }
+
+  return (
+    <AppShell
+      currentUser={currentUser}
+      onSwitchPersona={switchPersona}
+      statusBanner={statusBanner}
+      onStartTour={() => setShowWalkthrough(true)}
+      onOpenSearch={() => setShowSearch(true)}
+      onOpenCreateProject={() => setShowCreateProject(true)}
+      onSignOut={() => {
+        setToken('');
+        setCurrentUser(null);
+        setStatusBanner(null);
+      }}
+    >
+      {renderActivePage()}
 
       {/* Interactive Contextual Walkthrough Modal with 7 Invariants */}
       <InteractiveWalkthroughModal
