@@ -16,7 +16,91 @@ import type {
   DisputeEvidencePack,
   AuditLogEntry,
   Contract,
+  EvidenceSubmission,
 } from './types/domain.ts';
+
+function buildDefaultReviewDetails(milestoneId = 'ms_seed_01', contractId = 'contract_seed_01'): MilestoneReviewDetails {
+  return {
+    contract: {
+      id: contractId,
+      title: 'Tea Shop Web Application & Payments',
+      description: 'Modern high-assurance web storefront with menu catalog, cart, and PayPal Orders v2 payment release.',
+      totalBudgetCents: 550000,
+      currency: 'USD',
+      clientId: 'client_01',
+      developerId: 'dev_01',
+      reviewerId: 'reviewer_01',
+      policyRules: {
+        requirePassingCi: true,
+        requireSecurityScan: true,
+        maxAllowedCriticalVulns: 0,
+        maxAllowedHighVulns: 0,
+        allowPartialPayout: true,
+        latePenaltyDailyBps: 100,
+      },
+      status: 'ACTIVE',
+      version: 1,
+      createdAt: '2026-11-01T09:00:00.000Z',
+      updatedAt: '2026-11-01T09:00:00.000Z',
+    },
+    milestone: {
+      id: milestoneId,
+      contractId,
+      sequenceOrder: 1,
+      title: 'Milestone 1: Tea Shop Storefront & Cart Microservice',
+      description: 'Implement responsive storefront catalog, cart state, and PayPal authorization integration.',
+      agreedAmountCents: 250000,
+      deadlineIso: '2026-11-15T18:00:00.000Z',
+      paymentStatus: 'NOT_READY',
+      status: 'ACTIVE',
+      acceptanceCriteria: [
+        {
+          id: 'ac_01',
+          description: 'Responsive catalog with product filters and persistent cart',
+          requiredEvidenceTypes: ['PULL_REQUEST', 'CI_ARTIFACT'],
+        },
+        {
+          id: 'ac_02',
+          description: 'Automated test suite passing >=90% statement coverage',
+          requiredEvidenceTypes: ['CI_ARTIFACT'],
+        },
+        {
+          id: 'ac_03',
+          description: 'Zero critical or high security vulnerabilities',
+          requiredEvidenceTypes: ['SECURITY_SCAN'],
+        },
+      ],
+      createdAt: '2026-11-01T09:00:00.000Z',
+      updatedAt: '2026-11-01T09:00:00.000Z',
+    },
+    stateMachineStatus: 'ACTIVE',
+    latestSubmission: null,
+    latestEvaluation: null,
+    latestProvenance: null,
+    policyCalculation: {
+      engineVersion: '2.0.0',
+      agreedAmountCents: 250000,
+      verifiedCriteriaRatio: 1.0,
+      grossEligibleCents: 250000,
+      deductionCents: 22500,
+      gatesTripped: [],
+      gateBlocked: false,
+      lateDays: 9,
+      latePenaltyCents: 22500,
+      permittedAmountCents: 227500,
+      currency: 'USD',
+      formulaExplanation: 'Permitted: $2,500.00 agreed - $225.00 late penalty (9 days late @ 100bps/day) = $2,275.00',
+    },
+    approvals: [],
+    allowedActions: {
+      canApprove: true,
+      canReject: true,
+      canRequestChanges: true,
+      maxPermittedAmountCents: 227500,
+      blockingReasons: [],
+    },
+  };
+}
 
 import { RouterProvider, usePathname, useNavigate } from './router/Router.tsx';
 import { AppShell } from './components/layout/AppShell.tsx';
@@ -50,7 +134,9 @@ function AppContent() {
 
   // Domain Telemetry & Workbench Data
   const [scheduleData, setScheduleData] = useState<ContractScheduleResponse | null>(null);
-  const [reviewDetails, setReviewDetails] = useState<MilestoneReviewDetails | null>(null);
+  const [reviewDetails, setReviewDetails] = useState<MilestoneReviewDetails | null>(() =>
+    buildDefaultReviewDetails('ms_seed_01', 'contract_seed_01')
+  );
   const [provenanceData, setProvenanceData] = useState<{
     latestProvenance: EvidenceProvenanceVerificationRecord | null;
     provenanceHistory: EvidenceProvenanceVerificationRecord[];
@@ -238,8 +324,9 @@ function AppContent() {
           setReviewDetails(revData.data);
           setApprovedAmountCentsInput(revData.data.policyCalculation?.permittedAmountCents ?? 0);
         } else {
-          // Default review state
-          setApprovedAmountCentsInput(250000);
+          // Default review state for static preview
+          setReviewDetails((prev) => prev ?? buildDefaultReviewDetails(milestoneId, contractId));
+          setApprovedAmountCentsInput(227500);
         }
 
         const provData = await safeFetchJson<{
@@ -345,13 +432,14 @@ function AppContent() {
     }
 
     setReviewDetails((prev) => {
-      if (!prev) return prev;
+      const base = prev ?? buildDefaultReviewDetails(selectedMilestoneId, selectedContractId);
       return {
-        ...prev,
+        ...base,
         latestSubmission: {
           id: `sub_${Date.now()}`,
           milestoneId: selectedMilestoneId,
-          attemptNumber: (prev.latestSubmission?.attemptNumber ?? 0) + 1,
+          attemptNumber: (base.latestSubmission?.attemptNumber ?? 0) + 1,
+          submittedBy: 'dev_01',
           repoUrl: 'https://github.com/Mohamed-529/TrustChain',
           branch: 'main',
           commitSha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
@@ -409,11 +497,41 @@ function AppContent() {
 
     const nowIso = new Date().toISOString();
     setReviewDetails((prev) => {
-      if (!prev) return prev;
+      const base = prev ?? buildDefaultReviewDetails(selectedMilestoneId, selectedContractId);
+      const sub = base.latestSubmission ?? {
+        id: `sub_seed_01`,
+        milestoneId: selectedMilestoneId,
+        attemptNumber: 1,
+        submittedBy: 'dev_01',
+        repoUrl: 'https://github.com/Mohamed-529/TrustChain',
+        branch: 'main',
+        commitSha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
+        prUrl: 'https://github.com/Mohamed-529/TrustChain/pull/42',
+        prStatus: 'MERGED',
+        ciReport: {
+          provider: 'github_actions',
+          status: 'SUCCESS',
+          totalTests: 64,
+          passedTests: 64,
+          failedTests: 0,
+          coveragePct: 91.5,
+          logSummary: '64/64 test suites passed with 91.5% statement coverage.',
+        },
+        securityScan: {
+          scanner: 'npm audit',
+          scannerVersion: '10.8.2',
+          status: 'COMPLETED',
+          findings: [],
+        },
+        developerNotes: 'Tea Shop storefront delivery verified: 100% test pass rate, 0 vulnerabilities.',
+        submittedAt: nowIso,
+      };
+
       return {
-        ...prev,
+        ...base,
+        latestSubmission: sub,
         milestone: {
-          ...prev.milestone,
+          ...base.milestone,
           status: 'APPROVED',
         },
         approvals: [
@@ -426,12 +544,12 @@ function AppContent() {
             justification: 'Automated Tri-Agent verification passed. Acceptance criteria verified. Fiduciary gate automatically cleared for settlement.',
             reviewedAt: nowIso,
           },
-          ...(prev.approvals ?? []),
+          ...(base.approvals ?? []),
         ],
         latestEvaluation: {
           id: `eval_${Date.now()}`,
           milestoneId: selectedMilestoneId,
-          submissionId: prev.latestSubmission?.id ?? 'sub_seed_01',
+          submissionId: sub.id,
           status: 'COMPLETED',
           evaluationMode: 'LIVE_GEMINI',
           isMockEvaluation: false,
@@ -489,20 +607,34 @@ function AppContent() {
             isAdvisoryOnly: true,
           },
           policyCalculation: {
-            permittedAmountCents: 227500,
-            latePenaltyCents: 22500,
+            engineVersion: '2.0.0',
             agreedAmountCents: 250000,
-            gateBlocked: false,
+            verifiedCriteriaRatio: 1.0,
+            grossEligibleCents: 250000,
+            deductionCents: 22500,
             gatesTripped: [],
+            gateBlocked: false,
+            lateDays: 9,
+            latePenaltyCents: 22500,
+            permittedAmountCents: 227500,
+            currency: 'USD',
+            formulaExplanation: 'Permitted: $2,500.00 agreed - $225.00 late penalty (9 days late @ 100bps/day) = $2,275.00',
           },
           evaluatedAt: new Date().toISOString(),
         },
         policyCalculation: {
-          permittedAmountCents: 227500,
-          latePenaltyCents: 22500,
+          engineVersion: '2.0.0',
           agreedAmountCents: 250000,
-          gateBlocked: false,
+          verifiedCriteriaRatio: 1.0,
+          grossEligibleCents: 250000,
+          deductionCents: 22500,
           gatesTripped: [],
+          gateBlocked: false,
+          lateDays: 9,
+          latePenaltyCents: 22500,
+          permittedAmountCents: 227500,
+          currency: 'USD',
+          formulaExplanation: 'Permitted: $2,500.00 agreed - $225.00 late penalty (9 days late @ 100bps/day) = $2,275.00',
         },
       };
     });
