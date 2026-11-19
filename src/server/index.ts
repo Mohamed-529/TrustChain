@@ -811,7 +811,7 @@ async function startDevOrProdServer(): Promise<void> {
       enableDemoImpersonation:
         process.env.ENABLE_DEMO_IMPERSONATION !== undefined
           ? process.env.ENABLE_DEMO_IMPERSONATION === 'true'
-          : !isProd,
+          : true,
     },
   });
 
