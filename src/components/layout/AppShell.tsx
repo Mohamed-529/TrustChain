@@ -124,7 +124,7 @@ export function AppShell({
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold tracking-tight text-[#0b1f17] leading-tight">
-                    trustchain
+                    veridex
                   </span>
                   <span className="text-[9px] text-[#2f7a50] font-mono tracking-tight flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#2f7a50] animate-pulse" />

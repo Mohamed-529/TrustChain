@@ -46,7 +46,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
           {/* Subheading */}
           <p className="text-sm sm:text-base md:text-lg text-[#3d5248] max-w-2xl mx-auto leading-relaxed font-normal px-2">
             Eliminate freelance ghosting, broken deliverables, and software milestone disputes.
-            TrustChain bridges git repositories, automated test telemetry, and non-custodial payment holds.
+            Veridex bridges git repositories, automated test telemetry, and non-custodial payment holds.
             Tri-agent AI verifies milestone criteria before human reviewers approve programmatic settlement.
           </p>
 
@@ -504,7 +504,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
                 Non-Custodial Zero-Escrow Architecture
               </h3>
               <p className="text-xs text-[#3d5248] leading-relaxed">
-                A 29-day authorization hold is placed via banking payment gateway. TrustChain holds no funds, no private keys, and no custodial wallet.
+                A 29-day authorization hold is placed via banking payment gateway. Veridex holds no funds, no private keys, and no custodial wallet.
               </p>
             </div>
 
@@ -517,7 +517,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
               <div className="text-base font-semibold text-[#0b1f17]">$2,500.00 USD</div>
               <div className="space-y-1 text-[10px] text-[#3d5248] pt-1 border-t border-[rgba(11,31,23,0.06)]">
                 <div className="flex justify-between"><span>Client:</span><span className="text-[#2f7a50]">✓ Authorization Active</span></div>
-                <div className="flex justify-between"><span>TrustChain:</span><span className="text-[#6b7f75]">Zero Custody Engine</span></div>
+                <div className="flex justify-between"><span>Veridex:</span><span className="text-[#6b7f75]">Zero Custody Engine</span></div>
               </div>
             </div>
           </div>
@@ -690,7 +690,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
               <span className="w-5 h-5 rounded-full bg-[#0b1f17] text-white flex items-center justify-center text-[10px] font-bold">
                 ◈
               </span>
-              <span className="text-[#0b1f17] font-semibold text-sm tracking-tight">TrustChain</span>
+              <span className="text-[#0b1f17] font-semibold text-sm tracking-tight">Veridex</span>
             </div>
             <p className="text-xs text-[#3d5248] leading-relaxed max-w-xs">
               Autonomous multi-agent evidence-to-settlement orchestration for software engineering contracts.
@@ -742,7 +742,7 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
         </div>
 
         <div className="mt-12 pt-6 border-t border-[rgba(11,31,23,0.06)] flex flex-wrap items-center justify-between gap-4 text-[11px] text-[#6b7f75]">
-          <div>© 2026 TrustChain · MilestoneProof AI. All rights reserved.</div>
+          <div>© 2026 Veridex · MilestoneProof AI. All rights reserved.</div>
           <div className="font-mono">SQLite ACID Persistence • SLSA Level 2 Provenance • Multi-Agent Fiduciary Mesh</div>
         </div>
       </footer>
