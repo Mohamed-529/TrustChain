@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from '../router/Router.tsx';
+import type { User } from '../types/domain.ts';
 
 interface DeveloperProfile {
   id: string;
@@ -148,11 +149,29 @@ const AVAILABLE_PROJECTS: ProjectOpportunity[] = [
   },
 ];
 
-export function MarketplacePage({ token, onRefreshData }: { token: string; onRefreshData?: () => void }) {
+export function MarketplacePage({
+  token,
+  currentUser,
+  onRefreshData,
+}: {
+  token: string;
+  currentUser?: User | null;
+  onRefreshData?: () => void;
+}) {
   const navigate = useNavigate();
 
   // Perspective: CLIENT PERSPECTIVE vs DEVELOPER PERSPECTIVE
-  const [activePerspective, setActivePerspective] = useState<'CLIENT' | 'DEVELOPER'>('CLIENT');
+  const [activePerspective, setActivePerspective] = useState<'CLIENT' | 'DEVELOPER'>(
+    currentUser?.role === 'DEVELOPER' ? 'DEVELOPER' : 'CLIENT'
+  );
+
+  useEffect(() => {
+    if (currentUser?.role === 'DEVELOPER') {
+      setActivePerspective('DEVELOPER');
+    } else {
+      setActivePerspective('CLIENT');
+    }
+  }, [currentUser?.role]);
 
   // Client Mode: Simple (Idea) vs Technical (PRD / OpenAPI)
   const [clientMode, setClientMode] = useState<'NON_TECH' | 'TECH'>('NON_TECH');

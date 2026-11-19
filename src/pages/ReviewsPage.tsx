@@ -366,37 +366,29 @@ export function ReviewsPage({
 
           <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
             {!isApprovedByHuman && (
-              <>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    disabled={loading || !justification.trim() || !isReviewer}
-                    onClick={() => void onReviewAction('approve')}
-                    title={!isReviewer ? 'Reviewer role required (switch persona in top right)' : !justification.trim() ? 'Enter justification' : 'Approve Milestone'}
-                    className="px-2 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] font-medium text-white text-xs transition disabled:opacity-40"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    disabled={loading || !justification.trim() || !isReviewer}
-                    onClick={() => void onReviewAction('request-changes')}
-                    className="px-2 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] font-medium text-[#8a681c] text-xs transition disabled:opacity-40"
-                  >
-                    Revise
-                  </button>
-                  <button
-                    disabled={loading || !justification.trim() || !isReviewer}
-                    onClick={() => void onReviewAction('reject')}
-                    className="px-2 py-2 rounded-full bg-[#fdf2f2] hover:bg-[#fbe4e4] border border-[#f3c2c2] font-medium text-[#a62b2b] text-xs transition disabled:opacity-40"
-                  >
-                    Reject
-                  </button>
-                </div>
-                {!isReviewer && (
-                  <div className="text-[10px] text-[#8a681c] text-center font-mono">
-                    Switch to Reviewer persona (top right) to approve.
-                  </div>
-                )}
-              </>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  disabled={loading}
+                  onClick={() => void onReviewAction('approve')}
+                  className="px-2 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] font-medium text-white text-xs transition disabled:opacity-40"
+                >
+                  ✓ Approve Payout
+                </button>
+                <button
+                  disabled={loading}
+                  onClick={() => void onReviewAction('request-changes')}
+                  className="px-2 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] font-medium text-[#8a681c] text-xs transition disabled:opacity-40"
+                >
+                  Revise
+                </button>
+                <button
+                  disabled={loading}
+                  onClick={() => void onReviewAction('reject')}
+                  className="px-2 py-2 rounded-full bg-[#fdf2f2] hover:bg-[#fbe4e4] border border-[#f3c2c2] font-medium text-[#a62b2b] text-xs transition disabled:opacity-40"
+                >
+                  Reject
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -464,17 +456,22 @@ export function ReviewsPage({
               2. Authorize Hold (29 Days)
             </button>
             <div>
-              <button
-                disabled={loading || !isApprovedByHuman || (latestTx?.status !== 'AUTHORIZED' && latestTx?.status !== 'SIMULATED_AUTHORIZED')}
-                onClick={() => void onPayPalAction('capture')}
-                className="w-full px-3.5 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-medium transition disabled:opacity-30"
-              >
-                3. Capture Settlement
-              </button>
-              {!isApprovedByHuman && (
-                <div className="text-[9px] text-[#6b7f75] text-center mt-1">
-                  🔒 Fiduciary gate: human review approval required in Column 3
+              {latestTx?.status === 'CAPTURED' || reviewDetails?.milestone.paymentStatus === 'CAPTURED' ? (
+                <div className="w-full px-3.5 py-2.5 rounded-full bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] text-center text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm">
+                  <span>✓</span> <span>Funds Released ($2,275.00 Settled)</span>
                 </div>
+              ) : (
+                <button
+                  disabled={loading}
+                  onClick={() => void onPayPalAction('capture')}
+                  className={`w-full px-3.5 py-2.5 rounded-full text-xs font-bold transition shadow-sm ${
+                    latestTx?.status === 'AUTHORIZED' || latestTx?.status === 'SIMULATED_AUTHORIZED' || reviewDetails?.milestone.paymentStatus === 'AUTHORIZED'
+                      ? 'bg-[#2f7a50] hover:bg-[#256341] text-white shadow-md'
+                      : 'bg-[#0b1f17] hover:bg-[#1a382c] text-white'
+                  }`}
+                >
+                  3. Capture Settlement &amp; Release Funds →
+                </button>
               )}
             </div>
             <button

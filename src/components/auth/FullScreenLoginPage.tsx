@@ -280,32 +280,23 @@ export function FullScreenLoginPage({
           <span className="text-[11px] text-[#5f6368] font-mono uppercase tracking-wider block text-center">
             Or Instant 1-Click Sandbox Access
           </span>
-          <div className="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
+          <div className="grid grid-cols-2 gap-2 text-xs font-mono">
             <button
               type="button"
               onClick={() => handleQuickSandbox('client_01')}
-              className="p-2 rounded-xl bg-[#f8fafd] hover:bg-[#f0f4f2] border border-[#dadce0] text-center text-[#202124] transition truncate font-medium"
+              className="p-3 rounded-2xl bg-[#f8fafd] hover:bg-[#f0f4f2] border border-[#dadce0] text-center text-[#202124] transition truncate font-medium"
               title="Elena Vance (Client)"
             >
-              👔 Elena (Client)
+              👔 Elena Vance (Client)
             </button>
 
             <button
               type="button"
               onClick={() => handleQuickSandbox('dev_01')}
-              className="p-2 rounded-xl bg-[#f8fafd] hover:bg-[#f0f4f2] border border-[#dadce0] text-center text-[#202124] transition truncate font-medium"
+              className="p-3 rounded-2xl bg-[#f8fafd] hover:bg-[#f0f4f2] border border-[#dadce0] text-center text-[#202124] transition truncate font-medium"
               title="Marcus Chen (Developer)"
             >
-              💻 Marcus (Dev)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickSandbox('reviewer_01')}
-              className="p-2 rounded-xl bg-[#f8fafd] hover:bg-[#f0f4f2] border border-[#dadce0] text-center text-[#202124] transition truncate font-medium"
-              title="Sophia Sterling (Reviewer)"
-            >
-              ⚖️ Sophia (Reviewer)
+              💻 Marcus Chen (Developer)
             </button>
           </div>
         </div>

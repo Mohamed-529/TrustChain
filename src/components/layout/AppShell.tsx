@@ -61,16 +61,17 @@ export function AppShell({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const navDestinations: NavDestination[] = [
-    { path: '/', label: 'Overview' },
-    { path: '/marketplace', label: 'Marketplace', tag: 'AI Spec' },
-    { path: '/dashboard', label: 'Projects' },
-    { path: '/reviews', label: 'Review & Settle', tag: 'Escrow' },
-    { path: '/timeline', label: 'Timeline', tag: 'Gantt' },
-    { path: '/intelligence', label: 'Decision Ledger', tag: 'Live' },
-    { path: '/trust', label: 'Evidence Passport' },
-    { path: '/developers', label: 'API Engine', tag: 'v1.0' },
-  ];
+  const navDestinations: NavDestination[] = role === 'CLIENT'
+    ? [
+        { path: '/marketplace', label: 'Create Project (AI Spec)' },
+        { path: '/dashboard', label: 'My Contracts' },
+        { path: '/reviews', label: 'Escrow & Settle', tag: 'Bank Hold' },
+      ]
+    : [
+        { path: '/marketplace', label: 'Developer Workspace' },
+        { path: '/reviews', label: 'Submit Delivery', tag: 'Get Paid' },
+        { path: '/trust', label: 'Evidence Passport', tag: 'Proof' },
+      ];
 
   const personas = [
     {
@@ -88,14 +89,6 @@ export function AppShell({
       org: 'Core Systems Lead',
       avatar: 'MC',
       color: 'bg-blue-600',
-    },
-    {
-      id: 'reviewer_01',
-      name: 'Sophia Sterling',
-      role: 'REVIEWER',
-      org: 'Independent Fiduciary',
-      avatar: 'SS',
-      color: 'bg-amber-600',
     },
   ];
 
