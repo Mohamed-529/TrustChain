@@ -87,10 +87,6 @@ export function ReviewsPage({
     latestTx?.status === 'SIMULATED_AUTHORIZED' ||
     reviewDetails?.milestone.paymentStatus === 'AUTHORIZED';
 
-  const isOrderCreated =
-    latestTx?.status === 'ORDER_CREATED' ||
-    latestTx?.status === 'SIMULATED_ORDER_CREATED';
-
   const isDeveloper = currentUser?.role === 'DEVELOPER';
 
   // Compute stage progression flags
@@ -114,71 +110,127 @@ export function ReviewsPage({
     }
   }, [isStage1Complete, isStage2Complete, isStage3Complete, isStage4Complete, isAuthorized]);
 
-  const stages = [
+  // Steppers tailored by role
+  const developerStages = [
     {
       id: 1 as const,
       number: '1',
-      title: 'Delivery Evidence',
-      shortTitle: 'Evidence',
+      title: 'Submit Code & Proof',
+      shortTitle: 'Submit Code',
       isComplete: isStage1Complete,
-      chip: latestSub ? `✓ ${latestSub.ciReport.passedTests}/${latestSub.ciReport.totalTests} Tests` : 'Pending Evidence',
+      chip: latestSub ? `✓ ${latestSub.ciReport.passedTests}/${latestSub.ciReport.totalTests} Tests` : 'Ready to Submit',
       icon: '📦',
     },
     {
       id: 2 as const,
       number: '2',
-      title: 'Tri-Agent AI',
-      shortTitle: 'AI Consensus',
+      title: 'Multi-Agent Audit',
+      shortTitle: 'AI Verification',
       isComplete: isStage2Complete,
       chip: latestEval
         ? `✓ ${latestEval.arbitratorRecommendation.recommendedOutcome} (3/3 AC)`
-        : 'Pending AI',
+        : 'Pending Run',
       icon: '🤖',
     },
     {
       id: 3 as const,
       number: '3',
-      title: 'Policy Gate',
-      shortTitle: 'Fiduciary Cap',
+      title: 'My Eligible Payout',
+      shortTitle: 'Earnings',
       isComplete: isStage3Complete,
       chip: isApprovedByHuman
-        ? `✓ Cap: ${formatUsdCents(policy?.permittedAmountCents ?? 227500)}`
-        : 'Pending Approval',
-      icon: '⚖️',
+        ? `✓ Permitted: ${formatUsdCents(policy?.permittedAmountCents ?? 227500)}`
+        : 'Awaiting Client',
+      icon: '💰',
     },
     {
       id: 4 as const,
       number: '4',
-      title: isDeveloper ? 'Escrow Payout' : 'PayPal Settlement',
-      shortTitle: isDeveloper ? 'Payout' : 'Settlement',
+      title: 'Escrow & Payout',
+      shortTitle: 'Disbursement',
       isComplete: isStage4Complete,
       chip: isCaptured
-        ? '✓ Settled'
+        ? '✓ Funds Disbursed'
         : isAuthorized
-        ? '🔒 Escrow Locked'
-        : 'Pending Hold',
+        ? '🔒 Guaranteed in Escrow'
+        : 'Awaiting Escrow Lock',
       icon: '🏦',
     },
   ];
 
+  const clientStages = [
+    {
+      id: 1 as const,
+      number: '1',
+      title: 'Review Deliverables',
+      shortTitle: 'Deliverables',
+      isComplete: isStage1Complete,
+      chip: latestSub ? `✓ PR Merged & Tested` : 'Awaiting Dev Submission',
+      icon: '🔍',
+    },
+    {
+      id: 2 as const,
+      number: '2',
+      title: 'Tri-Agent Advisory',
+      shortTitle: 'AI Consensus',
+      isComplete: isStage2Complete,
+      chip: latestEval
+        ? `✓ ${latestEval.arbitratorRecommendation.recommendedOutcome} (3/3 AC)`
+        : 'Pending AI Analysis',
+      icon: '🛡️',
+    },
+    {
+      id: 3 as const,
+      number: '3',
+      title: 'Fiduciary Approval Gate',
+      shortTitle: 'Sign-Off',
+      isComplete: isStage3Complete,
+      chip: isApprovedByHuman
+        ? `✓ Approved: ${formatUsdCents(policy?.permittedAmountCents ?? 227500)}`
+        : 'Action Required',
+      icon: '✍️',
+    },
+    {
+      id: 4 as const,
+      number: '4',
+      title: 'PayPal Settlement',
+      shortTitle: 'Settlement',
+      isComplete: isStage4Complete,
+      chip: isCaptured
+        ? '✓ Settlement Complete'
+        : isAuthorized
+        ? '🔒 29-Day Hold Active'
+        : 'Ready to Authorize',
+      icon: '💳',
+    },
+  ];
+
+  const currentStages = isDeveloper ? developerStages : clientStages;
+
   return (
     <div className="space-y-6 font-sans pb-12">
-      {/* Top Header & Fast Action Toolbar */}
+      {/* Dynamic Header Tailored by Persona */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[rgba(11,31,23,0.08)] pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="w-5 h-[1.5px] bg-[#10b981] inline-block" />
-            <span className="text-[11px] font-mono tracking-wider uppercase text-[#10b981] font-semibold">
-              Kinetic Fiduciary Pipeline · Veridex Orders v2
+            <span className={`w-5 h-[2px] inline-block ${isDeveloper ? 'bg-[#2563eb]' : 'bg-[#10b981]'}`} />
+            <span
+              className={`text-[11px] font-mono tracking-wider uppercase font-semibold ${
+                isDeveloper ? 'text-[#2563eb]' : 'text-[#10b981]'
+              }`}
+            >
+              {isDeveloper
+                ? 'Developer Delivery & Payout Workbench · Marcus Chen'
+                : 'Client Fiduciary Inspection & Settlement Vault · Elena Vance'}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl text-[#0b1f17] tracking-tight font-normal">
-            Milestone Review &amp; Settlement
+            {isDeveloper ? 'Milestone Delivery & Escrow Payout' : 'Milestone Fiduciary Review & Settlement'}
           </h1>
           <p className="text-xs text-[#3d5248] mt-1 max-w-2xl leading-relaxed">
             {isDeveloper
-              ? 'Developer Delivery Control: Ingest repository telemetry, synthesize multi-agent verification, and track escrow release status.'
-              : 'Client Fiduciary Station: Verify git deliverables, review AI consensus recommendations, and programmatically release 29-day bank holds.'}
+              ? 'Submit your git pull requests, verify automated CI telemetry, run autonomous AI acceptance verification, and track escrow payout disbursements.'
+              : 'Inspect software delivered by Marcus Chen (Developer), verify AI consensus risk scores, approve milestone payout caps, and release PayPal pre-authorized escrow holds.'}
           </p>
         </div>
 
@@ -198,13 +250,13 @@ export function ReviewsPage({
         </div>
       </div>
 
-      {/* Milestone Selector Pill Bar */}
+      {/* Target Milestone Selector */}
       <div className="flex items-center gap-2 border-b border-[rgba(11,31,23,0.08)] pb-3 overflow-x-auto no-scrollbar py-1">
         <span className="text-[11px] text-[#6b7f75] font-mono mr-2 tracking-wide uppercase">
           Target Milestone:
         </span>
         {[
-          { id: 'ms_seed_01', label: 'Milestone 1 · Storefront & Cart (Active)' },
+          { id: 'ms_seed_01', label: 'Milestone 1 · Storefront & Cart Microservice (Active)' },
           { id: 'ms_seed_02', label: 'Milestone 2 · Settlement Policy Engine (Case B)' },
           { id: 'ms_seed_03', label: 'Milestone 3 · Audit Replay & Security' },
         ].map((m) => {
@@ -228,7 +280,7 @@ export function ReviewsPage({
       {/* 1. TOP ANIMATED PIPELINE STEPPER */}
       <div className="p-4 sm:p-5 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-[0_4px_24px_-4px_rgba(11,31,23,0.05)]">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 relative">
-          {stages.map((stage, idx) => {
+          {currentStages.map((stage) => {
             const isActive = activeStage === stage.id;
             return (
               <button
@@ -236,7 +288,9 @@ export function ReviewsPage({
                 onClick={() => setActiveStage(stage.id)}
                 className={`text-left p-3.5 rounded-2xl transition-all relative z-10 border ${
                   isActive
-                    ? 'bg-[#f6f5f0] border-[#0b1f17] shadow-sm'
+                    ? isDeveloper
+                      ? 'bg-[#f0f4ff] border-[#2563eb] shadow-sm'
+                      : 'bg-[#f6f5f0] border-[#0b1f17] shadow-sm'
                     : stage.isComplete
                     ? 'bg-white hover:bg-[#faf9f5] border-[rgba(16,185,129,0.3)]'
                     : 'bg-white hover:bg-[#faf9f5] border-[rgba(11,31,23,0.08)] opacity-80'
@@ -248,7 +302,9 @@ export function ReviewsPage({
                       stage.isComplete
                         ? 'bg-[#10b981] text-white'
                         : isActive
-                        ? 'bg-[#0b1f17] text-white ring-2 ring-[#0b1f17]/20'
+                        ? isDeveloper
+                          ? 'bg-[#2563eb] text-white ring-2 ring-[#2563eb]/20'
+                          : 'bg-[#0b1f17] text-white ring-2 ring-[#0b1f17]/20'
                         : 'bg-[#f6f5f0] text-[#6b7f75]'
                     }`}
                   >
@@ -259,7 +315,9 @@ export function ReviewsPage({
                       stage.isComplete
                         ? 'bg-[#e9efe6] text-[#2f7a50]'
                         : isActive
-                        ? 'bg-[#0b1f17]/10 text-[#0b1f17]'
+                        ? isDeveloper
+                          ? 'bg-[#2563eb]/10 text-[#2563eb]'
+                          : 'bg-[#0b1f17]/10 text-[#0b1f17]'
                         : 'bg-[#f6f5f0] text-[#6b7f75]'
                     }`}
                   >
@@ -281,25 +339,35 @@ export function ReviewsPage({
         </div>
       </div>
 
-      {/* 2. MAIN LAYOUT: CENTER HERO SPOTLIGHT (70%) + STICKY FIDUCIARY VAULT (30%) */}
+      {/* 2. MAIN LAYOUT: CENTER HERO SPOTLIGHT (70%) + STICKY SIDEBAR (30%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* CENTER HERO SPOTLIGHT STAGE (Col-span 8) */}
         <div className="lg:col-span-8 space-y-4">
-          <div className="p-6 sm:p-7 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-[0_4px_24px_-4px_rgba(11,31,23,0.06)] min-h-[440px] flex flex-col justify-between transition-all">
-            {/* STAGE 1 SPOTLIGHT: DELIVERY EVIDENCE */}
+          <div className="p-6 sm:p-7 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-[0_4px_24px_-4px_rgba(11,31,23,0.06)] min-h-[460px] flex flex-col justify-between transition-all">
+            {/* ============================================================== */}
+            {/* STAGE 1 SPOTLIGHT: DELIVERY EVIDENCE                          */}
+            {/* ============================================================== */}
             {activeStage === 1 && (
               <div className="space-y-5 animate-fadeIn">
                 <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-4">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-8 h-8 rounded-2xl bg-[#e9efe6] text-[#2f7a50] flex items-center justify-center text-sm font-bold">
+                    <span
+                      className={`w-8 h-8 rounded-2xl flex items-center justify-center text-sm font-bold ${
+                        isDeveloper ? 'bg-[#e0e7ff] text-[#2563eb]' : 'bg-[#e9efe6] text-[#2f7a50]'
+                      }`}
+                    >
                       1
                     </span>
                     <div>
                       <h2 className="text-base font-semibold text-[#0b1f17]">
-                        Stage 1 · Technical Delivery Evidence
+                        {isDeveloper
+                          ? 'Stage 1 · Code & Automated Telemetry Submission'
+                          : 'Stage 1 · Developer Deliverables Inspection'}
                       </h2>
                       <p className="text-[11px] text-[#6b7f75]">
-                        Ingest repository commits, pull request status, and automated test coverage.
+                        {isDeveloper
+                          ? 'Ingest your git commit, pull request status, and automated test telemetry for Milestone 1.'
+                          : 'Inspect git deliverables submitted by Marcus Chen (Developer) prior to escrow release.'}
                       </p>
                     </div>
                   </div>
@@ -310,7 +378,7 @@ export function ReviewsPage({
 
                 {latestSub ? (
                   <div className="space-y-4">
-                    {/* Commit & PR Telemetry Card */}
+                    {/* Deliverable Metadata Card */}
                     <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] space-y-3 font-mono text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgba(11,31,23,0.08)] pb-2.5">
                         <div className="flex items-center gap-2">
@@ -319,6 +387,9 @@ export function ReviewsPage({
                           </span>
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#0b1f17] text-white">
                             PR: {latestSub.prStatus}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-white border border-[rgba(11,31,23,0.12)] text-[#0b1f17]">
+                            Author: <strong>Marcus Chen</strong>
                           </span>
                         </div>
                         <span className="text-[11px] text-[#6b7f75]">
@@ -342,11 +413,11 @@ export function ReviewsPage({
                       </div>
                     </div>
 
-                    {/* Test & Security Scan Visual Meter */}
+                    {/* CI Test & Vulnerability Status */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] text-[#1c4b31] space-y-1.5">
                         <div className="flex items-center justify-between text-xs font-semibold">
-                          <span>Automated CI Suite</span>
+                          <span>Automated CI Test Suite</span>
                           <span className="font-mono text-[#2f7a50]">
                             {latestSub.ciReport.passedTests}/{latestSub.ciReport.totalTests} Passed
                           </span>
@@ -365,23 +436,51 @@ export function ReviewsPage({
 
                       <div className="p-4 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] text-[#8a681c] space-y-1.5">
                         <div className="flex items-center justify-between text-xs font-semibold">
-                          <span>Vulnerability Audit</span>
-                          <span className="font-mono text-[#2f7a50]">0 Findings</span>
+                          <span>Security Vulnerability Scan</span>
+                          <span className="font-mono text-[#2f7a50]">0 CVEs Found</span>
                         </div>
                         <p className="text-[11px] text-[#3d5248] leading-tight pt-1">
-                          Zero critical or high severity CVEs detected. Scanner:{' '}
+                          Zero critical or high severity vulnerabilities. Scanner:{' '}
                           <code className="text-[#0b1f17]">{latestSub.securityScan.scanner}</code>.
                         </p>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="p-8 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-center space-y-2">
-                    <span className="text-2xl">📦</span>
-                    <h3 className="text-xs font-semibold text-[#0b1f17]">No Delivery Evidence Yet</h3>
-                    <p className="text-[11px] text-[#6b7f75] max-w-sm mx-auto">
-                      Submit the developer delivery bundle or click &quot;Submit Demo Evidence&quot; to test the AI evaluation loop.
+                ) : isDeveloper ? (
+                  /* Developer Empty State with Clear Action */
+                  <div className="p-8 rounded-2xl bg-[#f0f4ff] border border-[rgba(37,99,235,0.15)] text-center space-y-3">
+                    <span className="text-3xl">💻</span>
+                    <h3 className="text-sm font-semibold text-[#0b1f17]">Ready to Submit Your Code Deliverables</h3>
+                    <p className="text-xs text-[#3d5248] max-w-md mx-auto">
+                      Click below to ingest your pull request (`PR #42`), verify commit hash telemetry, and initialize the automated AI acceptance pipeline.
                     </p>
+                    <div className="pt-2">
+                      <button
+                        disabled={loading}
+                        onClick={() => void onSubmitDemoEvidence()}
+                        className="px-6 py-2.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold shadow-md transition"
+                      >
+                        🚀 Submit Delivery Evidence (PR #42)
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Client Empty State: Awaiting Developer */
+                  <div className="p-8 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-center space-y-3">
+                    <span className="text-3xl">⏳</span>
+                    <h3 className="text-sm font-semibold text-[#0b1f17]">Awaiting Developer Delivery Submission</h3>
+                    <p className="text-xs text-[#6b7f75] max-w-md mx-auto">
+                      Marcus Chen has not yet submitted code for Milestone 1. You can test the fiduciary pipeline now by simulating a submission.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        disabled={loading}
+                        onClick={() => void onSubmitDemoEvidence()}
+                        className="px-6 py-2.5 rounded-full bg-white hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.15)] shadow-sm transition"
+                      >
+                        ⚡ Simulate Developer Deliverable Submission
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -407,16 +506,20 @@ export function ReviewsPage({
                       void onRunAiEvaluation();
                       setActiveStage(2);
                     }}
-                    className="ml-auto px-6 py-2.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-semibold shadow-md hover:shadow-lg transition flex items-center gap-2 group"
+                    className={`ml-auto px-6 py-2.5 rounded-full text-white text-xs font-semibold shadow-md hover:shadow-lg transition flex items-center gap-2 group ${
+                      isDeveloper ? 'bg-[#2563eb] hover:bg-[#1d4ed8]' : 'bg-[#0b1f17] hover:bg-[#1a382c]'
+                    }`}
                   >
-                    <span>Run AI Evaluation</span>
+                    <span>{isDeveloper ? 'Run AI Acceptance Verification' : 'Run AI Evaluation'}</span>
                     <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STAGE 2 SPOTLIGHT: TRI-AGENT AI ADVISORY */}
+            {/* ============================================================== */}
+            {/* STAGE 2 SPOTLIGHT: TRI-AGENT AI ADVISORY CONSENSUS            */}
+            {/* ============================================================== */}
             {activeStage === 2 && (
               <div className="space-y-5 animate-fadeIn">
                 <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-4">
@@ -426,10 +529,14 @@ export function ReviewsPage({
                     </span>
                     <div>
                       <h2 className="text-base font-semibold text-[#0b1f17]">
-                        Stage 2 · Tri-Agent AI Consensus Mesh
+                        {isDeveloper
+                          ? 'Stage 2 · Multi-Agent Contract Acceptance Audit'
+                          : 'Stage 2 · Tri-Agent Fiduciary Risk & Consensus Report'}
                       </h2>
                       <p className="text-[11px] text-[#6b7f75]">
-                        Multi-agent evidence appraisal, vulnerability screening, and contract arbitration.
+                        {isDeveloper
+                          ? 'Independent multi-agent evaluation verifying your deliverables against contract requirements.'
+                          : 'Consensus synthesis from Evidence Agent, Risk Agent, and Arbitrator prior to buyer sign-off.'}
                       </p>
                     </div>
                   </div>
@@ -440,18 +547,18 @@ export function ReviewsPage({
 
                 {latestEval ? (
                   <div className="space-y-4">
-                    {/* 3 Agents Staggered Grid */}
+                    {/* 3 Agents Staggered Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] space-y-1.5">
                         <div className="text-[10px] font-mono uppercase tracking-wider text-[#6b7f75]">
-                          Agent 1 · Verification
+                          Agent 1 · Evidence
                         </div>
                         <div className="text-xs font-semibold text-[#0b1f17]">Evidence Agent</div>
                         <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
                           {latestEval.evidenceAnalysis.verifiedCount}/{latestEval.evidenceAnalysis.totalCount} Verified
                         </div>
                         <p className="text-[10px] text-[#6b7f75] leading-tight">
-                          Telemetry signature matched pull request and CI logs.
+                          Verified commit SHA and PR merge telemetry against repository.
                         </p>
                       </div>
 
@@ -464,28 +571,28 @@ export function ReviewsPage({
                           {latestEval.riskAnalysis.overallRiskSeverity}
                         </div>
                         <p className="text-[10px] text-[#6b7f75] leading-tight">
-                          Slither / npm audit scans confirm zero exploit vectors.
+                          Zero CVEs. Dependency tree sanitized against exploits.
                         </p>
                       </div>
 
                       <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5">
                         <div className="text-[10px] font-mono uppercase tracking-wider text-[#2f7a50]">
-                          Agent 3 · Consensus
+                          Agent 3 · Arbitrator
                         </div>
                         <div className="text-xs font-semibold text-[#1c4b31]">Arbitrator Agent</div>
                         <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
                           {latestEval.arbitratorRecommendation.recommendedOutcome}
                         </div>
                         <p className="text-[10px] text-[#3d5248] leading-tight">
-                          Contractual acceptance criteria satisfied.
+                          Contractual acceptance criteria verified.
                         </p>
                       </div>
                     </div>
 
-                    {/* Acceptance Criteria Glowing Badges */}
+                    {/* Acceptance Criteria Status Chips */}
                     <div className="p-4 rounded-2xl bg-white border border-[rgba(11,31,23,0.08)] space-y-2">
                       <div className="text-[11px] font-mono uppercase tracking-wider text-[#6b7f75]">
-                        Contractual Acceptance Criteria:
+                        Contractual Acceptance Criteria Status:
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
@@ -495,12 +602,12 @@ export function ReviewsPage({
                           <span>✓</span> <span>AC-2: 64/64 Unit &amp; Integration Tests</span>
                         </span>
                         <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
-                          <span>✓</span> <span>AC-3: Zero CVEs in Dependency Tree</span>
+                          <span>✓</span> <span>AC-3: Zero High/Critical CVEs</span>
                         </span>
                       </div>
                     </div>
 
-                    {/* AI Advisory Rationale Quote */}
+                    {/* AI Advisory Rationale Block */}
                     <div className="p-4 rounded-2xl bg-[#f6f5f0] border-l-4 border-[#10b981] space-y-1 text-xs text-[#3d5248]">
                       <div className="font-semibold text-[#0b1f17] flex items-center gap-2">
                         <span>Autonomous Arbitrator Synthesis:</span>
@@ -516,9 +623,9 @@ export function ReviewsPage({
                 ) : (
                   <div className="p-8 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-center space-y-2">
                     <span className="text-2xl">🤖</span>
-                    <h3 className="text-xs font-semibold text-[#0b1f17]">Evaluation Not Executed</h3>
+                    <h3 className="text-xs font-semibold text-[#0b1f17]">Evaluation Not Executed Yet</h3>
                     <p className="text-[11px] text-[#6b7f75] max-w-sm mx-auto">
-                      Click &quot;Run AI Evaluation&quot; in Stage 1 to generate tri-agent consensus.
+                      Click &quot;Run AI Evaluation&quot; in Stage 1 to trigger multi-agent consensus.
                     </p>
                   </div>
                 )}
@@ -539,14 +646,16 @@ export function ReviewsPage({
                     onClick={() => setActiveStage(3)}
                     className="px-6 py-2.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-semibold shadow-md transition flex items-center gap-2 group"
                   >
-                    <span>Proceed to Policy Gate</span>
+                    <span>{isDeveloper ? 'Check My Payout Status' : 'Proceed to Fiduciary Gate'}</span>
                     <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STAGE 3 SPOTLIGHT: POLICY GATE & HUMAN APPROVAL */}
+            {/* ============================================================== */}
+            {/* STAGE 3 SPOTLIGHT: POLICY GATE / DEVELOPER EARNINGS           */}
+            {/* ============================================================== */}
             {activeStage === 3 && (
               <div className="space-y-5 animate-fadeIn">
                 <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-4">
@@ -556,15 +665,19 @@ export function ReviewsPage({
                     </span>
                     <div>
                       <h2 className="text-base font-semibold text-[#0b1f17]">
-                        Stage 3 · Deterministic Policy Gate &amp; Approval
+                        {isDeveloper
+                          ? 'Stage 3 · Eligible Developer Payout Breakdown'
+                          : 'Stage 3 · Deterministic Policy Gate & Buyer Sign-Off'}
                       </h2>
                       <p className="text-[11px] text-[#6b7f75]">
-                        Deterministic formula calculation, late penalty deductions, and human fiduciary clearance.
+                        {isDeveloper
+                          ? 'Deterministic payout calculation based on contractual acceptance and SLA timeline.'
+                          : 'Review calculated permitted cap and grant formal fiduciary approval for settlement release.'}
                       </p>
                     </div>
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
-                    FIDUCIARY GATE
+                    {isDeveloper ? 'DEVELOPER PAYOUT' : 'FIDUCIARY GATE'}
                   </span>
                 </div>
 
@@ -583,95 +696,114 @@ export function ReviewsPage({
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[#6b7f75]">
-                    <span>Security Risk Deductions:</span>
+                    <span>Security Exploit Deductions:</span>
                     <span className="text-[#0b1f17] font-semibold">$0.00</span>
                   </div>
                   <div className="pt-3 border-t border-[rgba(11,31,23,0.12)] flex items-center justify-between">
                     <span className="font-sans font-bold text-sm text-[#0b1f17]">
-                      Permitted Fiduciary Disbursement Cap:
+                      {isDeveloper ? 'Your Eligible Payout Cap:' : 'Permitted Fiduciary Disbursement Cap:'}
                     </span>
-                    <span className="text-lg font-bold text-[#10b981]">
+                    <span className="text-xl font-bold text-[#10b981]">
                       {formatUsdCents(policy?.permittedAmountCents ?? 227500)}
                     </span>
                   </div>
                 </div>
 
-                {isApprovedByHuman ? (
-                  <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] text-[#1c4b31] space-y-1.5">
-                    <div className="flex items-center gap-2 font-bold text-xs">
-                      <span>✓</span> <span>Fiduciary Clearance Granted</span>
-                    </div>
-                    <p className="text-[11px] text-[#3d5248] leading-tight">
-                      Decision: <strong>{latestApproval?.decision ?? 'APPROVE'}</strong> • Permitted Amount:{' '}
-                      <strong>{formatUsdCents(latestApproval?.approvedAmountCents ?? policy?.permittedAmountCents ?? 227500)}</strong>
-                    </p>
-                    <p className="text-[10px] text-[#6b7f75] italic pt-1 border-t border-[#a8d8b9]/50">
-                      Rationale: &quot;{latestApproval?.justification ?? 'Acceptance criteria verified. Fiduciary gate cleared for settlement release.'}&quot;
-                    </p>
-                  </div>
-                ) : isDeveloper ? (
-                  <div className="p-4 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] text-[#8a681c] space-y-1.5 text-center">
-                    <div className="text-xs font-bold flex items-center justify-center gap-1.5">
-                      <span>⏳</span> <span>Awaiting Client Fiduciary Approval</span>
-                    </div>
-                    <p className="text-[11px] text-[#3d5248]">
-                      Client (Elena Vance) must clear the fiduciary disbursement gate before funds are captured.
-                    </p>
+                {isDeveloper ? (
+                  /* DEVELOPER PERSPECTIVE: Payout Status (Zero Buyer Buttons) */
+                  <div className="space-y-3">
+                    {isApprovedByHuman ? (
+                      <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] text-[#1c4b31] space-y-1">
+                        <div className="flex items-center gap-2 font-bold text-xs">
+                          <span>✓</span> <span>Milestone Approved by Client (Elena Vance)</span>
+                        </div>
+                        <p className="text-[11px] text-[#3d5248]">
+                          Approved amount: <strong>{formatUsdCents(policy?.permittedAmountCents ?? 227500)}</strong>. Escrow funds are ready for release in Stage 4.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] text-[#8a681c] space-y-1.5 text-center">
+                        <div className="text-xs font-bold flex items-center justify-center gap-1.5">
+                          <span>⏳</span> <span>Pending Client Fiduciary Approval</span>
+                        </div>
+                        <p className="text-[11px] text-[#3d5248]">
+                          Client (Elena Vance) must review and approve the fiduciary gate before funds can be released.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="space-y-3 p-4 rounded-2xl bg-white border border-[rgba(11,31,23,0.08)]">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[11px] text-[#6b7f75] block mb-1">
-                          Disbursement Amount (Cents):
-                        </label>
-                        <input
-                          type="number"
-                          value={approvedAmountCentsInput}
-                          onChange={(e) => setApprovedAmountCentsInput(Number(e.target.value))}
-                          className="w-full px-3 py-2 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#10b981]"
-                        />
+                  /* CLIENT PERSPECTIVE: Buyer Approval Form */
+                  <div className="space-y-3">
+                    {isApprovedByHuman ? (
+                      <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] text-[#1c4b31] space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-xs">
+                          <span>✓</span> <span>Fiduciary Approval Recorded</span>
+                        </div>
+                        <p className="text-[11px] text-[#3d5248] leading-tight">
+                          Decision: <strong>{latestApproval?.decision ?? 'APPROVE'}</strong> • Permitted Amount:{' '}
+                          <strong>{formatUsdCents(latestApproval?.approvedAmountCents ?? policy?.permittedAmountCents ?? 227500)}</strong>
+                        </p>
+                        <p className="text-[10px] text-[#6b7f75] italic pt-1 border-t border-[#a8d8b9]/50">
+                          Rationale: &quot;{latestApproval?.justification ?? 'Acceptance criteria verified. Fiduciary gate cleared for settlement release.'}&quot;
+                        </p>
                       </div>
-                      <div>
-                        <label className="text-[11px] text-[#6b7f75] block mb-1">
-                          Fiduciary Justification:
-                        </label>
-                        <input
-                          type="text"
-                          value={justification}
-                          onChange={(e) => setJustification(e.target.value)}
-                          placeholder="Document rationale..."
-                          className="w-full px-3 py-2 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs outline-none focus:border-[#10b981]"
-                        />
-                      </div>
-                    </div>
+                    ) : (
+                      <div className="space-y-3 p-4 rounded-2xl bg-white border border-[rgba(11,31,23,0.08)]">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] text-[#6b7f75] block mb-1">
+                              Disbursement Amount (Cents):
+                            </label>
+                            <input
+                              type="number"
+                              value={approvedAmountCentsInput}
+                              onChange={(e) => setApprovedAmountCentsInput(Number(e.target.value))}
+                              className="w-full px-3 py-2 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#10b981]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-[#6b7f75] block mb-1">
+                              Fiduciary Justification (Required):
+                            </label>
+                            <input
+                              type="text"
+                              value={justification}
+                              onChange={(e) => setJustification(e.target.value)}
+                              placeholder="Document rationale..."
+                              className="w-full px-3 py-2 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs outline-none focus:border-[#10b981]"
+                            />
+                          </div>
+                        </div>
 
-                    <div className="flex items-center gap-2 pt-2">
-                      <button
-                        disabled={loading}
-                        onClick={() => {
-                          void onReviewAction('approve');
-                          setActiveStage(4);
-                        }}
-                        className="px-5 py-2.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] font-semibold text-white text-xs transition disabled:opacity-40"
-                      >
-                        ✓ Approve Payout
-                      </button>
-                      <button
-                        disabled={loading}
-                        onClick={() => void onReviewAction('request-changes')}
-                        className="px-4 py-2.5 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] font-medium text-[#8a681c] text-xs transition disabled:opacity-40"
-                      >
-                        Revise
-                      </button>
-                      <button
-                        disabled={loading}
-                        onClick={() => void onReviewAction('reject')}
-                        className="px-4 py-2.5 rounded-full bg-[#fdf2f2] hover:bg-[#fbe4e4] border border-[#f3c2c2] font-medium text-[#a62b2b] text-xs transition disabled:opacity-40"
-                      >
-                        Reject
-                      </button>
-                    </div>
+                        <div className="flex items-center gap-2 pt-2">
+                          <button
+                            disabled={loading}
+                            onClick={() => {
+                              void onReviewAction('approve');
+                              setActiveStage(4);
+                            }}
+                            className="px-5 py-2.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] font-semibold text-white text-xs transition disabled:opacity-40"
+                          >
+                            ✓ Approve Payout
+                          </button>
+                          <button
+                            disabled={loading}
+                            onClick={() => void onReviewAction('request-changes')}
+                            className="px-4 py-2.5 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] font-medium text-[#8a681c] text-xs transition disabled:opacity-40"
+                          >
+                            Revise
+                          </button>
+                          <button
+                            disabled={loading}
+                            onClick={() => void onReviewAction('reject')}
+                            className="px-4 py-2.5 rounded-full bg-[#fdf2f2] hover:bg-[#fbe4e4] border border-[#f3c2c2] font-medium text-[#a62b2b] text-xs transition disabled:opacity-40"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -687,14 +819,16 @@ export function ReviewsPage({
                     onClick={() => setActiveStage(4)}
                     className="px-6 py-2.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-semibold shadow-md transition flex items-center gap-2 group"
                   >
-                    <span>Proceed to Settlement Vault</span>
+                    <span>{isDeveloper ? 'View Escrow Protection' : 'Proceed to Settlement Vault'}</span>
                     <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STAGE 4 SPOTLIGHT: PAYPAL ORDERS V2 SETTLEMENT VAULT */}
+            {/* ============================================================== */}
+            {/* STAGE 4 SPOTLIGHT: PAYPAL ESCROW & SETTLEMENT                 */}
+            {/* ============================================================== */}
             {activeStage === 4 && (
               <div className="space-y-5 animate-fadeIn">
                 <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-4">
@@ -704,10 +838,14 @@ export function ReviewsPage({
                     </span>
                     <div>
                       <h2 className="text-base font-semibold text-[#0b1f17]">
-                        Stage 4 · Virtual Escrow Hold &amp; Settlement Vault
+                        {isDeveloper
+                          ? 'Stage 4 · Escrow Protection & Bank Disbursement'
+                          : 'Stage 4 · Virtual Escrow Hold & Settlement Vault'}
                       </h2>
                       <p className="text-[11px] text-[#6b7f75]">
-                        Non-custodial 29-day authorization hold and programmatic release via PayPal Orders API v2.
+                        {isDeveloper
+                          ? '29-day pre-authorized funds guaranteed in PayPal sandbox escrow awaiting disbursement.'
+                          : 'Non-custodial 29-day authorization hold and programmatic release via PayPal Orders API v2.'}
                       </p>
                     </div>
                   </div>
@@ -788,13 +926,13 @@ export function ReviewsPage({
                   )}
                 </div>
 
-                {/* Role Specific Action Buttons */}
+                {/* Role Specific Actions */}
                 <div className="pt-4 border-t border-[rgba(11,31,23,0.08)]">
                   {isDeveloper ? (
                     <div className="space-y-3">
                       <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] text-[#1c4b31] space-y-1">
                         <div className="text-xs font-bold flex items-center gap-1.5">
-                          <span>🛡️</span> <span>Developer Payout Protection</span>
+                          <span>🛡️</span> <span>Developer Escrow Guarantee</span>
                         </div>
                         <p className="text-[11px] text-[#3d5248]">
                           {isCaptured
@@ -859,25 +997,31 @@ export function ReviewsPage({
           </div>
         </div>
 
-        {/* 3. STICKY FIDUCIARY VAULT SUMMARY SIDEBAR (Col-span 4) */}
+        {/* ============================================================== */}
+        {/* 3. STICKY SIDEBAR TAILORED BY ROLE (Col-span 4)                */}
+        {/* ============================================================== */}
         <div className="lg:col-span-4 space-y-4">
           <div className="sticky top-6 p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-[0_4px_24px_-4px_rgba(11,31,23,0.06)] space-y-5">
             <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-3.5">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+                <span className={`w-2 h-2 rounded-full animate-pulse ${isDeveloper ? 'bg-[#2563eb]' : 'bg-[#10b981]'}`} />
                 <span className="text-xs font-mono uppercase tracking-wider text-[#0b1f17] font-semibold">
-                  Fiduciary Vault Ledger
+                  {isDeveloper ? 'Developer Earnings Vault' : 'Client Fiduciary Vault'}
                 </span>
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] font-mono font-medium">
-                LIVE
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium ${
+                  isDeveloper ? 'bg-[#e0e7ff] text-[#2563eb]' : 'bg-[#e9efe6] text-[#2f7a50]'
+                }`}
+              >
+                {isDeveloper ? 'MY EARNINGS' : 'FIDUCIARY'}
               </span>
             </div>
 
-            {/* Prominent Permitted Payout Display */}
+            {/* Payout Display */}
             <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-center space-y-1">
               <span className="text-[11px] font-mono text-[#6b7f75] uppercase tracking-wider block">
-                Permitted Disbursement Cap
+                {isDeveloper ? 'My Eligible Net Payout' : 'Permitted Disbursement Cap'}
               </span>
               <div className="text-3xl font-extrabold text-[#0b1f17] font-mono tracking-tight">
                 {formatUsdCents(policy?.permittedAmountCents ?? 227500)}
@@ -888,47 +1032,53 @@ export function ReviewsPage({
               </div>
             </div>
 
-            {/* Quick Status Checks */}
+            {/* Status Checks Tailored by Persona */}
             <div className="space-y-2.5 text-xs font-mono">
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[rgba(11,31,23,0.06)]">
-                <span className="text-[#6b7f75]">Milestone State:</span>
+                <span className="text-[#6b7f75]">
+                  {isDeveloper ? 'My Code Deliverable:' : 'Developer Submission:'}
+                </span>
                 <span className="font-semibold text-[#0b1f17]">
-                  {reviewDetails?.milestone.status ?? 'ACTIVE'}
+                  {latestSub ? `PR #${latestSub.attemptNumber} (Merged)` : 'Pending'}
                 </span>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[rgba(11,31,23,0.06)]">
-                <span className="text-[#6b7f75]">AI Advisory:</span>
+                <span className="text-[#6b7f75]">AI Verification:</span>
                 <span className="font-semibold text-[#10b981]">
                   {latestEval ? `${latestEval.arbitratorRecommendation.recommendedOutcome} (3/3 AC)` : 'PENDING'}
                 </span>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[rgba(11,31,23,0.06)]">
-                <span className="text-[#6b7f75]">Bank Escrow:</span>
+                <span className="text-[#6b7f75]">
+                  {isDeveloper ? 'Escrow Protection:' : 'Bank Escrow Hold:'}
+                </span>
                 <span className="font-semibold text-[#0b1f17]">
                   {isCaptured ? 'SETTLED' : isAuthorized ? 'AUTHORIZED (29d)' : 'PENDING'}
                 </span>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[rgba(11,31,23,0.06)]">
-                <span className="text-[#6b7f75]">Audit Integrity:</span>
+                <span className="text-[#6b7f75]">Audit Trail:</span>
                 <span className="font-semibold text-[#2f7a50]">
                   SHA-256 VERIFIED
                 </span>
               </div>
             </div>
 
-            {/* Fast Stage Jump Buttons */}
+            {/* Quick Stage Jump */}
             <div className="space-y-1.5 pt-2 border-t border-[rgba(11,31,23,0.08)]">
               <span className="text-[10px] font-mono text-[#6b7f75] uppercase tracking-wider block">
                 Quick Stage Jump:
               </span>
               <div className="grid grid-cols-2 gap-1.5">
-                {stages.map((st) => (
+                {currentStages.map((st) => (
                   <button
                     key={st.id}
                     onClick={() => setActiveStage(st.id)}
                     className={`px-3 py-1.5 rounded-xl text-[11px] font-medium transition text-left truncate ${
                       activeStage === st.id
-                        ? 'bg-[#0b1f17] text-white'
+                        ? isDeveloper
+                          ? 'bg-[#2563eb] text-white'
+                          : 'bg-[#0b1f17] text-white'
                         : 'bg-[#f6f5f0] text-[#3d5248] hover:bg-[#ecebe4]'
                     }`}
                   >
