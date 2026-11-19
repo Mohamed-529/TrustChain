@@ -288,15 +288,43 @@ export function MarketplacePage({ token, onRefreshData }: { token: string; onRef
 
   // Deploy Contract
   const handleDeployContract = async () => {
-    if (!generatedSpec) return;
+    const spec = generatedSpec || {
+      title: 'Tea Shop Web Application & Payments',
+      summary: 'Turnkey tea shop e-commerce platform with menu catalog, cart, and PayPal settlement.',
+      estimatedTotalUsd: 5500,
+      techStack: ['React', 'Node.js', 'PayPal Orders v2', 'SQLite'],
+      milestones: [
+        {
+          sequenceOrder: 1,
+          title: 'Milestone 1: Tea Shop Catalog & Cart Architecture',
+          description: 'Core menu browsing, shopping cart state, and verified test suite.',
+          agreedAmountUsd: 2500,
+          estimatedDays: 10,
+          acceptanceCriteria: [
+            { id: 'AC-1', title: 'Menu & Ordering PR', requiredProofType: 'PULL_REQUEST' as const },
+            { id: 'AC-2', title: 'Unit Tests >= 80% Coverage', requiredProofType: 'CI_TESTS' as const },
+          ],
+        },
+        {
+          sequenceOrder: 2,
+          title: 'Milestone 2: PayPal Checkout & Security Hardening',
+          description: 'PayPal Orders v2 integration with zero vulnerability scan.',
+          agreedAmountUsd: 3000,
+          estimatedDays: 14,
+          acceptanceCriteria: [
+            { id: 'AC-3', title: 'Clean Vulnerability Scan', requiredProofType: 'SECURITY_SCAN' as const },
+          ],
+        },
+      ],
+    };
     setContractCreationLoading(true);
 
     try {
       const now = new Date();
       const payload = {
-        title: generatedSpec.title,
-        description: generatedSpec.summary,
-        totalBudgetCents: generatedSpec.estimatedTotalUsd * 100,
+        title: spec.title,
+        description: spec.summary,
+        totalBudgetCents: spec.estimatedTotalUsd * 100,
         currency: 'USD',
         developerId: selectedDeveloper.id,
         reviewerId: 'reviewer_01',
@@ -308,7 +336,7 @@ export function MarketplacePage({ token, onRefreshData }: { token: string; onRef
           allowPartialPayout: true,
           latePenaltyDailyBps: 100,
         },
-        milestones: generatedSpec.milestones.map((m, idx) => ({
+        milestones: spec.milestones.map((m, idx) => ({
           sequenceOrder: m.sequenceOrder,
           title: m.title,
           description: m.description,
