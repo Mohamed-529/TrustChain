@@ -98,6 +98,42 @@ export class UserRepository {
       .all();
     return rows.map((r) => this.mapUserRow(r));
   }
+
+  public create(user: {
+    id: string;
+    name: string;
+    email: string;
+    passwordHash: string;
+    role: UserRole;
+    isActive: boolean;
+    isDemoAccount: boolean;
+    createdAt: string;
+  }): User {
+    this.rawDb
+      .prepare(
+        `INSERT INTO users (id, name, email, password_hash, role, is_active, is_demo_account, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        user.id,
+        user.name,
+        user.email,
+        user.passwordHash,
+        user.role,
+        user.isActive ? 1 : 0,
+        user.isDemoAccount ? 1 : 0,
+        user.createdAt
+      );
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      isDemoAccount: user.isDemoAccount,
+      createdAt: user.createdAt,
+    };
+  }
 }
 
 export class SessionRepository {

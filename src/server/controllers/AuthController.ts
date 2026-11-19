@@ -13,6 +13,16 @@ export class AuthController {
     this.authService = authService;
   }
 
+  public register = async (req: ApiRequest, res: ApiResponse, next: NextFunction): Promise<void> => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const result = await this.authService.register(body);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
   public login = async (req: ApiRequest, res: ApiResponse, next: NextFunction): Promise<void> => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;

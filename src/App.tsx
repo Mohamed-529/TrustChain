@@ -33,6 +33,7 @@ import { DisputesPage } from './pages/DisputesPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { DeveloperPortalPage } from './pages/DeveloperPortalPage.tsx';
 import { MarketplacePage } from './pages/MarketplacePage.tsx';
+import { InnovativeAuthPortalModal } from './components/auth/InnovativeAuthPortalModal.tsx';
 
 function AppContent() {
   const currentPath = usePathname();
@@ -78,6 +79,7 @@ function AppContent() {
   const [showWalkthrough, setShowWalkthrough] = useState<boolean>(false);
   const [showSearch, setShowSearch] = useState<boolean>(false);
   const [showCreateProject, setShowCreateProject] = useState<boolean>(false);
+  const [showAuthPortal, setShowAuthPortal] = useState<boolean>(true);
 
   // Global keyboard shortcut: / or Ctrl+K triggers Search
   useEffect(() => {
@@ -815,8 +817,25 @@ function AppContent() {
       onStartTour={() => setShowWalkthrough(true)}
       onOpenSearch={() => setShowSearch(true)}
       onOpenCreateProject={() => setShowCreateProject(true)}
+      onOpenAuthPortal={() => setShowAuthPortal(true)}
     >
       {renderActivePage()}
+
+      {/* Innovative First-Open Authentication & Registration Portal */}
+      <InnovativeAuthPortalModal
+        isOpen={showAuthPortal}
+        onClose={() => setShowAuthPortal(false)}
+        onAuthenticated={(newToken, newUser) => {
+          setToken(newToken);
+          setCurrentUser(newUser);
+          setStatusBanner({
+            type: 'success',
+            message: `Authenticated as ${newUser.name} (${newUser.role}) via HMAC-SHA256 session.`,
+          });
+          void refreshAllData(newToken, selectedMilestoneId, selectedContractId);
+        }}
+        onDemoSwitch={switchPersona}
+      />
 
       {/* Interactive Contextual Walkthrough Modal with 7 Invariants */}
       <InteractiveWalkthroughModal

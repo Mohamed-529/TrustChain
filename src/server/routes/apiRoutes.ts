@@ -179,6 +179,7 @@ export function createApiRouter(params: {
   });
 
   // Public authentication endpoints
+  router.post('/auth/register', authController.register);
   router.post('/auth/login', authController.login);
   router.post('/auth/demo-switch', authController.demoSwitch);
 

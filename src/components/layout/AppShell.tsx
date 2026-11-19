@@ -21,6 +21,7 @@ interface AppShellProps {
   onStartTour: () => void;
   onOpenSearch: () => void;
   onOpenCreateProject: () => void;
+  onOpenAuthPortal?: () => void;
   children: React.ReactNode;
 }
 
@@ -37,6 +38,7 @@ export function AppShell({
   onStartTour,
   onOpenSearch,
   onOpenCreateProject,
+  onOpenAuthPortal,
   children,
 }: AppShellProps) {
   const currentPath = usePathname();
@@ -204,6 +206,18 @@ export function AppShell({
                 <span>✨</span>
                 <span className="hidden md:inline">Guided Tour</span>
               </button>
+
+              {/* Innovative Auth Gateway Trigger */}
+              {onOpenAuthPortal && (
+                <button
+                  onClick={onOpenAuthPortal}
+                  className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+                  title="Open Innovative Login / Registration Portal"
+                >
+                  <span>🔑</span>
+                  <span className="hidden sm:inline">Sign In / Join</span>
+                </button>
+              )}
 
               {/* Persona Switcher Dropdown */}
               <div className="relative" ref={personaRef}>

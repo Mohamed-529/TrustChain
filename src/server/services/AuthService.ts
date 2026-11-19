@@ -25,6 +25,12 @@ export function scryptAsync(password: string, salt: Buffer, keylen = 64): Promis
   });
 }
 
+export async function hashPasswordAsync(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16);
+  const derived = await scryptAsync(password, salt, 64);
+  return `${salt.toString('hex')}:${derived.toString('hex')}`;
+}
+
 export async function verifyPasswordAsync(password: string, storedHash: string): Promise<boolean> {
   const parts = storedHash.split(':');
   if (parts.length !== 2) {
@@ -206,6 +212,53 @@ export class AuthService {
 
     const { passwordHash: _omitted, ...safeUser } = userWithPwd;
     return this.issueSessionWithinTx(safeUser, 'AUTH_LOGIN');
+  }
+
+  /**
+   * Registers a new Client or Developer and issues an authenticated session token.
+   */
+  public async register(input: {
+    name?: unknown;
+    email?: unknown;
+    password?: unknown;
+    role?: unknown;
+  }): Promise<{ token: string; user: User; expiresAt: number; jti: string }> {
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
+    const password = typeof input.password === 'string' ? input.password : 'Password123!';
+    const roleInput = typeof input.role === 'string' ? input.role.trim().toUpperCase() : 'CLIENT';
+
+    if (!name || name.length < 2) {
+      throw new AppError(400, 'INVALID_NAME', 'Name must be at least 2 characters.');
+    }
+    if (!email || !email.includes('@')) {
+      throw new AppError(400, 'INVALID_EMAIL', 'A valid email address is required.');
+    }
+    if (roleInput !== 'CLIENT' && roleInput !== 'DEVELOPER') {
+      throw new AppError(400, 'INVALID_ROLE', 'Registration role must be CLIENT or DEVELOPER.');
+    }
+
+    const existing = this.userRepo.findByEmailWithPassword(email);
+    if (existing) {
+      throw new AppError(409, 'EMAIL_ALREADY_EXISTS', 'An account with this email address already exists.');
+    }
+
+    const passwordHash = await hashPasswordAsync(password);
+    const userId = `${roleInput.toLowerCase()}_${Date.now().toString(36)}`;
+    const createdAt = new Date().toISOString();
+
+    const createdUser = this.userRepo.create({
+      id: userId,
+      name,
+      email,
+      passwordHash,
+      role: roleInput as 'CLIENT' | 'DEVELOPER',
+      isActive: true,
+      isDemoAccount: false,
+      createdAt,
+    });
+
+    return this.issueSessionWithinTx(createdUser, 'AUTH_LOGIN');
   }
 
   /**
