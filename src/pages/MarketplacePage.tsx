@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from '../router/Router.tsx';
-import type { User } from '../types/domain.ts';
+import type { User, Contract } from '../types/domain.ts';
 
 interface DeveloperProfile {
   id: string;
@@ -152,10 +152,14 @@ const AVAILABLE_PROJECTS: ProjectOpportunity[] = [
 export function MarketplacePage({
   token,
   currentUser,
+  contracts,
+  onSelectContract,
   onRefreshData,
 }: {
   token: string;
   currentUser?: User | null;
+  contracts?: Contract[];
+  onSelectContract?: (id: string) => void;
   onRefreshData?: () => void;
 }) {
   const navigate = useNavigate();
@@ -809,6 +813,61 @@ export function MarketplacePage({
                   <div className="text-xl font-black text-[#0b1f17]">$38,500 USD</div>
                   <div className="text-[10px] text-[#6b7f75] mt-0.5">Zero Lost Disputes</div>
                 </div>
+              </div>
+            </section>
+
+            {/* ASSIGNED CLIENT CONTRACTS (REAL CONTRACT INGESTION) */}
+            <section className="bg-white rounded-3xl p-6 sm:p-8 border border-[rgba(11,31,23,0.08)] shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[rgba(11,31,23,0.06)] pb-4">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold text-[#0b1f17] flex items-center gap-2">
+                    <span>📋</span> <span>My Assigned Client Contracts</span>
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#3d5248]">
+                    Active software development projects created by Elena Vance and assigned to Marcus Chen.
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono px-3 py-1 rounded-full bg-[#edf6f0] text-[#1c4b31] font-bold border border-[#a8d8b9]">
+                  {contracts?.length ?? 1} Projects Assigned
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {(contracts ?? []).map((contract) => (
+                  <div
+                    key={contract.id}
+                    className="p-5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-[#2563eb] transition"
+                  >
+                    <div className="space-y-1.5 max-w-2xl">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-[#0b1f17]">{contract.title}</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#e9efe6] text-[#2f7a50] font-bold">
+                          {contract.status}
+                        </span>
+                        <span className="text-[10px] font-mono text-[#6b7f75]">ID: {contract.id}</span>
+                      </div>
+                      <p className="text-xs text-[#3d5248] leading-relaxed">{contract.description}</p>
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono text-[#6b7f75]">
+                        <span>Client: <strong className="text-[#0b1f17]">Elena Vance</strong></span>
+                        <span>•</span>
+                        <span>Milestones: <strong className="text-[#0b1f17]">{contract.milestones?.length || 2}</strong></span>
+                        <span>•</span>
+                        <span>Budget: <strong className="text-[#2f7a50]">${(contract.totalBudgetCents / 100).toLocaleString()} USD</strong></span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        onSelectContract?.(contract.id);
+                        navigate('/reviews');
+                      }}
+                      className="px-5 py-2.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-bold transition shadow-sm whitespace-nowrap flex items-center gap-1.5 shrink-0"
+                    >
+                      <span>Work on Deliverables</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                ))}
               </div>
             </section>
 

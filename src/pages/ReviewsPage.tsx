@@ -5,6 +5,8 @@ import type {
   PayPalTransactionRecord,
   EvidenceProvenanceVerificationRecord,
   User,
+  Contract,
+  Milestone,
 } from '../types/domain.ts';
 
 export interface CustomEvidenceInput {
@@ -23,6 +25,9 @@ interface ReviewsPageProps {
   selectedMilestoneId: string;
   setSelectedMilestoneId: (id: string) => void;
   reviewDetails: MilestoneReviewDetails | null;
+  contracts?: Contract[];
+  selectedContractId?: string;
+  onSelectContract?: (id: string) => void;
   provenanceData: {
     latestProvenance: EvidenceProvenanceVerificationRecord | null;
     provenanceHistory: EvidenceProvenanceVerificationRecord[];
@@ -57,6 +62,9 @@ export function ReviewsPage({
   selectedMilestoneId,
   setSelectedMilestoneId,
   reviewDetails,
+  contracts,
+  selectedContractId,
+  onSelectContract,
   provenanceData,
   paypalTransactions,
   loading,
@@ -76,6 +84,21 @@ export function ReviewsPage({
 }: ReviewsPageProps) {
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [activeStage, setActiveStage] = useState<1 | 2 | 3 | 4>(1);
+
+  const activeContract =
+    contracts?.find((c) => c.id === selectedContractId) ?? contracts?.[0] ?? null;
+
+  const milestonesList =
+    activeContract?.milestones && activeContract.milestones.length > 0
+      ? activeContract.milestones.map((m: Milestone) => ({
+          id: m.id,
+          label: `${m.title} (${m.status})`,
+        }))
+      : [
+          { id: 'ms_seed_01', label: 'Milestone 1 · Core Deliverable (Active)' },
+          { id: 'ms_seed_02', label: 'Milestone 2 · Settlement Policy Engine (Case B)' },
+          { id: 'ms_seed_03', label: 'Milestone 3 · Audit Replay & Security' },
+        ];
 
   // Custom Evidence Ingestion State (e.g. Flight Booking System or custom repo)
   const [intakeMode, setIntakeMode] = useState<'CUSTOM' | 'PRESET'>('CUSTOM');
@@ -311,31 +334,46 @@ export function ReviewsPage({
         </div>
       </div>
 
-      {/* Target Milestone Selector */}
-      <div className="flex items-center gap-2 border-b border-[rgba(11,31,23,0.08)] pb-3 overflow-x-auto no-scrollbar py-1">
-        <span className="text-[11px] text-[#6b7f75] font-mono mr-2 tracking-wide uppercase">
-          Target Milestone:
-        </span>
-        {[
-          { id: 'ms_seed_01', label: 'Milestone 1 · Core Deliverable (Active)' },
-          { id: 'ms_seed_02', label: 'Milestone 2 · Settlement Policy Engine (Case B)' },
-          { id: 'ms_seed_03', label: 'Milestone 3 · Audit Replay & Security' },
-        ].map((m) => {
-          const isSelected = selectedMilestoneId === m.id;
-          return (
-            <button
-              key={m.id}
-              onClick={() => setSelectedMilestoneId(m.id)}
-              className={`px-4 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
-                isSelected
-                  ? 'bg-[#0b1f17] text-white shadow-sm'
-                  : 'bg-white border border-[rgba(11,31,23,0.12)] text-[#3d5248] hover:bg-[#f6f5f0] hover:text-[#0b1f17]'
-              }`}
+      {/* Target Milestone Selector & Contract Indicator */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[rgba(11,31,23,0.08)] pb-3 py-1">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <span className="text-[11px] text-[#6b7f75] font-mono mr-1 tracking-wide uppercase shrink-0">
+            Target Milestone:
+          </span>
+          {milestonesList.map((m: { id: string; label: string }) => {
+            const isSelected = selectedMilestoneId === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setSelectedMilestoneId(m.id)}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
+                  isSelected
+                    ? 'bg-[#0b1f17] text-white shadow-sm'
+                    : 'bg-white border border-[rgba(11,31,23,0.12)] text-[#3d5248] hover:bg-[#f6f5f0] hover:text-[#0b1f17]'
+                }`}
+              >
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {contracts && contracts.length > 1 && (
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-[#6b7f75] font-mono text-[11px]">Contract:</span>
+            <select
+              value={selectedContractId ?? activeContract?.id}
+              onChange={(e) => onSelectContract?.(e.target.value)}
+              className="px-2.5 py-1 rounded-full bg-white border border-[rgba(11,31,23,0.15)] text-xs font-medium text-[#0b1f17] outline-none"
             >
-              {m.label}
-            </button>
-          );
-        })}
+              {contracts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* 1. TOP ANIMATED PIPELINE STEPPER */}

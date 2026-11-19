@@ -263,16 +263,20 @@ export class ContractService {
       );
     }
 
-    if (typeof input.developerId !== 'string' || typeof input.reviewerId !== 'string') {
+    if (typeof input.developerId !== 'string' || !input.developerId.trim()) {
       throw new AppError(
         400,
         'INVALID_PARTICIPANTS',
-        'Both developerId and reviewerId must be specified.'
+        'developerId must be specified.'
       );
     }
 
     const developerId = input.developerId.trim();
-    const reviewerId = input.reviewerId.trim();
+    // Default reviewerId to the contract Client (actor.id) if omitted
+    const reviewerId =
+      typeof input.reviewerId === 'string' && input.reviewerId.trim()
+        ? input.reviewerId.trim()
+        : actor.id;
 
     if (developerId === reviewerId || developerId === actor.id) {
       throw new AppError(

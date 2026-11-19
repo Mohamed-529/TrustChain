@@ -1092,6 +1092,14 @@ function AppContent() {
             ledgerRows={ledgerRows}
             scheduleData={scheduleData}
             contracts={contracts}
+            selectedContractId={selectedContractId}
+            onSelectContract={(cId) => {
+              setSelectedContractId(cId);
+              const targetContract = contracts.find((c) => c.id === cId);
+              const firstMs = targetContract?.milestones?.[0]?.id || selectedMilestoneId;
+              setSelectedMilestoneId(firstMs);
+              void refreshAllData(token, firstMs, cId);
+            }}
             onSelectQuickFilter={(qf) => setQuickFilterType(qf)}
             onOpenCreateProject={() => setShowCreateProject(true)}
             onOpenWalkthrough={() => setShowWalkthrough(true)}
@@ -1147,6 +1155,15 @@ function AppContent() {
             selectedMilestoneId={selectedMilestoneId}
             setSelectedMilestoneId={setSelectedMilestoneId}
             reviewDetails={reviewDetails}
+            contracts={contracts}
+            selectedContractId={selectedContractId}
+            onSelectContract={(cId) => {
+              setSelectedContractId(cId);
+              const targetContract = contracts.find((c) => c.id === cId);
+              const firstMs = targetContract?.milestones?.[0]?.id || selectedMilestoneId;
+              setSelectedMilestoneId(firstMs);
+              void refreshAllData(token, firstMs, cId);
+            }}
             provenanceData={provenanceData}
             paypalTransactions={paypalTransactions}
             loading={loading}
@@ -1212,6 +1229,14 @@ function AppContent() {
           <MarketplacePage
             token={token}
             currentUser={currentUser}
+            contracts={contracts}
+            onSelectContract={(cId) => {
+              setSelectedContractId(cId);
+              const targetContract = contracts.find((c) => c.id === cId);
+              const firstMs = targetContract?.milestones?.[0]?.id || selectedMilestoneId;
+              setSelectedMilestoneId(firstMs);
+              void refreshAllData(token, firstMs, cId);
+            }}
             onRefreshData={() => refreshAllData(token, selectedMilestoneId, selectedContractId)}
           />
         );
@@ -1282,7 +1307,21 @@ function AppContent() {
         isOpen={showCreateProject}
         onClose={() => setShowCreateProject(false)}
         token={token}
-        onSuccess={() => refreshAllData(token, selectedMilestoneId, selectedContractId)}
+        onSuccess={async (newContract) => {
+          if (newContract?.id) {
+            setSelectedContractId(newContract.id);
+            const firstMsId = newContract.milestones?.[0]?.id || 'ms_seed_01';
+            setSelectedMilestoneId(firstMsId);
+            await refreshAllData(token, firstMsId, newContract.id);
+            setStatusBanner({
+              type: 'success',
+              message: `✓ Contract "${newContract.title}" created & assigned to Marcus Chen! Active ID: ${newContract.id}`,
+            });
+            navigate('/dashboard');
+          } else {
+            await refreshAllData(token, selectedMilestoneId, selectedContractId);
+          }
+        }}
       />
     </AppShell>
   );

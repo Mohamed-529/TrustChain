@@ -19,8 +19,32 @@ interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   token: string;
-  onSuccess: () => Promise<void>;
+  onSuccess: (newContract?: any) => Promise<void> | void;
 }
+
+const AVAILABLE_DEVELOPERS = [
+  {
+    id: 'dev_01',
+    name: 'Marcus Chen',
+    title: 'Senior Systems & Security Engineer',
+    badge: 'SLSA Level 2 · 98 Proof Score',
+    avatar: 'MC',
+  },
+  {
+    id: 'dev_02',
+    name: 'Aisha Patel',
+    title: 'Distributed Cloud & AI Architect',
+    badge: '95 Proof Score',
+    avatar: 'AP',
+  },
+  {
+    id: 'dev_03',
+    name: 'Liam Vance',
+    title: 'Full-Stack & Mobile Engineer',
+    badge: '92 Proof Score',
+    avatar: 'LV',
+  },
+];
 
 type IntakeTab = 'AI_QUICK_SPEC' | 'UPLOAD_FILE' | 'MANUAL_SPEC';
 
@@ -32,6 +56,9 @@ export function CreateProjectModal({
 }: CreateProjectModalProps) {
   // Intake Navigation Tab
   const [activeTab, setActiveTab] = useState<IntakeTab>('AI_QUICK_SPEC');
+
+  // Assigned Developer Selection
+  const [selectedDeveloperId, setSelectedDeveloperId] = useState('dev_01');
 
   // Tab 1: AI Quick Spec Input
   const [promptInput, setPromptInput] = useState('');
@@ -355,8 +382,7 @@ export function CreateProjectModal({
       description: fullDescription,
       totalBudgetCents,
       currency: 'USD',
-      developerId: 'dev_01',
-      reviewerId: 'reviewer_01',
+      developerId: selectedDeveloperId,
       policyRules: {
         requirePassingCi: true,
         requireSecurityScan: true,
@@ -398,7 +424,30 @@ export function CreateProjectModal({
       if (!res.ok) {
         throw new Error(data.error?.message ?? 'Failed to create contract');
       }
-      await onSuccess();
+
+      const createdContract = data.contract;
+
+      // Automatically activate contract so milestones are immediately actionable
+      if (createdContract?.id) {
+        try {
+          const activateRes = await fetch(`/api/v1/contracts/${createdContract.id}/activate`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (activateRes.ok) {
+            const actData = await activateRes.json();
+            if (actData.contract) {
+              createdContract.status = 'ACTIVE';
+            }
+          }
+        } catch {
+          // Non-blocking activation
+        }
+      }
+
+      await onSuccess(createdContract);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creating contract');
@@ -661,6 +710,48 @@ export function CreateProjectModal({
               placeholder="Describe deliverables, requirements, and scope..."
               className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[rgba(11,31,23,0.12)] text-[#0b1f17] placeholder:text-[#6b7f75] focus:border-[#2f7a50] outline-none font-sans"
             />
+          </div>
+
+          {/* ASSIGNED DEVELOPER SELECTOR */}
+          <div className="p-4 rounded-2xl bg-white border border-[rgba(11,31,23,0.08)] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-semibold text-[#0b1f17] flex items-center gap-1.5">
+                <span>👨‍💻</span> <span>Select &amp; Assign Developer:</span>
+              </label>
+              <span className="text-[10px] font-mono text-[#2f7a50] bg-[#e9efe6] px-2 py-0.5 rounded-full">
+                ACTIVE VETTED DEVELOPER
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {AVAILABLE_DEVELOPERS.map((dev) => (
+                <button
+                  type="button"
+                  key={dev.id}
+                  onClick={() => setSelectedDeveloperId(dev.id)}
+                  className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
+                    selectedDeveloperId === dev.id
+                      ? 'border-[#2563eb] bg-[#f0f4ff] ring-1 ring-[#2563eb]'
+                      : 'border-[rgba(11,31,23,0.1)] bg-[#f6f5f0] hover:bg-[#ecebe4]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-6 h-6 rounded-lg text-white font-bold text-[10px] flex items-center justify-center ${
+                        selectedDeveloperId === dev.id ? 'bg-[#2563eb]' : 'bg-[#0b1f17]'
+                      }`}
+                    >
+                      {dev.avatar}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-[#0b1f17] truncate">{dev.name}</div>
+                      <div className="text-[9px] text-[#6b7f75] truncate">{dev.title}</div>
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-mono text-[#2f7a50] pt-0.5">{dev.badge}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* STRUCTURED MILESTONES & BUDGET */}

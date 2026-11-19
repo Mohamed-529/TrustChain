@@ -8,6 +8,8 @@ interface DashboardPageProps {
   ledgerRows: FinancialLedgerRow[];
   scheduleData: ContractScheduleResponse | null;
   contracts: Contract[];
+  selectedContractId?: string;
+  onSelectContract?: (contractId: string) => void;
   onSelectQuickFilter: (filter: string) => void;
   onOpenCreateProject: () => void;
   onOpenWalkthrough: () => void;
@@ -20,6 +22,8 @@ export function DashboardPage({
   ledgerRows,
   scheduleData,
   contracts,
+  selectedContractId,
+  onSelectContract,
   onSelectQuickFilter,
   onOpenCreateProject,
   onOpenWalkthrough,
@@ -31,7 +35,8 @@ export function DashboardPage({
   const isClient = currentUser?.role === 'CLIENT';
   const isDev = currentUser?.role === 'DEVELOPER';
 
-  const activeContract = contracts[0] ?? null;
+  const activeContract =
+    contracts.find((c) => c.id === selectedContractId) ?? contracts[0] ?? null;
 
   const handleReset = async () => {
     setResetting(true);
@@ -103,6 +108,38 @@ export function DashboardPage({
         </div>
       </div>
 
+      {/* Project Switcher Bar */}
+      {contracts.length > 1 && (
+        <div className="p-3 rounded-2xl bg-white border border-[rgba(11,31,23,0.08)] flex flex-wrap items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-semibold text-[#0b1f17]">Active Contract:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {contracts.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onSelectContract?.(c.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                    activeContract?.id === c.id
+                      ? 'bg-[#0b1f17] text-white shadow-sm'
+                      : 'bg-[#f6f5f0] text-[#3d5248] hover:bg-[#e9efe6]'
+                  }`}
+                >
+                  {c.title}
+                </button>
+              ))}
+            </div>
+          </div>
+          {isClient && (
+            <button
+              onClick={onOpenCreateProject}
+              className="px-3.5 py-1 rounded-full bg-[#e9efe6] text-[#2f7a50] text-xs font-semibold hover:bg-[#dbe7d7] transition shrink-0"
+            >
+              + Create New Project
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Cascrow Hero Card: Sage surface with rounded-3xl container */}
       <div className="p-7 rounded-[28px] bg-[#e9efe6] border border-[#0b1f17]/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-[0_1px_rgba(11,31,23,0.05),0_20px_40px_-25px_rgba(11,31,23,0.15)]">
         <div className="space-y-2">
@@ -112,6 +149,9 @@ export function DashboardPage({
             </span>
             <span className="text-xs font-mono text-[#3d5248]">
               {activeContract?.id ?? 'contract_seed_01'}
+            </span>
+            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9]">
+              {activeContract?.status ?? 'ACTIVE'}
             </span>
           </div>
           <h2 className="text-xl font-normal text-[#0b1f17]">
@@ -133,9 +173,9 @@ export function DashboardPage({
               </strong>
             </span>
             <span>•</span>
-            <span>Contractor: <span className="text-[#0b1f17]">Marcus Chen</span></span>
+            <span>Contractor: <span className="text-[#0b1f17] font-semibold">Marcus Chen</span></span>
             <span>•</span>
-            <span>Fiduciary Reviewer: <span className="text-[#0b1f17]">Sophia Sterling</span></span>
+            <span>Client Fiduciary: <span className="text-[#0b1f17] font-semibold">Elena Vance</span></span>
           </div>
         </div>
 
