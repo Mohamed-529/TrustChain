@@ -76,6 +76,7 @@ export function ReviewsPage({
     latestApproval?.decision === 'APPROVE';
 
   const isReviewer = currentUser?.role === 'REVIEWER';
+  const isDeveloper = currentUser?.role === 'DEVELOPER';
 
   const rawLinks = Array.isArray(latestTx?.rawPaypalResponse?.links)
     ? (latestTx?.rawPaypalResponse?.links as Array<{ rel: string; href: string }>)
@@ -97,7 +98,9 @@ export function ReviewsPage({
             Milestone Review & Settlement
           </h1>
           <p className="text-xs text-[#3d5248] mt-1 max-w-2xl leading-relaxed">
-            Four-stage fiduciary workflow: Evidence Ingestion → AI Advisory Synthesis → Deterministic Settlement Cap → Human Review & PayPal Settlement.
+            {isDeveloper
+              ? 'Developer Delivery Workbench: Submit technical evidence, trigger multi-agent AI verification, and monitor escrow payout release.'
+              : 'Client Fiduciary Workbench: Inspect submitted evidence, verify AI consensus, approve disbursements, and release PayPal escrow hold.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -143,8 +146,8 @@ export function ReviewsPage({
         })}
       </div>
 
-      {/* 4-Column Operational Workbench in Cascrow Warm Editorial Containers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* Role-Specific Operational Workbench in Cascrow Warm Editorial Containers */}
+      <div className={`grid grid-cols-1 ${isDeveloper ? 'md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-4'} gap-5`}>
         {/* Column 1: Submitted Evidence Details */}
         <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
           <div className="space-y-3.5">
@@ -296,194 +299,276 @@ export function ReviewsPage({
           </div>
         </div>
 
-        {/* Column 3: Deterministic Policy & Human Review */}
-        <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
-              <span className="font-normal text-[#0b1f17] text-sm tracking-tight">3. Policy & Approval</span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
-                FIDUCIARY GATE
-              </span>
-            </div>
-
-            <div className="space-y-2 p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] font-mono">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-[#6b7f75]">Agreed Budget:</span>
-                <span className="text-[#0b1f17] font-semibold">{formatUsdCents(policy?.agreedAmountCents)}</span>
-              </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-[#6b7f75]">Late Penalty:</span>
-                <span className="text-[#a62b2b]">-{formatUsdCents(policy?.latePenaltyCents)}</span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[rgba(11,31,23,0.08)]">
-                <span className="text-[#6b7f75] font-sans">Permitted Cap:</span>
-                <span className="text-[#2f7a50] font-bold text-sm">
-                  {formatUsdCents(policy?.permittedAmountCents)}
+        {isDeveloper ? (
+          /* DEVELOPER PERSPECTIVE: Payout Status & Guaranteed Bank Escrow */
+          <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+                <span className="font-normal text-[#0b1f17] text-sm tracking-tight">3. My Payout Status</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
+                  DEVELOPER PAYOUT
                 </span>
               </div>
-            </div>
 
-            {isApprovedByHuman ? (
-              <div className="p-3.5 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5 text-[#1c4b31]">
-                <div className="flex items-center gap-1.5 font-semibold text-xs">
-                  <span>✓</span> <span>Milestone Approved by AI Arbitrator &amp; Fiduciary Gate</span>
+              <div className="space-y-2 p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] font-mono">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-[#6b7f75]">Milestone Agreed:</span>
+                  <span className="text-[#0b1f17] font-semibold">{formatUsdCents(policy?.agreedAmountCents)}</span>
                 </div>
-                <div className="text-[11px]">
-                  Decision: <strong>{latestApproval?.decision ?? 'APPROVE'}</strong> • Amount: <strong>{formatUsdCents(latestApproval?.approvedAmountCents ?? policy?.permittedAmountCents ?? 227500)}</strong>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-[#6b7f75]">SLA Late Penalty:</span>
+                  <span className="text-[#a62b2b]">-{formatUsdCents(policy?.latePenaltyCents)}</span>
                 </div>
-                <div className="text-[10px] text-[#3d5248] italic truncate">
-                  &quot;{latestApproval?.justification ?? 'Automated Tri-Agent verification passed. Acceptance criteria verified. Fiduciary gate automatically cleared for settlement.'}&quot;
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[rgba(11,31,23,0.08)]">
+                  <span className="text-[#6b7f75] font-sans">Eligible Payout:</span>
+                  <span className="text-[#2f7a50] font-bold text-sm">
+                    {formatUsdCents(policy?.permittedAmountCents)}
+                  </span>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-2.5 pt-1">
+
+              {/* Escrow Bank Protection Status for Developer */}
+              <div className="space-y-2">
+                {latestTx?.status === 'CAPTURED' || reviewDetails?.milestone.paymentStatus === 'CAPTURED' ? (
+                  <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] text-[#1c4b31] space-y-1.5 text-center">
+                    <div className="text-xs font-bold flex items-center justify-center gap-1.5">
+                      <span>✓</span> <span>Funds Disbursed ($2,275.00 Settled)</span>
+                    </div>
+                    <p className="text-[10px] text-[#3d5248] leading-tight">
+                      Payment has been successfully transferred to your account via PayPal sandbox.
+                    </p>
+                    <div className="font-mono text-[9px] text-[#6b7f75] pt-1 border-t border-[#a8d8b9]/50">
+                      Capture ID: {latestTx?.paypalCaptureId ?? 'CAP-VERIDEX-RELEASED'}
+                    </div>
+                  </div>
+                ) : latestTx?.status === 'AUTHORIZED' || reviewDetails?.milestone.paymentStatus === 'AUTHORIZED' ? (
+                  <div className="p-4 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] text-[#8a681c] space-y-1.5 text-center">
+                    <div className="text-xs font-bold flex items-center justify-center gap-1.5">
+                      <span>🔒</span> <span>$2,500.00 Pre-Authorized in Bank Escrow</span>
+                    </div>
+                    <p className="text-[10px] text-[#3d5248] leading-tight">
+                      Client has authorized the 29-day bank hold. Funds are guaranteed in escrow and will disburse upon AI acceptance verification.
+                    </p>
+                    <div className="font-mono text-[9px] text-[#6b7f75] pt-1 border-t border-[#e8dcb8]/50">
+                      Auth ID: {latestTx?.paypalAuthorizationId ?? 'AUTH-VERIDEX-LOCKED'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] text-[#6b7f75] space-y-1.5 text-center">
+                    <div className="text-xs font-semibold flex items-center justify-center gap-1.5 text-[#0b1f17]">
+                      <span>⏳</span> <span>Pending Client Escrow Authorization</span>
+                    </div>
+                    <p className="text-[10px] text-[#3d5248] leading-tight">
+                      Client will lock the 29-day payment authorization before final payout release.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[rgba(11,31,23,0.08)]">
+              <button
+                disabled={loading}
+                onClick={() => void onPayPalReconcile()}
+                className="w-full px-3 py-2 rounded-full bg-white hover:bg-[#f6f5f0] text-[#2f7a50] text-xs font-medium border border-[rgba(47,122,80,0.2)] transition shadow-sm"
+              >
+                🔄 Refresh Escrow &amp; Payout Telemetry
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* CLIENT PERSPECTIVE: Fiduciary Approval & PayPal Settlement Release */
+          <>
+            {/* Column 3: Deterministic Policy & Human Review */}
+            <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+                  <span className="font-normal text-[#0b1f17] text-sm tracking-tight">3. Policy &amp; Approval</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
+                    FIDUCIARY GATE
+                  </span>
+                </div>
+
+                <div className="space-y-2 p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] font-mono">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-[#6b7f75]">Agreed Budget:</span>
+                    <span className="text-[#0b1f17] font-semibold">{formatUsdCents(policy?.agreedAmountCents)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-[#6b7f75]">Late Penalty:</span>
+                    <span className="text-[#a62b2b]">-{formatUsdCents(policy?.latePenaltyCents)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[rgba(11,31,23,0.08)]">
+                    <span className="text-[#6b7f75] font-sans">Permitted Cap:</span>
+                    <span className="text-[#2f7a50] font-bold text-sm">
+                      {formatUsdCents(policy?.permittedAmountCents)}
+                    </span>
+                  </div>
+                </div>
+
+                {isApprovedByHuman ? (
+                  <div className="p-3.5 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5 text-[#1c4b31]">
+                    <div className="flex items-center gap-1.5 font-semibold text-xs">
+                      <span>✓</span> <span>Milestone Approved by AI Arbitrator &amp; Fiduciary Gate</span>
+                    </div>
+                    <div className="text-[11px]">
+                      Decision: <strong>{latestApproval?.decision ?? 'APPROVE'}</strong> • Amount: <strong>{formatUsdCents(latestApproval?.approvedAmountCents ?? policy?.permittedAmountCents ?? 227500)}</strong>
+                    </div>
+                    <div className="text-[10px] text-[#3d5248] italic truncate">
+                      &quot;{latestApproval?.justification ?? 'Automated Tri-Agent verification passed. Acceptance criteria verified. Fiduciary gate automatically cleared for settlement.'}&quot;
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 pt-1">
+                    <div>
+                      <label className="text-[11px] text-[#6b7f75] block mb-1">
+                        Disbursement Amount (Cents):
+                      </label>
+                      <input
+                        type="number"
+                        value={approvedAmountCentsInput}
+                        onChange={(e) => setApprovedAmountCentsInput(Number(e.target.value))}
+                        className="w-full px-3 py-1.5 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2f7a50]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-[#6b7f75] block mb-1">
+                        Fiduciary Justification (Required):
+                      </label>
+                      <textarea
+                        value={justification}
+                        onChange={(e) => setJustification(e.target.value)}
+                        placeholder="Document fiduciary rationale for audit record..."
+                        rows={2}
+                        className="w-full px-3 py-1.5 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs outline-none focus:border-[#2f7a50]"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
+                {!isApprovedByHuman && (
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      disabled={loading}
+                      onClick={() => void onReviewAction('approve')}
+                      className="px-2 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] font-medium text-white text-xs transition disabled:opacity-40"
+                    >
+                      ✓ Approve Payout
+                    </button>
+                    <button
+                      disabled={loading}
+                      onClick={() => void onReviewAction('request-changes')}
+                      className="px-2 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] font-medium text-[#8a681c] text-xs transition disabled:opacity-40"
+                    >
+                      Revise
+                    </button>
+                    <button
+                      disabled={loading}
+                      onClick={() => void onReviewAction('reject')}
+                      className="px-2 py-2 rounded-full bg-[#fdf2f2] hover:bg-[#fbe4e4] border border-[#f3c2c2] font-medium text-[#a62b2b] text-xs transition disabled:opacity-40"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Column 4: PayPal Orders API v2 Lifecycle */}
+            <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+                  <span className="font-normal text-[#0b1f17] text-sm tracking-tight">4. PayPal Settlement</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
+                    ORDERS V2
+                  </span>
+                </div>
+
+                {/* Regulatory Non-Escrow Notice */}
+                <div className="p-3 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] text-[10px] text-[#8a681c] space-y-0.5">
+                  <div className="font-semibold uppercase tracking-wider font-mono">⚠️ Non-Escrow Notice</div>
+                  <p className="text-[10px] text-[#3d5248] leading-tight">
+                    29-day authorization hold via PayPal Orders API v2. TrustChain never takes fund custody.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] font-mono text-[11px]">
+                  <div>
+                    Payment State:{' '}
+                    <span className="text-[#2f7a50] font-semibold">
+                      {latestTx?.status ?? reviewDetails?.milestone.paymentStatus ?? 'NOT_READY'}
+                    </span>
+                  </div>
+                  {latestTx && (
+                    <div className="space-y-0.5 text-[#6b7f75] text-[10px] pt-1 border-t border-[rgba(11,31,23,0.06)]">
+                      {latestTx.paypalOrderId && <div>Order: <span className="text-[#0b1f17]">{latestTx.paypalOrderId}</span></div>}
+                      <div>Auth ID: <span className="text-[#0b1f17]">{latestTx.paypalAuthorizationId ?? '—'}</span></div>
+                      <div>Capture ID: <span className="text-[#0b1f17]">{latestTx.paypalCaptureId ?? '—'}</span></div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Buyer Approval Action Card */}
+                {(latestTx?.status === 'ORDER_CREATED' || latestTx?.status === 'SIMULATED_ORDER_CREATED') && (
+                  <div className="p-3 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5">
+                    <div className="text-[10px] text-[#1c4b31] font-semibold flex items-center gap-1">
+                      <span>✓</span> <span>Escrow Order Validated</span>
+                    </div>
+                    <p className="text-[10px] text-[#3d5248] leading-tight">
+                      Bank authorization order is active. Click <strong>&quot;2. Authorize Hold (29 Days)&quot;</strong> below to lock the escrow funds.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
+                <button
+                  disabled={loading}
+                  onClick={() => void onPayPalAction('order')}
+                  className="w-full px-3.5 py-2 rounded-full bg-[#f6f5f0] hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.12)] transition disabled:opacity-50"
+                >
+                  1. Create Order (AUTHORIZE)
+                </button>
+                <button
+                  disabled={loading}
+                  onClick={() => void onPayPalAction('authorize')}
+                  className="w-full px-3.5 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] text-[#8a681c] text-xs font-medium transition disabled:opacity-50"
+                >
+                  2. Authorize Hold (29 Days)
+                </button>
                 <div>
-                  <label className="text-[11px] text-[#6b7f75] block mb-1">
-                    Disbursement Amount (Cents):
-                  </label>
-                  <input
-                    type="number"
-                    value={approvedAmountCentsInput}
-                    onChange={(e) => setApprovedAmountCentsInput(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2f7a50]"
-                  />
+                  {latestTx?.status === 'CAPTURED' || reviewDetails?.milestone.paymentStatus === 'CAPTURED' ? (
+                    <div className="w-full px-3.5 py-2.5 rounded-full bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] text-center text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm">
+                      <span>✓</span> <span>Funds Released ($2,275.00 Settled)</span>
+                    </div>
+                  ) : (
+                    <button
+                      disabled={loading}
+                      onClick={() => void onPayPalAction('capture')}
+                      className={`w-full px-3.5 py-2.5 rounded-full text-xs font-bold transition shadow-sm ${
+                        latestTx?.status === 'AUTHORIZED' || latestTx?.status === 'SIMULATED_AUTHORIZED' || reviewDetails?.milestone.paymentStatus === 'AUTHORIZED'
+                          ? 'bg-[#2f7a50] hover:bg-[#256341] text-white shadow-md'
+                          : 'bg-[#0b1f17] hover:bg-[#1a382c] text-white'
+                      }`}
+                    >
+                      3. Capture Settlement &amp; Release Funds →
+                    </button>
+                  )}
                 </div>
-
-                <div>
-                  <label className="text-[11px] text-[#6b7f75] block mb-1">
-                    Fiduciary Justification (Required):
-                  </label>
-                  <textarea
-                    value={justification}
-                    onChange={(e) => setJustification(e.target.value)}
-                    placeholder="Document fiduciary rationale for audit record..."
-                    rows={2}
-                    className="w-full px-3 py-1.5 rounded-xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.12)] text-[#0b1f17] text-xs outline-none focus:border-[#2f7a50]"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
-            {!isApprovedByHuman && (
-              <div className="grid grid-cols-3 gap-1.5">
                 <button
                   disabled={loading}
-                  onClick={() => void onReviewAction('approve')}
-                  className="px-2 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] font-medium text-white text-xs transition disabled:opacity-40"
+                  onClick={() => void onPayPalReconcile()}
+                  className="w-full px-3 py-1.5 rounded-full bg-white hover:bg-[#f6f5f0] text-[#2f7a50] text-[11px] border border-[rgba(47,122,80,0.2)] transition"
                 >
-                  ✓ Approve Payout
-                </button>
-                <button
-                  disabled={loading}
-                  onClick={() => void onReviewAction('request-changes')}
-                  className="px-2 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] font-medium text-[#8a681c] text-xs transition disabled:opacity-40"
-                >
-                  Revise
-                </button>
-                <button
-                  disabled={loading}
-                  onClick={() => void onReviewAction('reject')}
-                  className="px-2 py-2 rounded-full bg-[#fdf2f2] hover:bg-[#fbe4e4] border border-[#f3c2c2] font-medium text-[#a62b2b] text-xs transition disabled:opacity-40"
-                >
-                  Reject
+                  🔄 Reconcile with Sandbox
                 </button>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Column 4: PayPal Orders API v2 Lifecycle */}
-        <div className="p-6 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] space-y-4 text-xs flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(11,31,23,0.05)]">
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
-              <span className="font-normal text-[#0b1f17] text-sm tracking-tight">4. PayPal Settlement</span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#e9efe6] text-[#2f7a50] border border-[rgba(47,122,80,0.2)] font-mono font-medium">
-                ORDERS V2
-              </span>
             </div>
-
-            {/* Regulatory Non-Escrow Notice */}
-            <div className="p-3 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] text-[10px] text-[#8a681c] space-y-0.5">
-              <div className="font-semibold uppercase tracking-wider font-mono">⚠️ Non-Escrow Notice</div>
-              <p className="text-[10px] text-[#3d5248] leading-tight">
-                29-day authorization hold via PayPal Orders API v2. TrustChain never takes fund custody.
-              </p>
-            </div>
-
-            <div className="space-y-1.5 p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] font-mono text-[11px]">
-              <div>
-                Payment State:{' '}
-                <span className="text-[#2f7a50] font-semibold">
-                  {latestTx?.status ?? reviewDetails?.milestone.paymentStatus ?? 'NOT_READY'}
-                </span>
-              </div>
-              {latestTx && (
-                <div className="space-y-0.5 text-[#6b7f75] text-[10px] pt-1 border-t border-[rgba(11,31,23,0.06)]">
-                  {latestTx.paypalOrderId && <div>Order: <span className="text-[#0b1f17]">{latestTx.paypalOrderId}</span></div>}
-                  <div>Auth ID: <span className="text-[#0b1f17]">{latestTx.paypalAuthorizationId ?? '—'}</span></div>
-                  <div>Capture ID: <span className="text-[#0b1f17]">{latestTx.paypalCaptureId ?? '—'}</span></div>
-                </div>
-              )}
-            </div>
-
-            {/* Buyer Approval Action Card */}
-            {(latestTx?.status === 'ORDER_CREATED' || latestTx?.status === 'SIMULATED_ORDER_CREATED') && (
-              <div className="p-3 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5">
-                <div className="text-[10px] text-[#1c4b31] font-semibold flex items-center gap-1">
-                  <span>✓</span> <span>Escrow Order Validated</span>
-                </div>
-                <p className="text-[10px] text-[#3d5248] leading-tight">
-                  Bank authorization order is active. Click <strong>"2. Authorize Hold (29 Days)"</strong> below to lock the escrow funds.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2 pt-3 border-t border-[rgba(11,31,23,0.08)]">
-            <button
-              disabled={loading}
-              onClick={() => void onPayPalAction('order')}
-              className="w-full px-3.5 py-2 rounded-full bg-[#f6f5f0] hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.12)] transition disabled:opacity-50"
-            >
-              1. Create Order (AUTHORIZE)
-            </button>
-            <button
-              disabled={loading}
-              onClick={() => void onPayPalAction('authorize')}
-              className="w-full px-3.5 py-2 rounded-full bg-[#fbf7ed] hover:bg-[#f5edd4] border border-[#e8dcb8] text-[#8a681c] text-xs font-medium transition disabled:opacity-50"
-            >
-              2. Authorize Hold (29 Days)
-            </button>
-            <div>
-              {latestTx?.status === 'CAPTURED' || reviewDetails?.milestone.paymentStatus === 'CAPTURED' ? (
-                <div className="w-full px-3.5 py-2.5 rounded-full bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] text-center text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm">
-                  <span>✓</span> <span>Funds Released ($2,275.00 Settled)</span>
-                </div>
-              ) : (
-                <button
-                  disabled={loading}
-                  onClick={() => void onPayPalAction('capture')}
-                  className={`w-full px-3.5 py-2.5 rounded-full text-xs font-bold transition shadow-sm ${
-                    latestTx?.status === 'AUTHORIZED' || latestTx?.status === 'SIMULATED_AUTHORIZED' || reviewDetails?.milestone.paymentStatus === 'AUTHORIZED'
-                      ? 'bg-[#2f7a50] hover:bg-[#256341] text-white shadow-md'
-                      : 'bg-[#0b1f17] hover:bg-[#1a382c] text-white'
-                  }`}
-                >
-                  3. Capture Settlement &amp; Release Funds →
-                </button>
-              )}
-            </div>
-            <button
-              disabled={loading}
-              onClick={() => void onPayPalReconcile()}
-              className="w-full px-3 py-1.5 rounded-full bg-white hover:bg-[#f6f5f0] text-[#2f7a50] text-[11px] border border-[rgba(47,122,80,0.2)] transition"
-            >
-              🔄 Reconcile with Sandbox
-            </button>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
       <AiDecisionInspectorModal
