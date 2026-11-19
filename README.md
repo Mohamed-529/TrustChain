@@ -1,93 +1,68 @@
-# ◈ TrustChain — Autonomous AI-Fiduciary Software Escrow & Verification Engine
+# ◈ Veridex — Autonomous AI-Fiduciary Software Escrow & Verification Engine
 
+[![Live on Embarko](https://img.shields.io/badge/Live%20Demo-veridex.embarko.app-2f7a50?style=for-the-badge&logo=googlechrome&logoColor=white)](https://veridex.embarko.app)
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B%20(Native%20SQLite)-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React 19](https://img.shields.io/badge/React-19.0.1%20%2B%20TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.5%20Flash%20(Tri--Agent)-8E75C2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
-[![Pre-Auth Escrow](https://img.shields.io/badge/Smart%20Escrow-Non--Custodial%20Pre--Auth-00457C?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash%20(Tri--Agent)-8E75C2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![Pre-Auth Escrow](https://img.shields.io/badge/Smart%20Escrow-Non--Custodial%20Pre--Auth-00457C?style=for-the-badge&logo=shield&logoColor=white)](https://veridex.embarko.app)
 [![OpenAPI 3.0.3](https://img.shields.io/badge/OpenAPI-3.0.3%20Governed%20Contract-007ACC?style=for-the-badge&logo=openapiinitiative&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
-[![Decision Ledger](https://img.shields.io/badge/Decision%20Ledger-v36%20Grid%20Cockpit-009688?style=for-the-badge)](https://github.com/Mohamed-529/TrustChain)
-[![Timeline Gantt](https://img.shields.io/badge/Critical%20Path-Gantt%20v7.3-F36E21?style=for-the-badge)](https://github.com/Mohamed-529/TrustChain)
-[![Tests](https://img.shields.io/badge/Tests-293%20Passing%20(100%25)-success?style=for-the-badge&logo=checkmarx&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
+[![Tests Passing](https://img.shields.io/badge/Tests-Passing%20(100%25)-success?style=for-the-badge&logo=checkmarx&logoColor=white)](https://github.com/Mohamed-529/TrustChain)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-> **TrustChain** solves the **$100B+ freelance, agency, and software delivery milestone dispute crisis**. Clients fear paying upfront for broken deliverables or AI-hallucinated code; developers fear spending weeks implementing features only to be ghosted or denied payment. 
-> 
-> TrustChain creates the world's first **autonomous, non-custodial software escrow and verification engine**. It bridges git repositories, automated test telemetry, and payment pre-authorization holds. A tri-agent AI verification mesh evaluates deliverables against agreed acceptance criteria before an authenticated human fiduciary approves programmatic settlement.
+> **Veridex** solves the **$100B+ freelance, agency, and software delivery milestone dispute crisis**. Clients fear paying upfront for broken deliverables or AI-hallucinated code; developers fear spending weeks implementing features only to be ghosted or denied payment.
+>
+> Veridex is the world's first **autonomous, non-custodial software escrow and verification engine**. It bridges git repositories, automated test telemetry, and PayPal payment pre-authorization holds. A tri-agent AI verification mesh evaluates deliverables against contractual acceptance criteria, autonomously validates proof, and coordinates programmatic escrow settlement.
 
 ---
 
-## 🌐 Live Deployment & Demo
+## 🌐 Live Deployment & Interactive Demo
 
+- **Live Application (Embarko):** [https://veridex.embarko.app](https://veridex.embarko.app)
 - **GitHub Repository:** [https://github.com/Mohamed-529/TrustChain](https://github.com/Mohamed-529/TrustChain)
-- **Live Vercel Frontend:** [https://trust-chain-3h8nywf6w-yusuffa968-9131s-projects.vercel.app/](https://trust-chain-3h8nywf6w-yusuffa968-9131s-projects.vercel.app/)
-- **Live Deployment Guide:** See [Cloud Deployment](#-cloud-deployment) below to launch your own 1-click instance on Embarko, Render, or Vercel.
 - **Local Interactive Demo:** `http://localhost:3000` (Clone & run `npm start`)
 
-### 👥 Pre-Configured Demo Personas
-Switch personas instantly via the top-right profile badge in the floating navbar:
+---
 
-| Persona | Role | Credentials | Core Capabilities |
+## 👥 Streamlined Role Experience (Client & Developer)
+
+Veridex eliminates cumbersome multi-user bottlenecks by pairing a clean, role-tailored interface with an **Autonomous AI Fiduciary Mesh**:
+
+| Persona | Role | Quick Access | Responsibilities & Capabilities |
 | :--- | :--- | :--- | :--- |
-| **Elena Vance** | `CLIENT` | `elena@client.local` / `client123` | Defines contracts, configures milestone criteria, pre-authorizes 29-day PayPal hold |
-| **Marcus Chen** | `DEVELOPER` | `marcus@dev.local` / `dev123` | Submits delivery telemetry (PRs, commits, CI runs), views AI verification reports |
-| **Sophia Sterling** | `REVIEWER` | `sophia@reviewer.local` / `reviewer123` | Independent fiduciary who approves/rejects verified disbursements and triggers PayPal capture |
+| **Elena Vance** | `CLIENT` | 1-Click Sandbox on Login | Creates projects, defines milestone acceptance criteria, authorizes 29-day bank escrow hold, releases approved disbursements. |
+| **Marcus Chen** | `DEVELOPER` | 1-Click Sandbox on Login | Accepts contracts, submits deliverable telemetry (commit SHA, PRs, CI test suites), inspects AI evaluation passport, receives funds. |
+| **Tri-Agent Mesh** | `AUTONOMOUS AI` | Automated Background Engine | Replaces manual reviewer friction. Automatically validates commits, scans for CVE vulnerabilities, synthesizes acceptance criteria, and verifies fiduciary gates. |
+
+### 🧭 Role-Based Navigation
+- **Client View:** `Create Project (AI Spec)` • `My Contracts` • `Escrow & Settle (Bank Hold)`
+- **Developer View:** `Developer Workspace` • `Submit Delivery (Get Paid)` • `Evidence Passport (Proof)`
 
 ---
 
-## 📸 Visual Showcase & Architecture Slides
-
-<div align="center">
-
-### 1. Autonomous Evidence-to-Settlement Orchestration
-![TrustChain Hero Banner](media/trustchain_hero.png)
-*Warm editorial parchment & sage aesthetic (`#f6f5f0`, `#e9efe6`) with integrated sponsor standards.*
-
----
-
-### 2. Tri-Agent Consensus Engine & Ingestion Mesh
-![TrustChain Interactive Workflow](media/trustchain_demo_workflow.png)
-*Left: Enterprise Client scope definition & PayPal hold. Center: Tri-Agent Consensus Mesh (Evidence, Risk, Arbitrator). Right: Contractor delivery & Evidence Passport.*
-
----
-
-### 3. Architectural Invariants & Fiduciary Guardrails
-![TrustChain Invariants](media/trustchain_invariants.png)
-*Four non-negotiable security principles: AI Advisory Boundaries, Non-Custodial PayPal Escrow, SQLite SHA-256 Chained Ledger, and Deterministic Cap Formula.*
-
----
-
-### 4. Floating Island Navbar & Dynamic Persona Switching
-![TrustChain Navbar](media/trustchain_navbar_persona.png)
-*Segmented floating navigation bar with Spotlight Search (`/`), Guided Walkthrough Tour, and instant Role Switcher.*
-
-</div>
-
----
-
-## ⚡ The Core Problem & TrustChain's Solution
+## ⚡ The Core Problem & Veridex's Solution
 
 ```
-Traditional Freelance / Software Contracts:
-[Client Promises Payment] ---> [Developer Submits Code] ---> [Subjective Disputes / Frozen Funds]
+Traditional Freelance / Agency Contracts:
+[Client Promises Payment] ---> [Developer Submits Code] ---> [Subjective Disputes / Ghosting]
                                                                         ❌ Payment Withheld
 
-TrustChain Deterministic Fiduciary Flow:
-[Client Pre-Authorizes PayPal Hold]
+Veridex Deterministic Fiduciary Flow:
+[Client Pre-Authorizes 29-Day PayPal Escrow Hold]
         │
         ▼
-[Developer Submits PR & CI Telemetry]
+[Developer Submits PR, Commit SHA & CI/CD Telemetry]
         │
         ▼
-[Tri-Agent AI Verification (Evidence + Risk + Arbitrator)]
+[Tri-Agent AI Advisory Synthesis (Evidence + Risk + Arbitrator)]
         │
         ▼
-[Deterministic Settlement Policy (Calculates Permitted Cents)]
+[Deterministic Settlement Policy (Calculates Permitted Amount & Penalties)]
         │
         ▼
-[Human Fiduciary Approval (Sophia Sterling)]
+[Automated Fiduciary Gate Approval (Verified Criteria & Integrity)]
         │
         ▼
-[Programmatic PayPal Orders v2 Capture ($2,500.00)]
+[1-Click Programmatic PayPal Settlement Capture ($2,275.00 Released)]
         │
         ▼
 [Cryptographic Evidence Passport Issued & SHA-256 Ledger Sealed]
@@ -95,58 +70,57 @@ TrustChain Deterministic Fiduciary Flow:
 
 ---
 
-## 🏛️ System Architecture & Key Innovations
+## 🎬 4-Step Live Demo Runbook
 
-### 1. Tri-Agent AI Advisory Synthesis (`Google Gemini 3.5 Flash`)
-- **Evidence Agent:** Extracts git commit trees, verifies PR merge status, and parses CI/CD pipeline telemetry.
-- **Risk Agent:** Audits npm dependency trees and CVE advisories; detects adversarial prompt injections inside untrusted PR descriptions.
-- **Arbitrator Agent:** Synthesizes evidence against contractual acceptance criteria (AC-1, AC-2, AC-3) and outputs structured recommendations (`RECOMMEND_APPROVAL` / `REVISE_REQUIREMENTS`).
-- **Strict Separation of Concerns:** AI agents are purely advisory; no AI agent has permission to capture, void, or transfer funds.
+You can experience the complete client-to-developer settlement lifecycle in under 60 seconds on [veridex.embarko.app](https://veridex.embarko.app):
+
+1. **Client Sign In:**
+   - On the full-screen landing page, click **`👔 Elena Vance (Client)`** for instant sandbox access.
+2. **Open Escrow Workbench:**
+   - From the clean 3-tab navigation bar, click **`Escrow & Settle`** (`/reviews`).
+3. **Submit Evidence & Run Autonomous AI Verification:**
+   - In Column 1, click **`Submit Demo Evidence`** (ingests commit SHA, merged PR, and 64/64 passing test suite).
+   - In Column 1, click **`Run AI Evaluation`**.
+   - Column 2 immediately displays Tri-Agent Consensus (`PASS`, `⚡ LIVE GEMINI`, 3/3 criteria verified, 0 CVE risk).
+   - Column 3 immediately displays **`✓ Milestone Approved by AI Arbitrator & Fiduciary Gate`** with the deterministic permitted cap ($2,275.00).
+4. **Authorize Escrow Hold & Release Funds:**
+   - In Column 4, click **`2. Authorize Hold (29 Days)`** (locks pre-authorization hold).
+   - Click the green highlighted **`3. Capture Settlement & Release Funds →`** button.
+   - Instantly releases $2,275.00 to developer Marcus Chen with badge **`✓ Funds Released ($2,275.00 Settled)`**!
+
+---
+
+## 🏛️ System Architecture & Engineering Principles
+
+### 1. Tri-Agent AI Advisory Synthesis (`Google Gemini 2.5 Flash`)
+- **Evidence Agent:** Extracts git commit trees, verifies PR merge status, and parses CI/CD execution artifacts.
+- **Risk Agent:** Audits dependency trees for CVE advisories and defends against prompt injection attacks embedded inside untrusted repository descriptions or commit messages.
+- **Arbitrator Agent:** Evaluates ingested evidence against contractual acceptance criteria (AC-1, AC-2, AC-3) and generates structured advisory outcomes (`PASS` / `REVISE_REQUIREMENTS`).
+- **Strict Advisory Boundary:** AI agents never take custody of funds, never hold private credentials, and cannot independently alter contractual formulas.
 
 ### 2. Deterministic Settlement Policy Engine
-- Pure mathematical calculation running strictly in integer cents (preventing floating-point rounding errors).
-- Deducts contractual SLA late penalties and caps payouts strictly to verified criteria:
+- Pure mathematical calculation running strictly in integer cents (preventing floating-point errors).
+- Enforces contractual formulas, verified criteria ratios, and SLA late penalties:
   $$\text{Permitted Amount} = \min(\text{Agreed Amount} - \text{Late Penalty}, \text{Authorized Hold})$$
-- Zero risk of over-disbursement or negative balances.
+- Prevents negative transfers or over-disbursements.
 
-### 3. Non-Custodial Zero-Escrow Payment Model (`PayPal Orders API v2`)
-- Eliminates traditional custodial crypto/escrow risks.
+### 3. Non-Custodial Bank Escrow Model (`PayPal Orders API v2`)
+- Eliminates traditional custodial crypto or unregulated third-party escrow risks.
 - Client authorizes a standard 29-day payment hold via PayPal Orders API v2 (`intent: "AUTHORIZE"`).
-- TrustChain never takes custody of funds and holds zero private wallet keys.
-- Funds transfer directly from Client to Contractor only upon authenticated human fiduciary approval (`POST /api/v1/milestones/:id/paypal/capture`).
+- Veridex never takes custody of funds. Capital remains safely pre-authorized in PayPal's banking rail and captures directly to the contractor upon delivery verification.
 
 ### 4. Cryptographic SQLite Audit Ledger (`node:sqlite`)
 - Engineered with Node.js 22 built-in `node:sqlite` in WAL mode (`PRAGMA synchronous = FULL`).
 - Every lifecycle event is sealed into an immutable block with SHA-256 hash chaining:
   $$\text{Block Hash} = \text{SHA256}(\text{Index} \parallel \text{PrevHash} \parallel \text{Timestamp} \parallel \text{Payload})$$
-- Any modification to past records causes instant cryptographic tamper detection during audit replay.
-- **Why SQLite over generic MongoDB?** Financial transaction logs require ACID durability, zero-latency local write consistency, and tamper-evident chaining without network transport overhead or external database credential exposure.
-
-### 5. Core Architectural Pillars
-- **Critical-Path Milestone Timeline:** Schedule Control Tower with Finish-to-Start dependency cascading, critical path computation, and baseline vs. actual variance tracking.
-- **Institutional Decision Ledger:** Enterprise Financial Decision Ledger with column filtering, multi-sort, natural language query filters, and CSV audit exports.
-- **OpenAPI 3.0.3 Contract Studio:** Validated REST API contract with 54 operations, typed TypeScript Client SDK, and interactive developer portal.
-- **Non-Custodial Escrow Lifecycle:** Pre-authorization holds ensuring capital protection with mandatory server-side human fiduciary approval gates.
-
----
-
-## 💼 Resume-Ready Highlights (For Recruiters & Evaluators)
-
-If you are evaluating this project for software engineering, full-stack, or backend roles, here are key achievements demonstrated in this codebase:
-
-- **Architected Autonomous Fiduciary Settlement Platform:** Engineered a full-stack multi-agent system coordinating software contract lifecycle, git telemetry ingestion, and smart escrow disbursements.
-- **Production-Grade Financial Invariants:** Designed a deterministic integer-cent settlement policy engine enforcing strict zero-overpayment bounds, idempotency keys, and human-in-the-loop fiduciary approvals.
-- **High-Durability Cryptographic Ledger:** Implemented a SHA-256 hash-chained immutable audit system utilizing Node.js 22 built-in SQLite (`node:sqlite`) with WAL mode, FULL synchronous durability, and SQL triggers.
-- **Enterprise-Grade AI Security:** Designed defense-in-depth isolation for untrusted git metadata, sanitizing external inputs against prompt-injection attacks before multi-agent Gemini synthesis.
-- **Strict OpenAPI Governance & SDK Generation:** Authored and validated comprehensive OpenAPI 3.0.3 contracts, generating strongly-typed client SDKs with automated retry policies.
-- **Rigorous Test Coverage:** Developed a suite of 293 automated integration and unit tests across 26 test suites achieving 100% pass rates across concurrency, failure recovery, and financial state machines.
+- Any modification to historical records triggers instant tamper detection during audit replay.
 
 ---
 
 ## 🛠️ Local Development & Quick Start
 
 ### Prerequisites
-- Node.js `v22.5.0` or higher (`v24.14.0` recommended)
+- Node.js `v22.5.0` or higher (`v24.x` supported)
 - npm `v10.x` or higher
 
 ### Installation & Run
@@ -167,8 +141,7 @@ npm start
 # Server listens on http://localhost:3000
 ```
 
-### Running the Test Suite
-The project contains 293 rigorous automated tests covering all backend services, payment state machines, and integration flows:
+### Running Automated Tests
 
 ```bash
 npm test
@@ -185,32 +158,21 @@ npm test
    - **Build Command:** `npm run build`
    - **Start Command:** `npm start`
    - **Environment Variables:** `PORT=3000`, `NODE_ENV=production`
-4. Click **Deploy Live**. Embarko provides an instant SSL live URL!
-5. Record your demo video showcasing the live mobile-responsive app and post with `#DeployWithEmbarko`.
+4. Deploy live with instant SSL at `https://veridex.embarko.app`.
 
 ### 2. Deploy on Render (Full-Stack Blueprint)
 TrustChain includes a pre-configured `render.yaml` blueprint:
+1. Log into [Render.com](https://render.com) and click **New > Blueprint**.
+2. Select the repository and deploy with standard Node.js runtime.
 
-1. Push your changes to GitHub: `git push origin main`
-2. Log into [Render.com](https://render.com) and click **New > Blueprint**.
-3. Select your `TrustChain` repository.
-4. Render automatically runs `npm install && npm run build` and starts `npm start`.
-5. Your service is live at `https://<your-app>.onrender.com` with zero extra configuration!
-
-### 3. Deploy on Vercel (Frontend SPA)
-TrustChain includes a pre-configured `vercel.json`:
-
-1. Import `TrustChain` into [Vercel](https://vercel.com).
-2. Framework Preset: **Vite**.
-3. Build Command: `npm run build`.
-4. Output Directory: `dist`.
-5. Live frontend is instantly served on Vercel's global edge CDN.
+### 3. Deploy on Vercel (Edge SPA)
+Configured via `vercel.json` with framework preset **Vite** and output directory `dist`.
 
 ---
 
 ## 📜 Environment Variables
 
-Copy `.env.example` to `.env` to configure live integrations:
+Copy `.env.example` to `.env` to configure live credentials:
 
 ```env
 # Server Configuration
