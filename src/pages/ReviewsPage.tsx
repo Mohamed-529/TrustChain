@@ -681,55 +681,76 @@ export function ReviewsPage({
                       </div>
                     </div>
                   </div>
-                ) : !isDeveloper && (
+                ) : !isDeveloper ? (
                   /* Client Empty State: Awaiting Developer */
                   <div className="p-8 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-center space-y-3">
                     <span className="text-3xl">⏳</span>
                     <h3 className="text-sm font-semibold text-[#0b1f17]">Awaiting Developer Delivery Submission</h3>
                     <p className="text-xs text-[#6b7f75] max-w-md mx-auto">
-                      Marcus Chen has not yet submitted code for Milestone 1. You can test the fiduciary pipeline now by simulating a submission.
+                      Marcus Chen has not yet submitted code deliverables for Milestone 1. Once submitted, our multi-agent AI mesh will inspect the repository commits, test suite, and pull request.
                     </p>
                     <div className="pt-2">
                       <button
                         disabled={loading}
                         onClick={() => void onSubmitDemoEvidence()}
-                        className="px-6 py-2.5 rounded-full bg-white hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.15)] shadow-sm transition"
+                        className="px-6 py-2.5 rounded-full bg-white hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.15)] shadow-sm transition inline-flex items-center gap-2"
                       >
-                        ⚡ Simulate Developer Deliverable Submission
+                        <span>⚡</span>
+                        <span>Simulate Developer Submission (Test Sandbox)</span>
                       </button>
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                {/* Stage 1 Actions */}
-                <div className="pt-4 border-t border-[rgba(11,31,23,0.08)] flex flex-wrap items-center gap-3">
-                  <button
-                    disabled={loading}
-                    onClick={() => void onSubmitDemoEvidence()}
-                    className="px-4 py-2.5 rounded-full bg-[#f6f5f0] hover:bg-[#ecebe4] text-[#0b1f17] text-xs font-medium border border-[rgba(11,31,23,0.12)] transition disabled:opacity-50"
-                  >
-                    Submit Demo Evidence
-                  </button>
-                  <button
-                    disabled={loading}
-                    onClick={() => void onVerifyGithubProvenance()}
-                    className="px-4 py-2.5 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] text-[#2f7a50] text-xs font-medium border border-[rgba(47,122,80,0.2)] transition disabled:opacity-50"
-                  >
-                    Verify GitHub Telemetry
-                  </button>
-                  <button
-                    disabled={loading}
-                    onClick={() => {
-                      void onRunAiEvaluation();
-                      setActiveStage(2);
-                    }}
-                    className={`ml-auto px-6 py-2.5 rounded-full text-white text-xs font-semibold shadow-md hover:shadow-lg transition flex items-center gap-2 group ${
-                      isDeveloper ? 'bg-[#2563eb] hover:bg-[#1d4ed8]' : 'bg-[#0b1f17] hover:bg-[#1a382c]'
-                    }`}
-                  >
-                    <span>{isDeveloper ? 'Run AI Acceptance Verification' : 'Run AI Evaluation'}</span>
-                    <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                  </button>
+                {/* Stage 1 Actions: Strictly Persona-Driven */}
+                <div className="pt-4 border-t border-[rgba(11,31,23,0.08)] flex flex-wrap items-center justify-between gap-3">
+                  {isDeveloper ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={loading}
+                          onClick={() => void onVerifyGithubProvenance()}
+                          className="px-4 py-2 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] text-[#2f7a50] text-xs font-medium border border-[rgba(47,122,80,0.2)] transition disabled:opacity-50"
+                        >
+                          Verify GitHub Provenance
+                        </button>
+                      </div>
+                      <button
+                        disabled={loading}
+                        onClick={() => {
+                          void onRunAiEvaluation();
+                          setActiveStage(2);
+                        }}
+                        className="px-6 py-2.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold shadow-md hover:shadow-lg transition flex items-center gap-2 group"
+                      >
+                        <span>Run Multi-Agent AI Acceptance Verification</span>
+                        <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs text-[#6b7f75]">
+                        {latestSub
+                          ? 'Deliverable ingested from Marcus Chen. Fiduciary review ready.'
+                          : 'Waiting for Marcus Chen to submit code.'}
+                      </span>
+                      {latestSub && (
+                        <button
+                          disabled={loading}
+                          onClick={() => {
+                            if (!latestEval) {
+                              void onRunAiEvaluation();
+                            }
+                            setActiveStage(2);
+                          }}
+                          className="px-6 py-2.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-semibold shadow-md hover:shadow-lg transition flex items-center gap-2 group"
+                        >
+                          <span>Proceed to Tri-Agent AI Audit</span>
+                          <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             )}
