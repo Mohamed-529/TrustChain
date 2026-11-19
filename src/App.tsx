@@ -17,6 +17,7 @@ import type {
   AuditLogEntry,
   Contract,
   EvidenceSubmission,
+  HumanReviewDecision,
 } from './types/domain.ts';
 
 function buildDefaultReviewDetails(milestoneId = 'ms_seed_01', contractId = 'contract_seed_01'): MilestoneReviewDetails {
@@ -53,21 +54,25 @@ function buildDefaultReviewDetails(milestoneId = 'ms_seed_01', contractId = 'con
       deadlineIso: '2026-11-15T18:00:00.000Z',
       paymentStatus: 'NOT_READY',
       status: 'ACTIVE',
+      dependencyMilestoneIds: [],
       acceptanceCriteria: [
         {
           id: 'ac_01',
+          title: 'Storefront Catalog & Cart',
           description: 'Responsive catalog with product filters and persistent cart',
-          requiredEvidenceTypes: ['PULL_REQUEST', 'CI_ARTIFACT'],
+          requiredProofType: 'PULL_REQUEST',
         },
         {
           id: 'ac_02',
+          title: 'Automated CI Test Suite',
           description: 'Automated test suite passing >=90% statement coverage',
-          requiredEvidenceTypes: ['CI_ARTIFACT'],
+          requiredProofType: 'CI_TESTS',
         },
         {
           id: 'ac_03',
+          title: 'CVE Security Scan',
           description: 'Zero critical or high security vulnerabilities',
-          requiredEvidenceTypes: ['SECURITY_SCAN'],
+          requiredProofType: 'SECURITY_SCAN',
         },
       ],
       createdAt: '2026-11-01T09:00:00.000Z',
@@ -223,7 +228,7 @@ function AppContent() {
     },
   };
 
-  // 1. Switch Persona Handler
+  // 1. Switch Persona / Role Handler for active user persona
   const switchPersona = useCallback(async (userId: string) => {
     try {
       const res = await fetch('/api/v1/auth/demo-switch', {
@@ -308,6 +313,7 @@ function AppContent() {
                 latePenaltyDailyBps: 100,
               },
               status: 'ACTIVE',
+              version: 1,
               createdAt: '2026-11-01T09:00:00.000Z',
               updatedAt: '2026-11-01T09:00:00.000Z',
             },
@@ -539,9 +545,12 @@ function AppContent() {
             id: `appr_ai_auto_${Date.now()}`,
             milestoneId: selectedMilestoneId,
             reviewerId: 'ai_autonomous_fiduciary',
+            evaluationId: 'eval_seed_01',
             decision: 'APPROVE',
             approvedAmountCents: 227500,
             justification: 'Automated Tri-Agent verification passed. Acceptance criteria verified. Fiduciary gate automatically cleared for settlement.',
+            isOverride: false,
+            decidedAt: nowIso,
             reviewedAt: nowIso,
           },
           ...(base.approvals ?? []),
@@ -746,7 +755,7 @@ function AppContent() {
       setDisputePack(result.data.disputePack);
       setStatusBanner({
         type: 'success',
-        message: `Dispute Evidence Pack generated (Digest: ${result.data.disputePack.packDigestSha256.slice(0, 16)}...).`,
+        message: `Dispute Evidence Pack generated (Digest: ${result.data.disputePack.integrity.packDigestSha256.slice(0, 16)}...).`,
       });
     } catch (err) {
       setStatusBanner({
@@ -862,9 +871,12 @@ function AppContent() {
             id: `appr_${Date.now()}`,
             milestoneId: selectedMilestoneId,
             reviewerId: currentUser?.id ?? 'reviewer_01',
-            decision: actionEndpoint === 'approve' ? 'APPROVE' : actionEndpoint === 'reject' ? 'REJECT' : 'REQUEST_CHANGES',
+            evaluationId: prev.latestEvaluation?.id ?? 'eval_seed_01',
+            decision: (actionEndpoint === 'approve' ? 'APPROVE' : actionEndpoint === 'reject' ? 'REJECT' : 'REQUEST_REVISIONS') as HumanReviewDecision,
             approvedAmountCents: approvedCents,
             justification: justification.trim(),
+            isOverride: false,
+            decidedAt: nowIso,
             reviewedAt: nowIso,
           },
           ...(prev.approvals ?? []),
@@ -922,16 +934,19 @@ function AppContent() {
     const newTx: PayPalTransactionRecord = {
       id: `tx_${step}_${Date.now()}`,
       milestoneId: selectedMilestoneId,
-      contractId: selectedContractId,
+      approvalId: 'appr_seed_01',
       paypalOrderId: `ORD-VERIDEX-${Date.now().toString(36).toUpperCase()}`,
-      paypalAuthorizationId: step !== 'order' ? `AUTH-VERIDEX-${Date.now().toString(36).toUpperCase()}` : undefined,
-      paypalCaptureId: step === 'capture' ? `CAP-VERIDEX-${Date.now().toString(36).toUpperCase()}` : undefined,
+      paypalAuthorizationId: step !== 'order' ? `AUTH-VERIDEX-${Date.now().toString(36).toUpperCase()}` : null,
+      paypalCaptureId: step === 'capture' ? `CAP-VERIDEX-${Date.now().toString(36).toUpperCase()}` : null,
+      idempotencyKey: `idem_${Date.now()}`,
       status: nextStatus as any,
       executionMode: 'PAYPAL_SANDBOX',
+      nonEscrowDisclosure: 'Veridex non-custodial authorization hold via PayPal Orders v2.',
+      authExpiresAt: new Date(Date.now() + 29 * 24 * 3600 * 1000).toISOString(),
       authorizedAmountCents: 250000,
-      capturedAmountCents: step === 'capture' ? (approvedAmountCentsInput || 227500) : undefined,
+      capturedAmountCents: step === 'capture' ? (approvedAmountCentsInput || 227500) : 0,
       currency: 'USD',
-      createdAt: nowIso,
+      rawPaypalResponse: {},
       updatedAt: nowIso,
     };
 

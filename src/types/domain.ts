@@ -152,6 +152,50 @@ export interface CreateContractInput {
   milestones: CreateMilestoneInput[];
 }
 
+export interface ParseSpecInput {
+  content?: string;
+  rawText?: string;
+  fileName?: string;
+  fileType?: string;
+  figmaUrl?: string;
+  referenceWebsiteUrl?: string;
+  githubRepoOrIssueUrl?: string;
+  prompt?: string;
+}
+
+export interface ParsedMilestoneSpec {
+  sequenceOrder: number;
+  title: string;
+  description: string;
+  agreedAmountCents: number;
+  deadlineIso: string;
+  acceptanceCriteria: AcceptanceCriterion[];
+}
+
+export interface ParsedContractSpec {
+  title: string;
+  description: string;
+  totalBudgetCents: number;
+  currency: 'USD';
+  policyRules: ContractPolicyRules;
+  milestones: ParsedMilestoneSpec[];
+  metadata: {
+    sourceType: 'FILE_UPLOAD' | 'MANUAL_SPEC' | 'AI_QUICK_SPEC';
+    fileName?: string;
+    promptInjectionDetected: boolean;
+    referenceUrls: {
+      figmaUrl?: string;
+      referenceWebsiteUrl?: string;
+      githubRepoOrIssueUrl?: string;
+    };
+    modelUsed: string;
+  };
+}
+
+export interface ParsedContractSpecResponse {
+  spec: ParsedContractSpec;
+}
+
 export interface AuditLogEntry {
   seq: number;
   id: string;

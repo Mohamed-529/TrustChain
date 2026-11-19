@@ -198,6 +198,12 @@ export function createApiRouter(params: {
     contractController.createContract
   );
   router.post(
+    '/contracts/parse-spec',
+    authenticate,
+    requireRole(['CLIENT']),
+    contractController.parseSpec
+  );
+  router.post(
     '/contracts/:id/activate',
     authenticate,
     requireRole(['CLIENT']),

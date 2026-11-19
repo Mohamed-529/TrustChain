@@ -66,6 +66,20 @@ export const OPENAPI_REQUEST_SCHEMAS: Record<string, OpenApiObjectSchema> = {
       },
     },
   },
+  ParseSpecRequest: {
+    schemaName: 'ParseSpecRequest',
+    additionalProperties: false,
+    properties: {
+      content: { type: 'string', required: false, maxLength: 5000000 },
+      rawText: { type: 'string', required: false, maxLength: 5000000 },
+      fileName: { type: 'string', required: false, maxLength: 256 },
+      fileType: { type: 'string', required: false, maxLength: 64 },
+      figmaUrl: { type: 'string', required: false, maxLength: 2048 },
+      referenceWebsiteUrl: { type: 'string', required: false, maxLength: 2048 },
+      githubRepoOrIssueUrl: { type: 'string', required: false, maxLength: 2048 },
+      prompt: { type: 'string', required: false, maxLength: 10000 },
+    },
+  },
   CreateContractRequest: {
     schemaName: 'CreateContractRequest',
     additionalProperties: false,

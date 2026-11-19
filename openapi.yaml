@@ -85,6 +85,36 @@ paths:
               schema:
                 type: string
 
+  /auth/register:
+    post:
+      operationId: registerUser
+      tags: [Auth]
+      summary: Register a new user account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [CLIENT, DEVELOPER, REVIEWER]
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+
   /auth/login:
     post:
       operationId: loginUser
@@ -237,6 +267,33 @@ paths:
         '403':
           $ref: '#/components/responses/ForbiddenError'
 
+  /contracts/parse-spec:
+    post:
+      operationId: parseContractSpec
+      tags: [Contracts]
+      summary: Multi-modal requirement intake parsing for PRD documents and reference links
+      description: |
+        Extracts structured contract metadata, milestones, and testable acceptance criteria from uploaded documents (.pdf, .md, .txt) or reference URLs. Uses Google Gemini when configured with deterministic fallback when absent.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseSpecRequest'
+      responses:
+        '200':
+          description: Parsed contract specification structure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParseSpecResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
   /contracts/{id}:
     get:
       operationId: getContractById
@@ -282,6 +339,27 @@ paths:
           $ref: '#/components/responses/NotFoundError'
         '409':
           $ref: '#/components/responses/ConflictError'
+
+  /contracts/{id}/reset-demo:
+    post:
+      operationId: resetDemoContract
+      tags: [Contracts]
+      summary: Reset demo contract back to fresh unreviewed state
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPathParam'
+      responses:
+        '200':
+          description: Contract reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
 
   /contracts/{id}/schedule:
     get:
@@ -470,6 +548,25 @@ paths:
           $ref: '#/components/responses/BadRequestError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /milestones/{id}/evidence/verify-provenance:
+    post:
+      operationId: verifyMilestoneEvidenceProvenanceAlias
+      tags: [Evidence]
+      summary: Alias to independently verify submitted GitHub telemetry and SHA-256 payload integrity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Provenance verified
         '404':
           $ref: '#/components/responses/NotFoundError'
 
@@ -883,6 +980,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuditChainVerificationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /search:
+    get:
+      operationId: searchEntities
+      tags: [System]
+      summary: Global search across contracts, milestones, evidence, and audit events
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
@@ -1322,6 +1438,54 @@ paths:
                 $ref: '#/components/schemas/DisputePackExportResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/milestones/{milestoneId}/dispute-pack/verify:
+    get:
+      operationId: verifyMilestoneDisputePack
+      tags: [Approvals]
+      summary: Verify the latest dispute evidence pack for a given milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verification report
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /contracts/{contractId}/milestones/{milestoneId}/dispute-pack/export:
+    get:
+      operationId: exportMilestoneDisputePack
+      tags: [Approvals]
+      summary: Export the latest dispute evidence pack for a given milestone
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dispute pack export
         '404':
           $ref: '#/components/responses/NotFoundError'
 
@@ -1912,6 +2076,68 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/AcceptanceCriterion'
+
+    ParseSpecRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+          description: Base64 or raw text content of uploaded file
+        rawText:
+          type: string
+          description: Raw requirements text or markdown
+        fileName:
+          type: string
+          description: Name of uploaded file
+        fileType:
+          type: string
+          description: MIME type of uploaded file
+        figmaUrl:
+          type: string
+          description: Optional Figma mockup reference URL
+        referenceWebsiteUrl:
+          type: string
+          description: Optional reference website URL
+        githubRepoOrIssueUrl:
+          type: string
+          description: Optional GitHub repository reference URL
+        prompt:
+          type: string
+          description: Optional natural language prompt
+
+    ParseSpecResponse:
+      type: object
+      required:
+        - spec
+      properties:
+        spec:
+          type: object
+          required:
+            - title
+            - description
+            - totalBudgetCents
+            - currency
+            - policyRules
+            - milestones
+          properties:
+            title:
+              type: string
+            description:
+              type: string
+            totalBudgetCents:
+              type: integer
+            currency:
+              type: string
+              enum: [USD]
+            policyRules:
+              $ref: '#/components/schemas/ContractPolicyRules'
+            milestones:
+              type: array
+              items:
+                $ref: '#/components/schemas/CreateMilestoneInput'
+            metadata:
+              type: object
 
     CreateContractRequest:
       type: object

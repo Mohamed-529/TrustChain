@@ -65,6 +65,15 @@ export class ContractController {
     }
   };
 
+  public parseSpec = async (req: ApiRequest, res: ApiResponse, next: NextFunction): Promise<void> => {
+    try {
+      const spec = await this.contractService.parseSpec(req.body ?? {});
+      res.status(200).json({ spec });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   public activateContract = (req: ApiRequest, res: ApiResponse, next: NextFunction): void => {
     try {
       if (!req.actor) {

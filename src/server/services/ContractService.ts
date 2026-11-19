@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import type { AppDatabase } from '../repositories/Database.ts';
 import type {
   ContractRepository,
@@ -15,6 +16,9 @@ import type {
   Milestone,
   RequiredProofType,
   User,
+  ParseSpecInput,
+  ParsedContractSpec,
+  ParsedMilestoneSpec,
 } from '../../types/domain.ts';
 import { AppError } from '../middleware/errorHandler.ts';
 
@@ -500,5 +504,538 @@ export class ContractService {
 
       return this.getContractById(contractId);
     });
+  }
+
+  /**
+   * Multi-Modal Requirement Intake Parser
+   * Parses uploaded documents (.pdf, .md, .txt) and reference links into structured milestones.
+   * Supports Google Gemini with mandatory deterministic offline fallback and prompt injection defense.
+   */
+  public async parseSpec(input: ParseSpecInput): Promise<ParsedContractSpec> {
+    let rawText = (input.rawText ?? '').trim();
+    const content = (input.content ?? '').trim();
+    const prompt = (input.prompt ?? '').trim();
+    const fileName = (input.fileName ?? '').trim();
+    const fileType = (input.fileType ?? '').trim().toLowerCase();
+
+    // 1. Extract text from uploaded file if provided
+    if (content.length > 0) {
+      const isPdf =
+        fileName.toLowerCase().endsWith('.pdf') ||
+        fileType === 'application/pdf' ||
+        content.startsWith('%PDF-') ||
+        content.startsWith('data:application/pdf;base64,');
+
+      if (isPdf) {
+        let base64Clean = content;
+        if (content.includes(';base64,')) {
+          base64Clean = content.split(';base64,')[1];
+        }
+        try {
+          const buf = Buffer.from(base64Clean, 'base64');
+          const pdfExtracted = this.extractTextFromPdfBuffer(buf);
+          rawText = (rawText ? rawText + '\n\n' : '') + pdfExtracted;
+        } catch {
+          rawText = (rawText ? rawText + '\n\n' : '') + content;
+        }
+      } else {
+        let textContent = content;
+        if (content.startsWith('data:') && content.includes(';base64,')) {
+          try {
+            textContent = Buffer.from(content.split(';base64,')[1], 'base64').toString('utf8');
+          } catch {
+            textContent = content;
+          }
+        }
+        rawText = (rawText ? rawText + '\n\n' : '') + textContent;
+      }
+    }
+
+    if (prompt.length > 0) {
+      rawText = (rawText ? rawText + '\n\n' : '') + prompt;
+    }
+
+    // 2. Synthesize text from references if rawText is minimal
+    const hasRefs = Boolean(
+      input.figmaUrl?.trim() ||
+      input.referenceWebsiteUrl?.trim() ||
+      input.githubRepoOrIssueUrl?.trim()
+    );
+
+    if (rawText.length < 5) {
+      if (hasRefs) {
+        rawText = `Contract derived from design and technical references: ${[
+          input.figmaUrl?.trim() ? `Figma (${input.figmaUrl.trim()})` : null,
+          input.referenceWebsiteUrl?.trim() ? `Reference App (${input.referenceWebsiteUrl.trim()})` : null,
+          input.githubRepoOrIssueUrl?.trim() ? `GitHub Target (${input.githubRepoOrIssueUrl.trim()})` : null,
+        ]
+          .filter(Boolean)
+          .join(', ')}`;
+      } else {
+        throw new AppError(
+          400,
+          'EMPTY_SPEC_CONTENT',
+          'Specification content, document, or prompt is required.'
+        );
+      }
+    }
+
+    // 3. Prompt-injection defense and sanitization
+    const injectionAnalysis = this.detectAndSanitizePromptInjection(rawText);
+    const sanitizedText = injectionAnalysis.sanitizedText;
+
+    // 4. Try Google Gemini if configured
+    const apiKey = process.env.GEMINI_API_KEY;
+    const isGeminiAvailable = Boolean(apiKey && apiKey.trim().length > 0 && apiKey !== 'MY_GEMINI_API_KEY');
+
+    if (isGeminiAvailable && apiKey) {
+      try {
+        const geminiResult = await this.callGeminiSpecParser(apiKey, sanitizedText, input);
+        if (geminiResult) {
+          return {
+            ...geminiResult,
+            metadata: {
+              sourceType: content ? 'FILE_UPLOAD' : prompt ? 'AI_QUICK_SPEC' : 'MANUAL_SPEC',
+              fileName: fileName || undefined,
+              promptInjectionDetected: injectionAnalysis.promptInjectionDetected,
+              referenceUrls: {
+                figmaUrl: input.figmaUrl?.trim() || undefined,
+                referenceWebsiteUrl: input.referenceWebsiteUrl?.trim() || undefined,
+                githubRepoOrIssueUrl: input.githubRepoOrIssueUrl?.trim() || undefined,
+              },
+              modelUsed: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+            },
+          };
+        }
+      } catch {
+        // Fall back gracefully to deterministic parsing
+      }
+    }
+
+    // 5. Mandatory Deterministic Fallback Parser
+    const fallbackSpec = this.parseSpecDeterministically(sanitizedText, input);
+    return {
+      ...fallbackSpec,
+      metadata: {
+        sourceType: content ? 'FILE_UPLOAD' : prompt ? 'AI_QUICK_SPEC' : 'MANUAL_SPEC',
+        fileName: fileName || undefined,
+        promptInjectionDetected: injectionAnalysis.promptInjectionDetected,
+        referenceUrls: {
+          figmaUrl: input.figmaUrl?.trim() || undefined,
+          referenceWebsiteUrl: input.referenceWebsiteUrl?.trim() || undefined,
+          githubRepoOrIssueUrl: input.githubRepoOrIssueUrl?.trim() || undefined,
+        },
+        modelUsed: 'deterministic-offline-fallback',
+      },
+    };
+  }
+
+  private extractTextFromPdfBuffer(buffer: Buffer): string {
+    const str = buffer.toString('latin1');
+    let extractedText = '';
+
+    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let match: RegExpExecArray | null;
+    while ((match = streamRegex.exec(str)) !== null) {
+      let streamBytes = Buffer.from(match[1], 'latin1');
+      try {
+        streamBytes = zlib.inflateSync(streamBytes);
+      } catch {
+        // uncompressed stream or already raw
+      }
+      const decoded = streamBytes.toString('latin1');
+
+      const tjRegex = /\(([^)]+)\)\s*Tj/g;
+      let tjMatch: RegExpExecArray | null;
+      while ((tjMatch = tjRegex.exec(decoded)) !== null) {
+        extractedText += tjMatch[1] + ' ';
+      }
+
+      const tjaRegex = /\[(.*?)\]\s*TJ/g;
+      let tjaMatch: RegExpExecArray | null;
+      while ((tjaMatch = tjaRegex.exec(decoded)) !== null) {
+        const innerTj = /\(([^)]+)\)/g;
+        let innerMatch: RegExpExecArray | null;
+        while ((innerMatch = innerTj.exec(tjaMatch[1])) !== null) {
+          extractedText += innerMatch[1] + ' ';
+        }
+      }
+    }
+
+    const rawAsciiWords = str.match(/[A-Za-z0-9\s.,;:!?'"#-]{4,}/g) || [];
+    const filteredAscii = rawAsciiWords
+      .filter((w) => !w.includes('ObjStm') && !w.includes('endobj') && !w.includes('FlateDecode') && !w.includes('XObject'))
+      .join(' ');
+
+    const combined = (extractedText + ' ' + filteredAscii).replace(/\s+/g, ' ').trim();
+    return combined || 'Uploaded Document Specification';
+  }
+
+  private detectAndSanitizePromptInjection(text: string): { promptInjectionDetected: boolean; sanitizedText: string } {
+    const patterns: RegExp[] = [
+      /ignore\s+(all\s+)?(previous|prior|above|system)\s+instructions/i,
+      /(system\s+override|you\s+are\s+now\s+the\s+admin|act\s+as\s+settlement\s+bot)/i,
+      /<\/?untrusted_evidence>/i,
+      /(set\s+milestoneStatus\s*=\s*["']?APPROVED|bypass\s+human\s+(review|approval)|recommendedOutcome\s*=\s*["']?PASS["']?)/i,
+      /(approvedAmountCents\s*=|call\s+paypal|release\s+\$?[0-9,]+(\.[0-9]{2})?\s+via\s+paypal|capture\s+immediately)/i,
+      /(transfer|disburse|pay|send)\s+\$?[0-9,]+(\.[0-9]{2})?\s+(to|into)\s+/i,
+      /(approve\s+all\s+(milestones|payments)|hacker\s+account|drain\s+funds)/i,
+    ];
+
+    let detected = false;
+    let sanitized = text;
+
+    for (const pat of patterns) {
+      if (pat.test(sanitized)) {
+        detected = true;
+        sanitized = sanitized.replace(pat, '[ESCAPED_INJECTION_PATTERN]');
+      }
+    }
+
+    return { promptInjectionDetected: detected, sanitizedText: sanitized };
+  }
+
+  private async callGeminiSpecParser(
+    apiKey: string,
+    sanitizedText: string,
+    input: ParseSpecInput
+  ): Promise<Omit<ParsedContractSpec, 'metadata'> | null> {
+    const model = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model
+    )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const systemInstruction = `You are an expert full-stack software architect. Parse the provided software specification / PRD into structured contract milestones with acceptance criteria.
+Return ONLY valid JSON matching this structure:
+{
+  "title": "string (project title)",
+  "description": "string (executive summary of scope)",
+  "totalBudgetCents": integer (e.g. 550000 for $5,500.00),
+  "milestones": [
+    {
+      "sequenceOrder": 1,
+      "title": "string",
+      "description": "string",
+      "agreedAmountCents": integer,
+      "estimatedDays": integer,
+      "acceptanceCriteria": [
+        {
+          "id": "AC-1",
+          "title": "string",
+          "description": "string",
+          "requiredProofType": "PULL_REQUEST" | "CI_TESTS" | "SECURITY_SCAN" | "CODE_COMMIT" | "API_DOCS"
+        }
+      ]
+    }
+  ]
+}
+Ensure sum of milestone agreedAmountCents equals totalBudgetCents. Generate 2 to 3 testable milestones.`;
+
+    const userPrompt = `Requirements Document:\n${sanitizedText.slice(0, 15000)}\n\nOptional References:\nFigma: ${input.figmaUrl ?? 'none'}\nReference Site: ${input.referenceWebsiteUrl ?? 'none'}\nGitHub: ${input.githubRepoOrIssueUrl ?? 'none'}`;
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+        },
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = (await res.json()) as any;
+    const textOut = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textOut) return null;
+
+    const parsed = JSON.parse(textOut);
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.milestones) || parsed.milestones.length === 0) {
+      return null;
+    }
+
+    const now = Date.now();
+    let calculatedTotal = 0;
+    const validatedMilestones: ParsedMilestoneSpec[] = parsed.milestones.map((m: any, idx: number) => {
+      const amount = isPositiveInteger(m.agreedAmountCents) ? m.agreedAmountCents : 250000;
+      calculatedTotal += amount;
+      const days = isPositiveInteger(m.estimatedDays) ? m.estimatedDays : (idx + 1) * 14;
+      const criteria: AcceptanceCriterion[] = Array.isArray(m.acceptanceCriteria) && m.acceptanceCriteria.length > 0
+        ? m.acceptanceCriteria.map((c: any, cIdx: number) => ({
+            id: typeof c.id === 'string' && c.id.trim() ? c.id.trim() : `AC-${cIdx + 1}`,
+            title: typeof c.title === 'string' && c.title.trim() ? c.title.trim() : `Criterion ${cIdx + 1}`,
+            description: typeof c.description === 'string' ? c.description.trim() : 'Deliverable verification criterion.',
+            requiredProofType: VALID_PROOF_TYPES.includes(c.requiredProofType) ? c.requiredProofType : 'PULL_REQUEST',
+          }))
+        : [
+            {
+              id: 'AC-1',
+              title: 'Source Code Implementation',
+              description: 'Merge pull request with passing test suite.',
+              requiredProofType: 'PULL_REQUEST',
+            },
+          ];
+
+      return {
+        sequenceOrder: idx + 1,
+        title: typeof m.title === 'string' && m.title.trim() ? m.title.trim() : `Milestone ${idx + 1}`,
+        description: typeof m.description === 'string' ? m.description.trim() : 'Software deliverable milestone.',
+        agreedAmountCents: amount,
+        deadlineIso: new Date(now + days * 24 * 60 * 60 * 1000).toISOString(),
+        acceptanceCriteria: criteria,
+      };
+    });
+
+    const totalCents = isPositiveInteger(parsed.totalBudgetCents) ? parsed.totalBudgetCents : calculatedTotal;
+    if (calculatedTotal !== totalCents && validatedMilestones.length > 0) {
+      validatedMilestones[0].agreedAmountCents += totalCents - calculatedTotal;
+    }
+
+    return {
+      title: typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : 'Software Delivery Contract',
+      description: typeof parsed.description === 'string' && parsed.description.trim() ? parsed.description.trim() : sanitizedText.slice(0, 300),
+      totalBudgetCents: totalCents,
+      currency: 'USD',
+      policyRules: {
+        requirePassingCi: true,
+        requireSecurityScan: true,
+        maxAllowedCriticalVulns: 0,
+        maxAllowedHighVulns: 0,
+        allowPartialPayout: true,
+        latePenaltyDailyBps: 100,
+      },
+      milestones: validatedMilestones,
+    };
+  }
+
+  private parseSpecDeterministically(
+    sanitizedText: string,
+    input: ParseSpecInput
+  ): Omit<ParsedContractSpec, 'metadata'> {
+    // 1. Derive Title
+    let title = '';
+    const titleMatch = sanitizedText.match(/^(?:#|Title:?|Project:?)\s*([^\r\n]+)/im);
+    if (titleMatch && titleMatch[1].trim().length > 3) {
+      title = titleMatch[1].trim().replace(/^#+\s*/, '');
+    } else if (input.fileName) {
+      title = input.fileName
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    } else {
+      const firstLine = sanitizedText.split('\n').find((l) => l.trim().length > 4);
+      title = firstLine ? firstLine.trim().slice(0, 80).replace(/^#+\s*/, '') : 'Software Delivery Contract';
+    }
+
+    // 2. Append references to description
+    let description = sanitizedText.slice(0, 600).replace(/^#+[^\n]+\n?/, '').trim();
+    if (!description) {
+      description = 'Software delivery contract with verified milestones and deterministic settlement.';
+    }
+
+    const refLines: string[] = [];
+    if (input.figmaUrl?.trim()) refLines.push(`• Figma: ${input.figmaUrl.trim()}`);
+    if (input.referenceWebsiteUrl?.trim()) refLines.push(`• Reference Site: ${input.referenceWebsiteUrl.trim()}`);
+    if (input.githubRepoOrIssueUrl?.trim()) refLines.push(`• GitHub Target: ${input.githubRepoOrIssueUrl.trim()}`);
+    if (refLines.length > 0) {
+      description += `\n\n[Design & Technical References]\n${refLines.join('\n')}`;
+    }
+
+    // 3. Extract budget if mentioned
+    let totalBudgetCents = 550000; // $5,500.00 default
+    const budgetMatch =
+      sanitizedText.match(/(?:Total\s*Budget|Budget|Cost|Price)[:\s]*\$([0-9,]+(?:\.[0-9]{2})?)/i) ||
+      sanitizedText.match(/\$([0-9,]+(?:\.[0-9]{2})?)/);
+    if (budgetMatch) {
+      const parsedNum = parseFloat(budgetMatch[1].replace(/,/g, ''));
+      if (!Number.isNaN(parsedNum) && parsedNum >= 100) {
+        totalBudgetCents = Math.round(parsedNum * 100);
+      }
+    }
+
+    // 4. Extract section milestones
+    const lines = sanitizedText.split('\n');
+    const milestoneBlocks: Array<{ title: string; bullets: string[]; explicitAmountCents?: number }> = [];
+    let currentBlock: { title: string; bullets: string[]; explicitAmountCents?: number } | null = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const headingMatch = line.match(/^(?:##|###|\*\*|Milestone\s+\d+|Phase\s+\d+)\s*[:.-]?\s*(.+)/i);
+      if (headingMatch) {
+        if (currentBlock) milestoneBlocks.push(currentBlock);
+        currentBlock = {
+          title: headingMatch[1].replace(/\*\*$/, '').trim(),
+          bullets: [],
+        };
+      } else if (currentBlock) {
+        const amountMatch = line.match(/^(?:Budget|Amount)[:\s]*\$([0-9,]+(?:\.[0-9]{2})?)/i);
+        if (amountMatch) {
+          const parsed = parseFloat(amountMatch[1].replace(/,/g, ''));
+          if (!Number.isNaN(parsed) && parsed > 0) {
+            currentBlock.explicitAmountCents = Math.round(parsed * 100);
+          }
+          continue;
+        }
+
+        if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s/.test(line)) {
+          const bulletText = line.replace(/^[-*]|\d+\.\s*/, '').trim();
+          if (bulletText.length > 3) {
+            currentBlock.bullets.push(bulletText);
+          }
+        }
+      }
+    }
+    if (currentBlock) milestoneBlocks.push(currentBlock);
+
+    const now = Date.now();
+    let milestones: ParsedMilestoneSpec[] = [];
+
+    if (milestoneBlocks.length >= 2) {
+      const selected = milestoneBlocks.slice(0, 4);
+      const count = selected.length;
+      const allHaveExplicit = selected.every((b) => typeof b.explicitAmountCents === 'number');
+
+      if (allHaveExplicit) {
+        let sum = 0;
+        milestones = selected.map((block, idx) => {
+          const amount = block.explicitAmountCents!;
+          sum += amount;
+          return {
+            sequenceOrder: idx + 1,
+            title: `Milestone ${idx + 1}: ${block.title}`,
+            description: block.bullets.join('. ') || 'Core deliverable implementation.',
+            agreedAmountCents: amount,
+            deadlineIso: new Date(now + (idx + 1) * 14 * 24 * 60 * 60 * 1000).toISOString(),
+            acceptanceCriteria: this.buildCriteriaFromBullets(block.bullets),
+          };
+        });
+        totalBudgetCents = sum;
+      } else {
+        const baseShare = Math.floor(totalBudgetCents / count);
+        let allocated = 0;
+
+        milestones = selected.map((block, idx) => {
+          const isLast = idx === count - 1;
+          const amount = typeof block.explicitAmountCents === 'number'
+            ? block.explicitAmountCents
+            : isLast
+            ? totalBudgetCents - allocated
+            : baseShare;
+          allocated += amount;
+
+          return {
+            sequenceOrder: idx + 1,
+            title: `Milestone ${idx + 1}: ${block.title}`,
+            description: block.bullets.join('. ') || 'Core deliverable implementation.',
+            agreedAmountCents: amount,
+            deadlineIso: new Date(now + (idx + 1) * 14 * 24 * 60 * 60 * 1000).toISOString(),
+            acceptanceCriteria: this.buildCriteriaFromBullets(block.bullets),
+          };
+        });
+      }
+    } else {
+      // Standard 2-milestone split
+      const m1Amount = Math.round(totalBudgetCents * 0.55);
+      const m2Amount = totalBudgetCents - m1Amount;
+
+      milestones = [
+        {
+          sequenceOrder: 1,
+          title: 'Milestone 1: Core Architecture, API Contract & Implementation',
+          description: 'Deliver core system implementation with passing unit tests and merged pull request.',
+          agreedAmountCents: m1Amount,
+          deadlineIso: new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          acceptanceCriteria: [
+            {
+              id: 'AC-1',
+              title: 'Source Code Implementation',
+              description: 'Merge feature PR with unit tests.',
+              requiredProofType: 'PULL_REQUEST',
+            },
+            {
+              id: 'AC-2',
+              title: 'Automated CI Test Suite',
+              description: 'Passing automated test run with zero critical vulnerabilities.',
+              requiredProofType: 'CI_TESTS',
+            },
+          ],
+        },
+        {
+          sequenceOrder: 2,
+          title: 'Milestone 2: Security Hardening, Verification & Production Readiness',
+          description: 'Production hardening, security scans, and deployment smoke test verification.',
+          agreedAmountCents: m2Amount,
+          deadlineIso: new Date(now + 28 * 24 * 60 * 60 * 1000).toISOString(),
+          acceptanceCriteria: [
+            {
+              id: 'AC-1',
+              title: 'OpenAPI Documentation & Security Scan',
+              description: 'Deliver API specification and vulnerability audit report.',
+              requiredProofType: 'SECURITY_SCAN',
+            },
+            {
+              id: 'AC-2',
+              title: 'API Engine Specification',
+              description: 'Verified OpenAPI 3.0.3 contract and schema documentation.',
+              requiredProofType: 'API_DOCS',
+            },
+          ],
+        },
+      ];
+    }
+
+    return {
+      title,
+      description,
+      totalBudgetCents,
+      currency: 'USD',
+      policyRules: {
+        requirePassingCi: true,
+        requireSecurityScan: true,
+        maxAllowedCriticalVulns: 0,
+        maxAllowedHighVulns: 0,
+        allowPartialPayout: true,
+        latePenaltyDailyBps: 100,
+      },
+      milestones,
+    };
+  }
+
+  private buildCriteriaFromBullets(bullets: string[]): AcceptanceCriterion[] {
+    return bullets.length > 0
+      ? bullets.slice(0, 4).map((b, bIdx) => {
+          const lower = b.toLowerCase();
+          let proofType: RequiredProofType = 'PULL_REQUEST';
+          if (lower.includes('ci_tests') || lower.includes('test') || lower.includes('coverage') || lower.includes('ci')) {
+            proofType = 'CI_TESTS';
+          } else if (lower.includes('security_scan') || lower.includes('security') || lower.includes('cve') || lower.includes('audit') || lower.includes('slither')) {
+            proofType = 'SECURITY_SCAN';
+          } else if (lower.includes('api_docs') || lower.includes('api') || lower.includes('spec') || lower.includes('docs')) {
+            proofType = 'API_DOCS';
+          }
+          return {
+            id: `AC-${bIdx + 1}`,
+            title: b.slice(0, 60),
+            description: b,
+            requiredProofType: proofType,
+          };
+        })
+      : [
+          {
+            id: 'AC-1',
+            title: 'Deliverable Implementation',
+            description: 'Complete feature pull request merged into main.',
+            requiredProofType: 'PULL_REQUEST',
+          },
+          {
+            id: 'AC-2',
+            title: 'Automated CI Test Suite',
+            description: 'Passing automated tests with zero security vulnerabilities.',
+            requiredProofType: 'CI_TESTS',
+          },
+        ];
   }
 }

@@ -111,8 +111,8 @@ describe('APIMatic Sponsor Excellence — OpenAPI 3.0.3 Contract, SDK & Agent In
       }
     }
 
-    assert.equal(routes.length, 54, 'Expected exactly 54 registered routes in apiRoutes.ts');
-    assert.equal(yamlOps.length, 54, 'Expected exactly 54 documented operations in openapi.yaml');
+    assert.equal(routes.length, 61, 'Expected exactly 61 registered routes in apiRoutes.ts');
+    assert.equal(yamlOps.length, 61, 'Expected exactly 61 documented operations in openapi.yaml');
 
     const missingInYaml = routes.filter((r) => !yamlOps.some((y) => y.method === r.method && y.path === r.path));
     assert.equal(missingInYaml.length, 0, `Routes missing in openapi.yaml: ${JSON.stringify(missingInYaml)}`);
