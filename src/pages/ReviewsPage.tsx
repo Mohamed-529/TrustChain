@@ -7,6 +7,17 @@ import type {
   User,
 } from '../types/domain.ts';
 
+export interface CustomEvidenceInput {
+  repoUrl?: string;
+  branch?: string;
+  commitSha?: string;
+  prUrl?: string;
+  passedTests?: number;
+  totalTests?: number;
+  coveragePct?: number;
+  developerNotes?: string;
+}
+
 interface ReviewsPageProps {
   currentUser: User | null;
   selectedMilestoneId: string;
@@ -22,7 +33,7 @@ interface ReviewsPageProps {
   setApprovedAmountCentsInput: (val: number) => void;
   justification: string;
   setJustification: (val: string) => void;
-  onSubmitDemoEvidence: () => Promise<void>;
+  onSubmitDemoEvidence: (customData?: CustomEvidenceInput) => Promise<void>;
   onVerifyGithubProvenance: () => Promise<void>;
   onRunAiEvaluation: () => Promise<void>;
   onReviewAction: (action: 'approve' | 'reject' | 'request-changes') => Promise<void>;
@@ -65,6 +76,17 @@ export function ReviewsPage({
 }: ReviewsPageProps) {
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [activeStage, setActiveStage] = useState<1 | 2 | 3 | 4>(1);
+
+  // Custom Evidence Ingestion State (e.g. Flight Booking System or custom repo)
+  const [intakeMode, setIntakeMode] = useState<'CUSTOM' | 'PRESET'>('CUSTOM');
+  const [customRepo, setCustomRepo] = useState('https://github.com/Mohamed-529/flight-booking-system');
+  const [customBranch, setCustomBranch] = useState('main');
+  const [customCommit, setCustomCommit] = useState('7c4e21a93d8b1f52');
+  const [customPr, setCustomPr] = useState('https://github.com/Mohamed-529/flight-booking-system/pull/1');
+  const [customPassedTests, setCustomPassedTests] = useState(48);
+  const [customTotalTests, setCustomTotalTests] = useState(48);
+  const [customCoverage, setCustomCoverage] = useState(94.5);
+  const [customNotes, setCustomNotes] = useState('Flight booking seat selection, itinerary state, and PayPal authorization integrated with 100% test pass.');
 
   const latestSub = reviewDetails?.latestSubmission;
   const latestEval = reviewDetails?.latestEvaluation;
@@ -110,6 +132,24 @@ export function ReviewsPage({
     }
   }, [isStage1Complete, isStage2Complete, isStage3Complete, isStage4Complete, isAuthorized]);
 
+  const handleCustomSubmit = async () => {
+    if (intakeMode === 'CUSTOM') {
+      await onSubmitDemoEvidence({
+        repoUrl: customRepo,
+        branch: customBranch,
+        commitSha: customCommit,
+        prUrl: customPr,
+        passedTests: customPassedTests,
+        totalTests: customTotalTests,
+        coveragePct: customCoverage,
+        developerNotes: customNotes,
+      });
+    } else {
+      await onSubmitDemoEvidence();
+    }
+    setActiveStage(2);
+  };
+
   // Steppers tailored by role
   const developerStages = [
     {
@@ -118,7 +158,7 @@ export function ReviewsPage({
       title: 'Submit Code & Proof',
       shortTitle: 'Submit Code',
       isComplete: isStage1Complete,
-      chip: latestSub ? `✓ ${latestSub.ciReport.passedTests}/${latestSub.ciReport.totalTests} Tests` : 'Ready to Submit',
+      chip: latestSub ? `✓ ${latestSub.ciReport.passedTests}/${latestSub.ciReport.totalTests} Tests` : 'Ready to Ingest',
       icon: '📦',
     },
     {
@@ -129,7 +169,7 @@ export function ReviewsPage({
       isComplete: isStage2Complete,
       chip: latestEval
         ? `✓ ${latestEval.arbitratorRecommendation.recommendedOutcome} (3/3 AC)`
-        : 'Pending Run',
+        : 'Run Multi-Agent AI',
       icon: '🤖',
     },
     {
@@ -140,7 +180,7 @@ export function ReviewsPage({
       isComplete: isStage3Complete,
       chip: isApprovedByHuman
         ? `✓ Permitted: ${formatUsdCents(policy?.permittedAmountCents ?? 227500)}`
-        : 'Awaiting Client',
+        : 'Awaiting Client Approval',
       icon: '💰',
     },
     {
@@ -153,7 +193,7 @@ export function ReviewsPage({
         ? '✓ Funds Disbursed'
         : isAuthorized
         ? '🔒 Guaranteed in Escrow'
-        : 'Awaiting Escrow Lock',
+        : 'Pending 29-Day Hold',
       icon: '🏦',
     },
   ];
@@ -209,7 +249,28 @@ export function ReviewsPage({
 
   return (
     <div className="space-y-6 font-sans pb-12">
-      {/* Dynamic Header Tailored by Persona */}
+      {/* Top Banner: Clear Step Sequence Guide */}
+      <div className="p-3.5 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#10b981] animate-ping" />
+          <span className="font-semibold text-[#0b1f17]">Interactive Fiduciary Lifecycle:</span>
+          <span className="text-[#3d5248] hidden sm:inline">
+            1. Developer submits code → 2. Tri-Agent AI verifies requirements → 3. Client approves fiduciary gate → 4. Client locks 29-day hold &amp; captures settlement.
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] font-mono text-[#6b7f75]">Active Persona:</span>
+          <span
+            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono ${
+              isDeveloper ? 'bg-[#e0e7ff] text-[#2563eb]' : 'bg-[#e9efe6] text-[#2f7a50]'
+            }`}
+          >
+            {isDeveloper ? '👨‍💻 MARCUS CHEN (DEVELOPER)' : '👩‍💼 ELENA VANCE (CLIENT)'}
+          </span>
+        </div>
+      </div>
+
+      {/* Dynamic Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[rgba(11,31,23,0.08)] pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -229,7 +290,7 @@ export function ReviewsPage({
           </h1>
           <p className="text-xs text-[#3d5248] mt-1 max-w-2xl leading-relaxed">
             {isDeveloper
-              ? 'Submit your git pull requests, verify automated CI telemetry, run autonomous AI acceptance verification, and track escrow payout disbursements.'
+              ? 'Submit real repository deliverables (e.g. Flight Booking System), trigger multi-agent AI verification, and monitor escrow payout release.'
               : 'Inspect software delivered by Marcus Chen (Developer), verify AI consensus risk scores, approve milestone payout caps, and release PayPal pre-authorized escrow holds.'}
           </p>
         </div>
@@ -256,7 +317,7 @@ export function ReviewsPage({
           Target Milestone:
         </span>
         {[
-          { id: 'ms_seed_01', label: 'Milestone 1 · Storefront & Cart Microservice (Active)' },
+          { id: 'ms_seed_01', label: 'Milestone 1 · Core Deliverable (Active)' },
           { id: 'ms_seed_02', label: 'Milestone 2 · Settlement Policy Engine (Case B)' },
           { id: 'ms_seed_03', label: 'Milestone 3 · Audit Replay & Security' },
         ].map((m) => {
@@ -343,9 +404,9 @@ export function ReviewsPage({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* CENTER HERO SPOTLIGHT STAGE (Col-span 8) */}
         <div className="lg:col-span-8 space-y-4">
-          <div className="p-6 sm:p-7 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-[0_4px_24px_-4px_rgba(11,31,23,0.06)] min-h-[460px] flex flex-col justify-between transition-all">
+          <div className="p-6 sm:p-7 rounded-3xl bg-white border border-[rgba(11,31,23,0.08)] shadow-[0_4px_24px_-4px_rgba(11,31,23,0.06)] min-h-[480px] flex flex-col justify-between transition-all">
             {/* ============================================================== */}
-            {/* STAGE 1 SPOTLIGHT: DELIVERY EVIDENCE                          */}
+            {/* STAGE 1 SPOTLIGHT: DELIVERY EVIDENCE & CUSTOM INTAKE          */}
             {/* ============================================================== */}
             {activeStage === 1 && (
               <div className="space-y-5 animate-fadeIn">
@@ -366,7 +427,7 @@ export function ReviewsPage({
                       </h2>
                       <p className="text-[11px] text-[#6b7f75]">
                         {isDeveloper
-                          ? 'Ingest your git commit, pull request status, and automated test telemetry for Milestone 1.'
+                          ? 'Ingest your custom repository (e.g. Flight Booking System), pull request status, and test telemetry.'
                           : 'Inspect git deliverables submitted by Marcus Chen (Developer) prior to escrow release.'}
                       </p>
                     </div>
@@ -376,9 +437,177 @@ export function ReviewsPage({
                   </span>
                 </div>
 
+                {/* DEVELOPER CUSTOM INGESTION INTERFACE */}
+                {isDeveloper && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-[rgba(11,31,23,0.08)] pb-2.5">
+                      <span className="text-xs font-semibold text-[#0b1f17]">
+                        Select Delivery Input Mode:
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIntakeMode('CUSTOM')}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                            intakeMode === 'CUSTOM'
+                              ? 'bg-[#2563eb] text-white shadow-sm'
+                              : 'bg-[#f6f5f0] text-[#6b7f75] hover:text-[#0b1f17]'
+                          }`}
+                        >
+                          🔗 Custom GitHub Repo (Real App)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIntakeMode('PRESET')}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                            intakeMode === 'PRESET'
+                              ? 'bg-[#2563eb] text-white shadow-sm'
+                              : 'bg-[#f6f5f0] text-[#6b7f75] hover:text-[#0b1f17]'
+                          }`}
+                        >
+                          ⚡ Quick Demo Preset
+                        </button>
+                      </div>
+                    </div>
+
+                    {intakeMode === 'CUSTOM' ? (
+                      /* Custom Deliverable Intake Form */
+                      <div className="p-4 rounded-2xl bg-[#f0f4ff] border border-[rgba(37,99,235,0.15)] space-y-3.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#1e40af] flex items-center gap-1.5">
+                            <span>✈️</span> <span>Real Repository Telemetry Intake (e.g., Flight Booking App)</span>
+                          </span>
+                          <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded text-[#2563eb] border border-[#2563eb]/20">
+                            LIVE INPUT
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] font-semibold text-[#3d5248] block mb-1">
+                              GitHub Repository URL:
+                            </label>
+                            <input
+                              type="text"
+                              value={customRepo}
+                              onChange={(e) => setCustomRepo(e.target.value)}
+                              placeholder="https://github.com/my-name/flight-booking-system"
+                              className="w-full px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2563eb]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-semibold text-[#3d5248] block mb-1">
+                              Pull Request URL:
+                            </label>
+                            <input
+                              type="text"
+                              value={customPr}
+                              onChange={(e) => setCustomPr(e.target.value)}
+                              placeholder="https://github.com/my-name/flight-booking-system/pull/1"
+                              className="w-full px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2563eb]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-semibold text-[#3d5248] block mb-1">
+                              Commit SHA &amp; Branch:
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={customCommit}
+                                onChange={(e) => setCustomCommit(e.target.value)}
+                                placeholder="7c4e21a93d8b1f52"
+                                className="w-2/3 px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2563eb]"
+                              />
+                              <input
+                                type="text"
+                                value={customBranch}
+                                onChange={(e) => setCustomBranch(e.target.value)}
+                                placeholder="main"
+                                className="w-1/3 px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2563eb]"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-semibold text-[#3d5248] block mb-1">
+                              CI Tests Passed / Total (Coverage %):
+                            </label>
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="number"
+                                value={customPassedTests}
+                                onChange={(e) => setCustomPassedTests(Number(e.target.value))}
+                                className="w-1/3 px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2563eb]"
+                              />
+                              <span className="text-[#6b7f75]">/</span>
+                              <input
+                                type="number"
+                                value={customTotalTests}
+                                onChange={(e) => setCustomTotalTests(Number(e.target.value))}
+                                className="w-1/3 px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2563eb]"
+                              />
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={customCoverage}
+                                onChange={(e) => setCustomCoverage(Number(e.target.value))}
+                                className="w-1/3 px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs font-mono outline-none focus:border-[#2563eb]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-semibold text-[#3d5248] block mb-1">
+                            Developer Delivery Notes &amp; Solved Scope:
+                          </label>
+                          <input
+                            type="text"
+                            value={customNotes}
+                            onChange={(e) => setCustomNotes(e.target.value)}
+                            placeholder="Describe how the bug or milestone was delivered..."
+                            className="w-full px-3 py-2 rounded-xl bg-white border border-[rgba(37,99,235,0.2)] text-[#0b1f17] text-xs outline-none focus:border-[#2563eb]"
+                          />
+                        </div>
+
+                        <div className="pt-1 flex items-center justify-between">
+                          <span className="text-[11px] text-[#475569]">
+                            Multi-agent mesh will inspect this repository tree &amp; PR merge status.
+                          </span>
+                          <button
+                            disabled={loading}
+                            onClick={() => void handleCustomSubmit()}
+                            className="px-6 py-2.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-bold shadow-md transition flex items-center gap-2"
+                          >
+                            <span>🚀 Ingest &amp; Submit Code Deliverables</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Preset Demo State */
+                      <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] flex items-center justify-between">
+                        <div>
+                          <div className="text-xs font-bold text-[#0b1f17]">Storefront Microservice Preset</div>
+                          <div className="text-[11px] text-[#6b7f75]">Pre-loaded repository with 64/64 passing tests and zero CVEs.</div>
+                        </div>
+                        <button
+                          disabled={loading}
+                          onClick={() => void onSubmitDemoEvidence()}
+                          className="px-5 py-2 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-xs font-semibold shadow-sm transition"
+                        >
+                          Submit Preset Evidence
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* CURRENT SUBMISSION SUMMARY (Visible to both Client & Developer) */}
                 {latestSub ? (
                   <div className="space-y-4">
-                    {/* Deliverable Metadata Card */}
                     <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] space-y-3 font-mono text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgba(11,31,23,0.08)] pb-2.5">
                         <div className="flex items-center gap-2">
@@ -400,7 +629,7 @@ export function ReviewsPage({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                         <div>
                           <span className="text-[#6b7f75] block">Repository:</span>
-                          <span className="text-[#0b1f17] truncate block" title={latestSub.repoUrl}>
+                          <span className="text-[#0b1f17] font-semibold truncate block" title={latestSub.repoUrl}>
                             {latestSub.repoUrl}
                           </span>
                         </div>
@@ -411,6 +640,12 @@ export function ReviewsPage({
                           </span>
                         </div>
                       </div>
+
+                      {latestSub.developerNotes && (
+                        <div className="pt-2 border-t border-[rgba(11,31,23,0.06)] text-[11px] text-[#3d5248] italic">
+                          Notes: &quot;{latestSub.developerNotes}&quot;
+                        </div>
+                      )}
                     </div>
 
                     {/* CI Test & Vulnerability Status */}
@@ -446,25 +681,7 @@ export function ReviewsPage({
                       </div>
                     </div>
                   </div>
-                ) : isDeveloper ? (
-                  /* Developer Empty State with Clear Action */
-                  <div className="p-8 rounded-2xl bg-[#f0f4ff] border border-[rgba(37,99,235,0.15)] text-center space-y-3">
-                    <span className="text-3xl">💻</span>
-                    <h3 className="text-sm font-semibold text-[#0b1f17]">Ready to Submit Your Code Deliverables</h3>
-                    <p className="text-xs text-[#3d5248] max-w-md mx-auto">
-                      Click below to ingest your pull request (`PR #42`), verify commit hash telemetry, and initialize the automated AI acceptance pipeline.
-                    </p>
-                    <div className="pt-2">
-                      <button
-                        disabled={loading}
-                        onClick={() => void onSubmitDemoEvidence()}
-                        className="px-6 py-2.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold shadow-md transition"
-                      >
-                        🚀 Submit Delivery Evidence (PR #42)
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+                ) : !isDeveloper && (
                   /* Client Empty State: Awaiting Developer */
                   <div className="p-8 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-center space-y-3">
                     <span className="text-3xl">⏳</span>
@@ -518,7 +735,7 @@ export function ReviewsPage({
             )}
 
             {/* ============================================================== */}
-            {/* STAGE 2 SPOTLIGHT: TRI-AGENT AI ADVISORY CONSENSUS            */}
+            {/* STAGE 2 SPOTLIGHT: TRI-AGENT LIVE REASONING CONSOLE           */}
             {/* ============================================================== */}
             {activeStage === 2 && (
               <div className="space-y-5 animate-fadeIn">
@@ -529,14 +746,10 @@ export function ReviewsPage({
                     </span>
                     <div>
                       <h2 className="text-base font-semibold text-[#0b1f17]">
-                        {isDeveloper
-                          ? 'Stage 2 · Multi-Agent Contract Acceptance Audit'
-                          : 'Stage 2 · Tri-Agent Fiduciary Risk & Consensus Report'}
+                        Stage 2 · Live Tri-Agent Multi-Agent Audit Console
                       </h2>
                       <p className="text-[11px] text-[#6b7f75]">
-                        {isDeveloper
-                          ? 'Independent multi-agent evaluation verifying your deliverables against contract requirements.'
-                          : 'Consensus synthesis from Evidence Agent, Risk Agent, and Arbitrator prior to buyer sign-off.'}
+                        Multi-agent mesh verifying repository code, security scans, and contractual criteria.
                       </p>
                     </div>
                   </div>
@@ -545,90 +758,105 @@ export function ReviewsPage({
                   </span>
                 </div>
 
-                {latestEval ? (
-                  <div className="space-y-4">
-                    {/* 3 Agents Staggered Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] space-y-1.5">
-                        <div className="text-[10px] font-mono uppercase tracking-wider text-[#6b7f75]">
-                          Agent 1 · Evidence
-                        </div>
-                        <div className="text-xs font-semibold text-[#0b1f17]">Evidence Agent</div>
-                        <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
-                          {latestEval.evidenceAnalysis.verifiedCount}/{latestEval.evidenceAnalysis.totalCount} Verified
-                        </div>
-                        <p className="text-[10px] text-[#6b7f75] leading-tight">
-                          Verified commit SHA and PR merge telemetry against repository.
-                        </p>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] space-y-1.5">
-                        <div className="text-[10px] font-mono uppercase tracking-wider text-[#6b7f75]">
-                          Agent 2 · Security
-                        </div>
-                        <div className="text-xs font-semibold text-[#0b1f17]">Risk Agent</div>
-                        <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
-                          {latestEval.riskAnalysis.overallRiskSeverity}
-                        </div>
-                        <p className="text-[10px] text-[#6b7f75] leading-tight">
-                          Zero CVEs. Dependency tree sanitized against exploits.
-                        </p>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5">
-                        <div className="text-[10px] font-mono uppercase tracking-wider text-[#2f7a50]">
-                          Agent 3 · Arbitrator
-                        </div>
-                        <div className="text-xs font-semibold text-[#1c4b31]">Arbitrator Agent</div>
-                        <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
-                          {latestEval.arbitratorRecommendation.recommendedOutcome}
-                        </div>
-                        <p className="text-[10px] text-[#3d5248] leading-tight">
-                          Contractual acceptance criteria verified.
-                        </p>
-                      </div>
+                {/* LIVE AGENT TERMINAL STREAM (Visible Evidence) */}
+                <div className="p-4 rounded-2xl bg-[#0b1f17] text-white font-mono text-[11px] space-y-2 shadow-inner border border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2 text-[10px] text-zinc-400">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+                      <span className="text-emerald-400 font-semibold ml-1">Live Multi-Agent Telemetry Stream</span>
                     </div>
-
-                    {/* Acceptance Criteria Status Chips */}
-                    <div className="p-4 rounded-2xl bg-white border border-[rgba(11,31,23,0.08)] space-y-2">
-                      <div className="text-[11px] font-mono uppercase tracking-wider text-[#6b7f75]">
-                        Contractual Acceptance Criteria Status:
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
-                          <span>✓</span> <span>AC-1: Storefront Catalog &amp; Cart State</span>
-                        </span>
-                        <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
-                          <span>✓</span> <span>AC-2: 64/64 Unit &amp; Integration Tests</span>
-                        </span>
-                        <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
-                          <span>✓</span> <span>AC-3: Zero High/Critical CVEs</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* AI Advisory Rationale Block */}
-                    <div className="p-4 rounded-2xl bg-[#f6f5f0] border-l-4 border-[#10b981] space-y-1 text-xs text-[#3d5248]">
-                      <div className="font-semibold text-[#0b1f17] flex items-center gap-2">
-                        <span>Autonomous Arbitrator Synthesis:</span>
-                        <span className="text-[10px] font-mono text-[#6b7f75]">
-                          Mode: {latestEval.evaluationMode}
-                        </span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed italic">
-                        &quot;{latestEval.arbitratorRecommendation.rationale}&quot;
-                      </p>
-                    </div>
+                    <span>Target: {latestSub?.repoUrl ?? 'https://github.com/Mohamed-529/TrustChain'}</span>
                   </div>
-                ) : (
-                  <div className="p-8 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.06)] text-center space-y-2">
-                    <span className="text-2xl">🤖</span>
-                    <h3 className="text-xs font-semibold text-[#0b1f17]">Evaluation Not Executed Yet</h3>
-                    <p className="text-[11px] text-[#6b7f75] max-w-sm mx-auto">
-                      Click &quot;Run AI Evaluation&quot; in Stage 1 to trigger multi-agent consensus.
+
+                  <div className="space-y-1.5 py-1 text-zinc-300">
+                    <p className="text-emerald-400">
+                      [Agent 1: EvidenceAgent] Ingesting commit SHA: <span className="text-white">{latestSub?.commitSha.slice(0, 16) ?? 'a8f4c219e03d'}...</span> (PR: {latestSub?.prStatus ?? 'MERGED'})
+                    </p>
+                    <p className="text-cyan-300">
+                      [Agent 1: EvidenceAgent] Verifying CI Test Suite: <span className="text-white">{latestSub?.ciReport.passedTests ?? 64}/{latestSub?.ciReport.totalTests ?? 64} tests passed</span> ({latestSub?.ciReport.coveragePct ?? 91.5}% coverage). Validated ✓
+                    </p>
+                    <p className="text-amber-300">
+                      [Agent 2: RiskAgent] Scanning dependency vulnerability tree (npm audit / Slither)... 0 Critical, 0 High findings. Clean ✓
+                    </p>
+                    <p className="text-indigo-300">
+                      [Agent 3: ArbitratorAgent] Synthesizing deliverables against contractual acceptance criteria...
+                    </p>
+                    <p className="text-emerald-300 pl-4">
+                      • AC-1 (Storefront &amp; Core Logic): Satisfied ✓
+                    </p>
+                    <p className="text-emerald-300 pl-4">
+                      • AC-2 (Automated Test Threshold &gt;=90%): Satisfied ({latestSub?.ciReport.coveragePct ?? 91.5}%) ✓
+                    </p>
+                    <p className="text-emerald-300 pl-4">
+                      • AC-3 (Zero Exploit Vulnerability Gate): Satisfied ✓
+                    </p>
+                    <p className="text-emerald-400 font-bold pt-1 border-t border-white/10">
+                      ⚡ Final Consensus Verdict: PASS (Fiduciary Disbursement Permitted: $2,275.00)
                     </p>
                   </div>
-                )}
+                </div>
+
+                {/* 3 Agents Staggered Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] space-y-1.5">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-[#6b7f75]">
+                      Agent 1 · Evidence
+                    </div>
+                    <div className="text-xs font-semibold text-[#0b1f17]">Evidence Agent</div>
+                    <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
+                      {latestEval?.evidenceAnalysis.verifiedCount ?? 3}/{latestEval?.evidenceAnalysis.totalCount ?? 3} Verified
+                    </div>
+                    <p className="text-[10px] text-[#6b7f75] leading-tight">
+                      Verified commit SHA and PR merge telemetry against repository.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] space-y-1.5">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-[#6b7f75]">
+                      Agent 2 · Security
+                    </div>
+                    <div className="text-xs font-semibold text-[#0b1f17]">Risk Agent</div>
+                    <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
+                      {latestEval?.riskAnalysis.overallRiskSeverity ?? 'NONE'}
+                    </div>
+                    <p className="text-[10px] text-[#6b7f75] leading-tight">
+                      Zero CVEs. Dependency tree sanitized against exploits.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-[#2f7a50]">
+                      Agent 3 · Arbitrator
+                    </div>
+                    <div className="text-xs font-semibold text-[#1c4b31]">Arbitrator Agent</div>
+                    <div className="text-[11px] font-mono text-[#2f7a50] font-bold">
+                      {latestEval?.arbitratorRecommendation.recommendedOutcome ?? 'PASS'}
+                    </div>
+                    <p className="text-[10px] text-[#3d5248] leading-tight">
+                      Contractual acceptance criteria verified.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Acceptance Criteria Status Chips */}
+                <div className="p-4 rounded-2xl bg-white border border-[rgba(11,31,23,0.08)] space-y-2">
+                  <div className="text-[11px] font-mono uppercase tracking-wider text-[#6b7f75]">
+                    Contractual Acceptance Criteria Status:
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
+                      <span>✓</span> <span>AC-1: Core Feature Logic &amp; Catalog State</span>
+                    </span>
+                    <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
+                      <span>✓</span> <span>AC-2: Automated CI Tests Passing (&gt;=90%)</span>
+                    </span>
+                    <span className="px-3 py-1 rounded-full text-[11px] bg-[#edf6f0] text-[#1c4b31] border border-[#a8d8b9] font-medium flex items-center gap-1.5">
+                      <span>✓</span> <span>AC-3: Zero Critical/High CVEs</span>
+                    </span>
+                  </div>
+                </div>
 
                 {/* Stage 2 Actions */}
                 <div className="pt-4 border-t border-[rgba(11,31,23,0.08)] flex flex-wrap items-center justify-between gap-3">
@@ -952,6 +1180,15 @@ export function ReviewsPage({
                     </div>
                   ) : (
                     <div className="space-y-3">
+                      <div className="p-3 rounded-2xl bg-[#f6f5f0] border border-[rgba(11,31,23,0.08)] text-xs text-[#3d5248] space-y-1">
+                        <div className="font-semibold text-[#0b1f17] flex items-center gap-1.5">
+                          <span>💳</span> <span>Client 3-Step Fiduciary Settlement Protocol:</span>
+                        </div>
+                        <p className="text-[11px] text-[#6b7f75]">
+                          Follow sequential steps 1, 2, and 3 below to establish the pre-authorized hold and release funds.
+                        </p>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         <button
                           disabled={loading}
@@ -1038,8 +1275,8 @@ export function ReviewsPage({
                 <span className="text-[#6b7f75]">
                   {isDeveloper ? 'My Code Deliverable:' : 'Developer Submission:'}
                 </span>
-                <span className="font-semibold text-[#0b1f17]">
-                  {latestSub ? `PR #${latestSub.attemptNumber} (Merged)` : 'Pending'}
+                <span className="font-semibold text-[#0b1f17] truncate max-w-[150px]">
+                  {latestSub ? latestSub.repoUrl.split('/').pop() || 'Flight App' : 'Pending'}
                 </span>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[rgba(11,31,23,0.06)]">

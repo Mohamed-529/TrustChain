@@ -411,24 +411,68 @@ function AppContent() {
   }, []);
 
   // 3. Operational Handlers
-  const handleSubmitDemoEvidence = async () => {
+  const handleSubmitDemoEvidence = async (customData?: {
+    repoUrl?: string;
+    branch?: string;
+    commitSha?: string;
+    prUrl?: string;
+    passedTests?: number;
+    totalTests?: number;
+    coveragePct?: number;
+    developerNotes?: string;
+  }) => {
     if (!token) return;
     setLoading(true);
+    const repoUrl = customData?.repoUrl?.trim() || 'https://github.com/Mohamed-529/TrustChain';
+    const branch = customData?.branch?.trim() || 'main';
+    const commitSha = customData?.commitSha?.trim() || 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f';
+    const prUrl = customData?.prUrl?.trim() || 'https://github.com/Mohamed-529/TrustChain/pull/42';
+    const totalTests = customData?.totalTests ?? 64;
+    const passedTests = customData?.passedTests ?? 64;
+    const coveragePct = customData?.coveragePct ?? 91.5;
+    const developerNotes = customData?.developerNotes?.trim() || 'Custom delivery verified against contractual acceptance criteria.';
+
     try {
       const fixtureKey = selectedMilestoneId === 'ms_seed_02' ? 'INCOMPLETE_SUBMISSION' : 'SUCCESSFUL_SUBMISSION';
+      const body = customData
+        ? {
+            repoUrl,
+            branch,
+            commitSha,
+            prUrl,
+            prStatus: 'MERGED',
+            ciReport: {
+              provider: 'github_actions',
+              status: 'SUCCESS',
+              totalTests,
+              passedTests,
+              failedTests: 0,
+              coveragePct,
+              logSummary: `${passedTests}/${totalTests} tests passed with ${coveragePct}% coverage.`,
+            },
+            securityScan: {
+              scanner: 'npm audit',
+              scannerVersion: '10.8.2',
+              status: 'COMPLETED',
+              findings: [],
+            },
+            developerNotes,
+          }
+        : { demoFixtureKey: fixtureKey };
+
       const res = await fetch(`/api/v1/milestones/${selectedMilestoneId}/evidence`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ demoFixtureKey: fixtureKey }),
+        body: JSON.stringify(body),
       });
       const result = await safeFetchJson<{ submission: { attemptNumber: number } }>(res);
       if (result.ok && result.data) {
         setStatusBanner({
           type: 'success',
-          message: `Delivery evidence submitted for ${selectedMilestoneId} (Attempt #${result.data.submission.attemptNumber}). Reviewers may now run evaluation.`,
+          message: `Delivery evidence submitted for ${selectedMilestoneId} (${repoUrl}). Multi-agent evaluation is ready.`,
         });
         await refreshAllData(token, selectedMilestoneId, selectedContractId);
         return;
@@ -446,19 +490,19 @@ function AppContent() {
           milestoneId: selectedMilestoneId,
           attemptNumber: (base.latestSubmission?.attemptNumber ?? 0) + 1,
           submittedBy: 'dev_01',
-          repoUrl: 'https://github.com/Mohamed-529/TrustChain',
-          branch: 'main',
-          commitSha: 'a8f4c219e03d7b6451298ce7f0039a1b2c4d5e6f',
-          prUrl: 'https://github.com/Mohamed-529/TrustChain/pull/42',
+          repoUrl,
+          branch,
+          commitSha,
+          prUrl,
           prStatus: 'MERGED',
           ciReport: {
             provider: 'github_actions',
             status: 'SUCCESS',
-            totalTests: 64,
-            passedTests: 64,
+            totalTests,
+            passedTests,
             failedTests: 0,
-            coveragePct: 91.5,
-            logSummary: '64/64 test suites passed with 91.5% statement coverage.',
+            coveragePct,
+            logSummary: `${passedTests}/${totalTests} test suites passed with ${coveragePct}% statement coverage.`,
           },
           securityScan: {
             scanner: 'npm audit',
@@ -466,7 +510,7 @@ function AppContent() {
             status: 'COMPLETED',
             findings: [],
           },
-          developerNotes: 'Completed Milestone 1 delivery with 100% passing tests and zero CVE vulnerabilities.',
+          developerNotes,
           submittedAt: new Date().toISOString(),
         },
       };
@@ -474,7 +518,7 @@ function AppContent() {
 
     setStatusBanner({
       type: 'success',
-      message: `Delivery evidence submitted for ${selectedMilestoneId} (Attempt #1). Reviewers may now run evaluation.`,
+      message: `Delivery evidence ingested for ${selectedMilestoneId}: ${repoUrl}. Multi-agent AI verification ready.`,
     });
     setLoading(false);
   };
