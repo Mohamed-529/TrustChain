@@ -59,6 +59,7 @@ export function AppShell({
 
   const navDestinations: NavDestination[] = [
     { path: '/', label: 'Overview' },
+    { path: '/marketplace', label: 'Marketplace', tag: 'AI Spec' },
     { path: '/dashboard', label: 'Projects' },
     { path: '/reviews', label: 'Review & Settle', tag: 'Escrow' },
     { path: '/timeline', label: 'Timeline', tag: 'Gantt' },

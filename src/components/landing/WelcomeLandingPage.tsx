@@ -50,19 +50,25 @@ export function WelcomeLandingPage({ onStartTour }: WelcomeLandingPageProps) {
             Tri-agent AI verifies milestone criteria before human reviewers approve programmatic settlement.
           </p>
 
-          {/* Twin Pill Action Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 w-full max-w-md mx-auto sm:max-w-none">
+          {/* Triple Pill Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 w-full max-w-lg mx-auto sm:max-w-none">
+            <button
+              onClick={() => navigate('/marketplace')}
+              className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-sm font-semibold transition shadow-md active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <span>🚀 Marketplace &amp; Spec Studio</span>
+            </button>
             <button
               onClick={() => navigate('/reviews')}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white text-sm font-medium transition shadow-sm active:scale-[0.98]"
+              className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-white hover:bg-[#f6f5f0] text-[#0b1f17] text-sm font-semibold border border-[rgba(11,31,23,0.15)] transition shadow-sm active:scale-[0.98]"
             >
-              Inspect Live Evaluation
+              ⚖️ Fiduciary Review Workbench
             </button>
             <button
               onClick={onStartTour}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] text-[#0b1f17] text-sm font-medium border border-[rgba(11,31,23,0.08)] transition active:scale-[0.98]"
+              className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-[#e9efe6] hover:bg-[#dce6d8] text-[#0b1f17] text-sm font-medium border border-[rgba(11,31,23,0.08)] transition active:scale-[0.98]"
             >
-              Explore Interactive Walkthrough
+              Explore Walkthrough
             </button>
           </div>
 

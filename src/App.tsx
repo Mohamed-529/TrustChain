@@ -32,6 +32,7 @@ import { TrustPage } from './pages/TrustPage.tsx';
 import { DisputesPage } from './pages/DisputesPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { DeveloperPortalPage } from './pages/DeveloperPortalPage.tsx';
+import { MarketplacePage } from './pages/MarketplacePage.tsx';
 
 function AppContent() {
   const currentPath = usePathname();
@@ -784,6 +785,14 @@ function AppContent() {
             auditLogs={auditLogs}
             onStartTour={() => setShowWalkthrough(true)}
             statusBanner={statusBanner}
+          />
+        );
+
+      case '/marketplace':
+        return (
+          <MarketplacePage
+            token={token}
+            onRefreshData={() => refreshAllData(token, selectedMilestoneId, selectedContractId)}
           />
         );
 
