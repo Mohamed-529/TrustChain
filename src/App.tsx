@@ -752,11 +752,8 @@ function AppContent() {
       if (result.ok && result.data) {
         setStatusBanner({
           type: 'success',
-          message: `PayPal ${step.toUpperCase()} transaction succeeded: status=${result.data.transaction.status} (${result.data.transaction.executionMode}). Non-escrow disclosure enforced.`,
+          message: `Escrow ${step.toUpperCase()} transaction succeeded: status=${result.data.transaction.status} (${result.data.transaction.executionMode}). Non-custodial bank hold enforced.`,
         });
-        if (result.data.approveUrl) {
-          window.open(result.data.approveUrl, '_blank');
-        }
         await refreshAllData(token, selectedMilestoneId, selectedContractId);
         setLoading(false);
         return;
@@ -771,9 +768,9 @@ function AppContent() {
       id: `tx_${step}_${Date.now()}`,
       milestoneId: selectedMilestoneId,
       contractId: selectedContractId,
-      paypalOrderId: `ORD-MPAI-${Date.now().toString(36).toUpperCase()}`,
-      paypalAuthorizationId: step !== 'order' ? `AUTH-MPAI-${Date.now().toString(36).toUpperCase()}` : undefined,
-      paypalCaptureId: step === 'capture' ? `CAP-MPAI-${Date.now().toString(36).toUpperCase()}` : undefined,
+      paypalOrderId: `ORD-VERIDEX-${Date.now().toString(36).toUpperCase()}`,
+      paypalAuthorizationId: step !== 'order' ? `AUTH-VERIDEX-${Date.now().toString(36).toUpperCase()}` : undefined,
+      paypalCaptureId: step === 'capture' ? `CAP-VERIDEX-${Date.now().toString(36).toUpperCase()}` : undefined,
       status: nextStatus as any,
       executionMode: 'PAYPAL_SANDBOX',
       authorizedAmountCents: 250000,
@@ -781,11 +778,6 @@ function AppContent() {
       currency: 'USD',
       createdAt: nowIso,
       updatedAt: nowIso,
-      rawPaypalResponse: {
-        links: [
-          { rel: 'approve', href: 'https://www.sandbox.paypal.com/checkoutnow?token=ORD-SANDBOX-DEMO' },
-        ],
-      },
     };
 
     setPaypalTransactions((prev) => [newTx, ...prev.filter((t) => t.id !== newTx.id)]);

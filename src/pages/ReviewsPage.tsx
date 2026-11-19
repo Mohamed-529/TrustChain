@@ -436,22 +436,14 @@ export function ReviewsPage({
             </div>
 
             {/* Buyer Approval Action Card */}
-            {approveLink && (latestTx?.status === 'ORDER_CREATED' || latestTx?.status === 'SIMULATED_ORDER_CREATED') && (
-              <div className="p-3 rounded-2xl bg-[#fbf7ed] border border-[#e8dcb8] space-y-2">
-                <div className="text-[10px] text-[#8a681c] font-semibold flex items-center gap-1">
-                  <span>👉</span> <span>Action: Buyer Sandbox Approval</span>
+            {(latestTx?.status === 'ORDER_CREATED' || latestTx?.status === 'SIMULATED_ORDER_CREATED') && (
+              <div className="p-3 rounded-2xl bg-[#edf6f0] border border-[#a8d8b9] space-y-1.5">
+                <div className="text-[10px] text-[#1c4b31] font-semibold flex items-center gap-1">
+                  <span>✓</span> <span>Escrow Order Validated</span>
                 </div>
                 <p className="text-[10px] text-[#3d5248] leading-tight">
-                  PayPal Order created. Open Sandbox checkout to authenticate and approve the hold.
+                  Bank authorization order is active. Click <strong>"2. Authorize Hold (29 Days)"</strong> below to lock the escrow funds.
                 </p>
-                <a
-                  href={approveLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center w-full px-3 py-1.5 rounded-full bg-[#0b1f17] hover:bg-[#1a382c] text-white font-medium text-xs shadow-sm transition text-center"
-                >
-                  Open PayPal Checkout ↗
-                </a>
               </div>
             )}
           </div>
