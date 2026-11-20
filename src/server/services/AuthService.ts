@@ -194,7 +194,7 @@ export class AuthService {
       throw new AppError(400, 'INVALID_LOGIN_PAYLOAD', 'Both email and password are required.');
     }
 
-    const email = input.email.trim();
+    const email = input.email.trim().toLowerCase();
     const password = input.password;
     if (!email || !password) {
       throw new AppError(400, 'INVALID_LOGIN_PAYLOAD', 'Both email and password are required.');
@@ -225,14 +225,24 @@ export class AuthService {
   }): Promise<{ token: string; user: User; expiresAt: number; jti: string }> {
     const name = typeof input.name === 'string' ? input.name.trim() : '';
     const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
-    const password = typeof input.password === 'string' ? input.password : 'Password123!';
+    const password = typeof input.password === 'string' ? input.password : '';
     const roleInput = typeof input.role === 'string' ? input.role.trim().toUpperCase() : 'CLIENT';
 
     if (!name || name.length < 2) {
       throw new AppError(400, 'INVALID_NAME', 'Name must be at least 2 characters.');
     }
-    if (!email || !email.includes('@')) {
+    if (!email || !email.includes('@') || !email.includes('.')) {
       throw new AppError(400, 'INVALID_EMAIL', 'A valid email address is required.');
+    }
+    const isStrongPassword =
+      password.length >= 15 ||
+      (password.length >= 8 && /[a-z]/.test(password) && /\d/.test(password));
+    if (!isStrongPassword) {
+      throw new AppError(
+        400,
+        'WEAK_PASSWORD',
+        'Password must be at least 15 characters OR at least 8 characters including a number and a lowercase letter.'
+      );
     }
     if (roleInput !== 'CLIENT' && roleInput !== 'DEVELOPER') {
       throw new AppError(400, 'INVALID_ROLE', 'Registration role must be CLIENT or DEVELOPER.');
