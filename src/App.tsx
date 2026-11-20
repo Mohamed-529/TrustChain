@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import type {
   ContractScheduleResponse,
   EvidencePassport,
@@ -108,22 +108,70 @@ function buildDefaultReviewDetails(milestoneId = 'ms_seed_01', contractId = 'con
 }
 
 import { RouterProvider, usePathname, useNavigate } from './router/Router.tsx';
-import { AppShell } from './components/layout/AppShell.tsx';
-import { InteractiveWalkthroughModal } from './components/walkthrough/InteractiveWalkthroughModal.tsx';
-import { GlobalSearchModal } from './components/search/GlobalSearchModal.tsx';
-import { CreateProjectModal } from './components/contracts/CreateProjectModal.tsx';
-import { WelcomeLandingPage } from './components/landing/WelcomeLandingPage.tsx';
-import { DashboardPage } from './pages/DashboardPage.tsx';
-import { IntelligencePage } from './pages/IntelligencePage.tsx';
-import { TimelinePage } from './pages/TimelinePage.tsx';
-import { ReviewsPage } from './pages/ReviewsPage.tsx';
-import { TrustPage } from './pages/TrustPage.tsx';
-import { DisputesPage } from './pages/DisputesPage.tsx';
-import { SettingsPage } from './pages/SettingsPage.tsx';
-import { DeveloperPortalPage } from './pages/DeveloperPortalPage.tsx';
-import { MarketplacePage } from './pages/MarketplacePage.tsx';
 import { FullScreenLoginPage } from './components/auth/FullScreenLoginPage.tsx';
 import { PublicLandingPage } from './components/landing/PublicLandingPage.tsx';
+
+// Lazy-load heavy authenticated workspace modules (Bryntum Gantt, AG Grid, etc.)
+// so the initial Landing & Auth pages load instantaneously (<150 KB).
+const AppShell = lazy(() =>
+  import('./components/layout/AppShell.tsx').then((m) => ({ default: m.AppShell }))
+);
+const InteractiveWalkthroughModal = lazy(() =>
+  import('./components/walkthrough/InteractiveWalkthroughModal.tsx').then((m) => ({
+    default: m.InteractiveWalkthroughModal,
+  }))
+);
+const GlobalSearchModal = lazy(() =>
+  import('./components/search/GlobalSearchModal.tsx').then((m) => ({
+    default: m.GlobalSearchModal,
+  }))
+);
+const CreateProjectModal = lazy(() =>
+  import('./components/contracts/CreateProjectModal.tsx').then((m) => ({
+    default: m.CreateProjectModal,
+  }))
+);
+const WelcomeLandingPage = lazy(() =>
+  import('./components/landing/WelcomeLandingPage.tsx').then((m) => ({
+    default: m.WelcomeLandingPage,
+  }))
+);
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage.tsx').then((m) => ({ default: m.DashboardPage }))
+);
+const IntelligencePage = lazy(() =>
+  import('./pages/IntelligencePage.tsx').then((m) => ({ default: m.IntelligencePage }))
+);
+const TimelinePage = lazy(() =>
+  import('./pages/TimelinePage.tsx').then((m) => ({ default: m.TimelinePage }))
+);
+const ReviewsPage = lazy(() =>
+  import('./pages/ReviewsPage.tsx').then((m) => ({ default: m.ReviewsPage }))
+);
+const TrustPage = lazy(() =>
+  import('./pages/TrustPage.tsx').then((m) => ({ default: m.TrustPage }))
+);
+const DisputesPage = lazy(() =>
+  import('./pages/DisputesPage.tsx').then((m) => ({ default: m.DisputesPage }))
+);
+const SettingsPage = lazy(() =>
+  import('./pages/SettingsPage.tsx').then((m) => ({ default: m.SettingsPage }))
+);
+const DeveloperPortalPage = lazy(() =>
+  import('./pages/DeveloperPortalPage.tsx').then((m) => ({ default: m.DeveloperPortalPage }))
+);
+const MarketplacePage = lazy(() =>
+  import('./pages/MarketplacePage.tsx').then((m) => ({ default: m.MarketplacePage }))
+);
+
+function WorkspaceLoader() {
+  return (
+    <div className="min-h-[60vh] w-full flex flex-col items-center justify-center gap-3 text-[#59636e]">
+      <div className="w-7 h-7 rounded-full border-2 border-[#d0d7de] border-t-[#1f883d] animate-spin" />
+      <span className="text-xs font-mono">Loading workspace module...</span>
+    </div>
+  );
+}
 
 function AppContent() {
   const currentPath = usePathname();
@@ -1296,59 +1344,75 @@ function AppContent() {
   }
 
   return (
-    <AppShell
-      currentUser={currentUser}
-      onSwitchPersona={switchPersona}
-      statusBanner={statusBanner}
-      onStartTour={() => setShowWalkthrough(true)}
-      onOpenSearch={() => setShowSearch(true)}
-      onOpenCreateProject={() => setShowCreateProject(true)}
-      onSignOut={() => {
-        setToken('');
-        setCurrentUser(null);
-        setStatusBanner(null);
-        setUnauthView('LANDING');
-      }}
-    >
-      {renderActivePage()}
-
-      {/* Interactive Contextual Walkthrough Modal with 7 Invariants */}
-      <InteractiveWalkthroughModal
-        isOpen={showWalkthrough}
-        onClose={() => setShowWalkthrough(false)}
+    <Suspense fallback={<WorkspaceLoader />}>
+      <AppShell
         currentUser={currentUser}
-      />
-
-      {/* Global Real Database Search Modal */}
-      <GlobalSearchModal
-        isOpen={showSearch}
-        onClose={() => setShowSearch(false)}
-        token={token}
-        onSelectMilestone={(id) => setSelectedMilestoneId(id)}
-      />
-
-      {/* Client Create Project Modal */}
-      <CreateProjectModal
-        isOpen={showCreateProject}
-        onClose={() => setShowCreateProject(false)}
-        token={token}
-        onSuccess={async (newContract) => {
-          if (newContract?.id) {
-            setSelectedContractId(newContract.id);
-            const firstMsId = newContract.milestones?.[0]?.id || 'ms_seed_01';
-            setSelectedMilestoneId(firstMsId);
-            await refreshAllData(token, firstMsId, newContract.id);
-            setStatusBanner({
-              type: 'success',
-              message: `✓ Contract "${newContract.title}" created & assigned to Marcus Chen! Active ID: ${newContract.id}`,
-            });
-            navigate('/dashboard');
-          } else {
-            await refreshAllData(token, selectedMilestoneId, selectedContractId);
-          }
+        onSwitchPersona={switchPersona}
+        statusBanner={statusBanner}
+        onStartTour={() => setShowWalkthrough(true)}
+        onOpenSearch={() => setShowSearch(true)}
+        onOpenCreateProject={() => setShowCreateProject(true)}
+        onSignOut={() => {
+          setToken('');
+          setCurrentUser(null);
+          setStatusBanner(null);
+          setUnauthView('LANDING');
         }}
-      />
-    </AppShell>
+      >
+        <Suspense fallback={<WorkspaceLoader />}>
+          {renderActivePage()}
+        </Suspense>
+
+        {/* Interactive Contextual Walkthrough Modal with 7 Invariants */}
+        {showWalkthrough && (
+          <Suspense fallback={null}>
+            <InteractiveWalkthroughModal
+              isOpen={showWalkthrough}
+              onClose={() => setShowWalkthrough(false)}
+              currentUser={currentUser}
+            />
+          </Suspense>
+        )}
+
+        {/* Global Real Database Search Modal */}
+        {showSearch && (
+          <Suspense fallback={null}>
+            <GlobalSearchModal
+              isOpen={showSearch}
+              onClose={() => setShowSearch(false)}
+              token={token}
+              onSelectMilestone={(id) => setSelectedMilestoneId(id)}
+            />
+          </Suspense>
+        )}
+
+        {/* Client Create Project Modal */}
+        {showCreateProject && (
+          <Suspense fallback={null}>
+            <CreateProjectModal
+              isOpen={showCreateProject}
+              onClose={() => setShowCreateProject(false)}
+              token={token}
+              onSuccess={async (newContract) => {
+                if (newContract?.id) {
+                  setSelectedContractId(newContract.id);
+                  const firstMsId = newContract.milestones?.[0]?.id || 'ms_seed_01';
+                  setSelectedMilestoneId(firstMsId);
+                  await refreshAllData(token, firstMsId, newContract.id);
+                  setStatusBanner({
+                    type: 'success',
+                    message: `✓ Contract "${newContract.title}" created & assigned to Marcus Chen! Active ID: ${newContract.id}`,
+                  });
+                  navigate('/dashboard');
+                } else {
+                  await refreshAllData(token, selectedMilestoneId, selectedContractId);
+                }
+              }}
+            />
+          </Suspense>
+        )}
+      </AppShell>
+    </Suspense>
   );
 }
 
