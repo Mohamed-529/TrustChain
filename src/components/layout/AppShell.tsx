@@ -13,6 +13,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, usePathname, useNavigate } from '../../router/Router.tsx';
 import type { User } from '../../types/domain.ts';
+import { SiteFooter } from './SiteFooter.tsx';
 
 interface AppShellProps {
   currentUser: User | null;
@@ -374,21 +375,8 @@ export function AppShell({
         {children}
       </main>
 
-      {/* Cascrow-Style Minimalist Footer (only shown on internal app routes) */}
-      {currentPath !== '/' && (
-        <footer className="border-t border-[#0b1f17]/10 py-6 bg-[#f6f5f0] text-xs text-[#3d5248] font-sans">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="font-medium text-[#0b1f17]">trustchain</span>
-              <span className="text-[#0b1f17]/20">•</span>
-              <span>Multi-Agent AI Verification & Deterministic PayPal Escrow Hold</span>
-            </div>
-            <div className="text-[11px] text-[#3d5248]/80 font-mono">
-              SQLite ACID Persistence • Hash-Chained Audit • Non-Custodial Intent: AUTHORIZE
-            </div>
-          </div>
-        </footer>
-      )}
+      {/* Global Unified Veridex Site Footer on every page */}
+      <SiteFooter onNavigatePath={(path) => navigate(path)} variant="subtle" />
     </div>
   );
 }

@@ -123,6 +123,7 @@ import { SettingsPage } from './pages/SettingsPage.tsx';
 import { DeveloperPortalPage } from './pages/DeveloperPortalPage.tsx';
 import { MarketplacePage } from './pages/MarketplacePage.tsx';
 import { FullScreenLoginPage } from './components/auth/FullScreenLoginPage.tsx';
+import { PublicLandingPage } from './components/landing/PublicLandingPage.tsx';
 
 function AppContent() {
   const currentPath = usePathname();
@@ -131,6 +132,9 @@ function AppContent() {
   // Authentication & Session
   const [token, setToken] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [unauthView, setUnauthView] = useState<'LANDING' | 'AUTH'>('LANDING');
+  const [authInitialMode, setAuthInitialMode] = useState<'CREATE_ACCOUNT' | 'SIGN_IN'>('CREATE_ACCOUNT');
+  const [authPrefillEmail, setAuthPrefillEmail] = useState<string>('');
 
   // Active Contract & Milestone Scope
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -1252,11 +1256,31 @@ function AppContent() {
     }
   };
 
-  // GATEWAY: Full-Screen Login Page (No Cross X) is the initial landing page
-  // Users must enter details or select a sandbox account first before accessing the project.
+  // GATEWAY: Public Hero Landing Page (1-scroll + 30s auto-play video) opens first.
+  // Clicking Sign in / Sign up transitions into the GitHub-style Split-Screen Auth Portal.
   if (!currentUser || !token) {
+    if (unauthView === 'LANDING') {
+      return (
+        <PublicLandingPage
+          onOpenAuth={(mode, prefillEmail) => {
+            setAuthInitialMode(mode);
+            setAuthPrefillEmail(prefillEmail ?? '');
+            setUnauthView('AUTH');
+            window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+          }}
+        />
+      );
+    }
+
     return (
       <FullScreenLoginPage
+        key={`${authInitialMode}-${authPrefillEmail}`}
+        initialMode={authInitialMode}
+        initialEmail={authPrefillEmail}
+        onBackToHome={() => {
+          setUnauthView('LANDING');
+          window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+        }}
         onAuthenticated={(newToken, newUser) => {
           setToken(newToken);
           setCurrentUser(newUser);
@@ -1283,6 +1307,7 @@ function AppContent() {
         setToken('');
         setCurrentUser(null);
         setStatusBanner(null);
+        setUnauthView('LANDING');
       }}
     >
       {renderActivePage()}

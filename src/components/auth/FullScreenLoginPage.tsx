@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import type { User } from '../../types/domain.ts';
+import { SiteFooter } from '../layout/SiteFooter.tsx';
 
 interface FullScreenLoginPageProps {
   onAuthenticated: (token: string, user: User) => void;
   onDemoSwitch: (userId: string) => Promise<void>;
+  initialMode?: 'CREATE_ACCOUNT' | 'SIGN_IN';
+  initialEmail?: string;
+  onBackToHome?: () => void;
 }
 
 interface StoredLocalAccount {
@@ -85,13 +89,16 @@ function isValidPassword(password: string): boolean {
 export function FullScreenLoginPage({
   onAuthenticated,
   onDemoSwitch,
+  initialMode = 'CREATE_ACCOUNT',
+  initialEmail = '',
+  onBackToHome,
 }: FullScreenLoginPageProps) {
-  const [authMode, setAuthMode] = useState<'CREATE_ACCOUNT' | 'SIGN_IN'>('CREATE_ACCOUNT');
+  const [authMode, setAuthMode] = useState<'CREATE_ACCOUNT' | 'SIGN_IN'>(initialMode);
   const [selectedRole, setSelectedRole] = useState<'CLIENT' | 'DEVELOPER'>('CLIENT');
   const [showFeatures, setShowFeatures] = useState(true);
 
   // Form fields
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [country, setCountry] = useState('India');
@@ -277,9 +284,10 @@ export function FullScreenLoginPage({
   };
 
   return (
-    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-white selection:bg-[#1f883d] selection:text-white">
-      {/* LEFT PANEL: Dark Cosmic Showcase (GitHub-style split-screen) */}
-      <div className="relative overflow-hidden bg-[#06090f] text-white flex flex-col justify-between px-8 sm:px-14 lg:px-16 py-10 lg:py-14">
+    <div className="min-h-screen w-full flex flex-col bg-white selection:bg-[#1f883d] selection:text-white">
+      <div className="flex-1 w-full grid grid-cols-1 lg:grid-cols-2">
+        {/* LEFT PANEL: Dark Cosmic Showcase (GitHub-style split-screen) */}
+        <div className="relative overflow-hidden bg-[#06090f] text-white flex flex-col justify-between px-8 sm:px-14 lg:px-16 py-10 lg:py-14">
         {/* Subtle starfield dots */}
         <div
           aria-hidden="true"
@@ -302,12 +310,17 @@ export function FullScreenLoginPage({
 
         {/* Top Brand + Value Proposition */}
         <div className="relative z-10 max-w-md space-y-6">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white text-[#06090f] flex items-center justify-center font-black text-base shadow-md">
+          <button
+            type="button"
+            onClick={() => onBackToHome?.()}
+            className="flex items-center gap-2.5 cursor-pointer group"
+            title="Back to Veridex Home"
+          >
+            <div className="w-9 h-9 rounded-xl bg-white text-[#06090f] flex items-center justify-center font-black text-base shadow-md group-hover:scale-105 transition">
               ◈
             </div>
             <span className="text-lg font-semibold tracking-tight text-white">Veridex</span>
-          </div>
+          </button>
 
           <div className="space-y-3 pt-2">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white leading-tight">
@@ -672,16 +685,12 @@ export function FullScreenLoginPage({
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="w-full max-w-[440px] mx-auto flex items-center justify-between text-[11px] text-[#59636e] pt-4 border-t border-[#eaeef2]">
-          <span>Veridex Fiduciary Engine</span>
-          <div className="flex items-center gap-4">
-            <span className="hover:underline cursor-pointer">Terms</span>
-            <span className="hover:underline cursor-pointer">Privacy</span>
-            <span className="hover:underline cursor-pointer">Security</span>
-          </div>
-        </div>
+        <div className="h-4" />
       </div>
+      </div>
+
+      {/* Unified Site Footer on Auth Page */}
+      <SiteFooter onNavigateAuth={(mode) => switchMode(mode)} variant="subtle" />
     </div>
   );
 }
