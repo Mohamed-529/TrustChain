@@ -342,11 +342,11 @@ export function AppShell({
         </div>
       </header>
 
-      {/* Floating Modern Toast Notification (Zero Layout Shift) */}
+      {/* Floating Modern Toast Notification (Zero Layout Shift, Mobile-Safe above Bottom Tab Bar) */}
       {statusBanner && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md animate-slideUp">
+        <div className="fixed bottom-20 lg:bottom-6 inset-x-3 sm:inset-x-auto sm:right-6 z-50 sm:max-w-md animate-slideUp">
           <div
-            className={`p-4 rounded-3xl shadow-2xl border flex items-start gap-3 backdrop-blur-md ${
+            className={`p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl shadow-2xl border flex items-start gap-3 backdrop-blur-md ${
               statusBanner.type === 'success'
                 ? 'bg-[#e9efe6]/95 border-[#2f7a50]/30 text-[#1c4b31]'
                 : statusBanner.type === 'error'
@@ -369,14 +369,91 @@ export function AppShell({
         className={`flex-1 w-full mx-auto ${
           currentPath === '/'
             ? 'px-0 py-0 max-w-full'
-            : 'max-w-7xl px-3 sm:px-6 lg:px-8 py-6 sm:py-8'
-        } pb-[calc(1.5rem+env(safe-area-inset-bottom))]`}
+            : 'max-w-7xl px-3 sm:px-6 lg:px-8 py-5 sm:py-8'
+        }`}
       >
         {children}
       </main>
 
-      {/* Global Unified Veridex Site Footer on every page */}
-      <SiteFooter onNavigatePath={(path) => navigate(path)} variant="subtle" />
+      {/* Global Unified Veridex Site Footer on every page (with bottom space for mobile tab bar) */}
+      <div className="pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <SiteFooter onNavigatePath={(path) => navigate(path)} variant="subtle" />
+      </div>
+
+      {/* Native-Style Mobile Bottom Workflow Bar (Thumb-friendly navigation for Embarko mobile judging) */}
+      <nav
+        aria-label="Mobile Workflow Navigation"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-[rgba(11,31,23,0.10)] shadow-[0_-4px_20px_rgba(11,31,23,0.06)] pb-[env(safe-area-inset-bottom)]"
+      >
+        <div className="grid grid-cols-4 h-16 px-1">
+          {navDestinations.map((dest) => {
+            const isActive =
+              currentPath === dest.path ||
+              (dest.path !== '/' && currentPath.startsWith(dest.path));
+            const icon =
+              dest.path === '/marketplace'
+                ? role === 'CLIENT'
+                  ? '✨'
+                  : '💻'
+                : dest.path === '/dashboard'
+                ? '📋'
+                : dest.path === '/reviews'
+                ? role === 'CLIENT'
+                  ? '💳'
+                  : '🚀'
+                : '🛡️';
+            const shortLabel =
+              dest.path === '/marketplace'
+                ? role === 'CLIENT'
+                  ? 'AI Spec'
+                  : 'Workspace'
+                : dest.path === '/dashboard'
+                ? 'Contracts'
+                : dest.path === '/reviews'
+                ? role === 'CLIENT'
+                  ? 'Escrow'
+                  : 'Deliver'
+                : 'Passport';
+
+            return (
+              <Link
+                key={dest.path}
+                to={dest.path}
+                className={`flex flex-col items-center justify-center gap-0.5 rounded-xl transition ${
+                  isActive
+                    ? 'text-[#0b1f17] font-semibold'
+                    : 'text-[#6b7f75] hover:text-[#0b1f17]'
+                }`}
+              >
+                <span
+                  className={`text-base leading-none px-3 py-1 rounded-full transition ${
+                    isActive ? 'bg-[#e9efe6]' : ''
+                  }`}
+                >
+                  {icon}
+                </span>
+                <span className="text-[10px] leading-tight truncate max-w-full">
+                  {shortLabel}
+                </span>
+              </Link>
+            );
+          })}
+
+          {/* 4th Mobile Action Button: + New Project (Client) or Contracts Overview (Developer) */}
+          <button
+            type="button"
+            onClick={role === 'CLIENT' ? onOpenCreateProject : () => navigate('/dashboard')}
+            className="flex flex-col items-center justify-center gap-0.5 text-[#1f883d] font-semibold cursor-pointer"
+          >
+            <span className="text-base leading-none px-3 py-1 rounded-full bg-[#dafbe1]">
+              {role === 'CLIENT' ? '＋' : '📊'}
+            </span>
+            <span className="text-[10px] leading-tight">
+              {role === 'CLIENT' ? 'New Project' : 'Overview'}
+            </span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }

@@ -91,15 +91,15 @@ export function PublicLandingPage({ onOpenAuth }: PublicLandingPageProps) {
 
       {/* SECTION 1: ABOVE-THE-FOLD HERO (Exact Clean Photo Layout — Zero Text Wall) */}
       <section className="relative w-full bg-white">
-        <div className="max-w-5xl mx-auto border-x border-[#eaeef2] min-h-[calc(100vh-4rem)] flex flex-col justify-between items-center px-6 pt-16 sm:pt-24 pb-0 text-center">
-          <div className="w-full max-w-3xl mx-auto flex flex-col items-center space-y-8">
+        <div className="max-w-5xl mx-auto border-x border-[#eaeef2] min-h-[calc(100dvh-4rem)] flex flex-col justify-between items-center px-4 sm:px-6 pt-10 sm:pt-24 pb-0 text-center">
+          <div className="w-full max-w-3xl mx-auto flex flex-col items-center space-y-6 sm:space-y-8">
             {/* Announcement Pill */}
             <button
               type="button"
               onClick={scrollToVideo}
-              className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white border border-[#d0d7de] shadow-xs hover:border-[#8c959f] transition text-xs sm:text-sm font-medium text-[#1f2328] cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-full bg-white border border-[#d0d7de] shadow-xs hover:border-[#8c959f] transition text-xs sm:text-sm font-medium text-[#1f2328] cursor-pointer"
             >
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-tr from-[#3b82f6] via-[#8b5cf6] to-[#10b981] text-white text-[10px] font-bold">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-tr from-[#3b82f6] via-[#8b5cf6] to-[#10b981] text-white text-[10px] font-bold shrink-0">
                 ◈
               </span>
               <span>Veridex Escrow &amp; Tri-Agent AI &apos;26</span>
@@ -107,17 +107,17 @@ export function PublicLandingPage({ onOpenAuth }: PublicLandingPageProps) {
             </button>
 
             {/* Giant Crisp Two-Line Headline */}
-            <h1 className="text-4xl sm:text-6xl lg:text-[68px] font-bold tracking-[-0.03em] text-[#0d1117] leading-[1.06]">
+            <h1 className="text-[36px] sm:text-6xl lg:text-[68px] font-bold tracking-[-0.03em] text-[#0d1117] leading-[1.08]">
               Trusted delivery starts
               <br />
               with Veridex
             </h1>
 
-            {/* Inline Email + Green Sign Up Bar + Secondary Demo Button */}
-            <div className="w-full max-w-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
+            {/* Inline Email + Green Sign Up Bar + Secondary Demo Button (Stacks cleanly on mobile) */}
+            <div className="w-full max-w-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-1 sm:pt-2">
               <form
                 onSubmit={handleHeroSignUp}
-                className="flex-1 flex items-center bg-[#f6f8fa] border border-[#d0d7de] rounded-lg p-1.5 focus-within:border-[#0969da] focus-within:ring-2 focus-within:ring-[#0969da]/15 transition"
+                className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-0 bg-[#f6f8fa] border border-[#d0d7de] rounded-xl sm:rounded-lg p-2 sm:p-1.5 focus-within:border-[#0969da] focus-within:ring-2 focus-within:ring-[#0969da]/15 transition"
               >
                 <input
                   type="email"
@@ -125,11 +125,11 @@ export function PublicLandingPage({ onOpenAuth }: PublicLandingPageProps) {
                   onChange={(e) => setHeroEmail(e.target.value)}
                   placeholder="Enter your email"
                   aria-label="Enter your email"
-                  className="flex-1 bg-transparent px-3 py-2 text-sm text-[#1f2328] placeholder:text-[#6e7781] focus:outline-none min-w-0"
+                  className="flex-1 bg-white sm:bg-transparent border border-[#d0d7de] sm:border-0 rounded-lg sm:rounded-none px-3.5 py-2.5 sm:py-2 text-base sm:text-sm text-[#1f2328] placeholder:text-[#6e7781] focus:outline-none min-h-[44px] min-w-0"
                 />
                 <button
                   type="submit"
-                  className="shrink-0 px-4 sm:px-5 py-2.5 rounded-md bg-[#1f883d] hover:bg-[#1a7f37] text-white text-sm font-semibold shadow-xs transition cursor-pointer"
+                  className="shrink-0 w-full sm:w-auto px-4 sm:px-5 py-3 sm:py-2.5 min-h-[44px] rounded-lg sm:rounded-md bg-[#1f883d] hover:bg-[#1a7f37] text-white text-sm font-semibold shadow-xs transition cursor-pointer"
                 >
                   Sign up for Veridex
                 </button>
@@ -138,7 +138,7 @@ export function PublicLandingPage({ onOpenAuth }: PublicLandingPageProps) {
               <button
                 type="button"
                 onClick={scrollToVideo}
-                className="px-5 py-3.5 rounded-lg bg-[#f6f8fa] hover:bg-[#eaeef2] border border-[#d0d7de] text-sm font-semibold text-[#1f2328] transition whitespace-nowrap cursor-pointer"
+                className="w-full sm:w-auto px-5 py-3.5 min-h-[44px] rounded-xl sm:rounded-lg bg-[#f6f8fa] hover:bg-[#eaeef2] border border-[#d0d7de] text-sm font-semibold text-[#1f2328] transition whitespace-nowrap cursor-pointer"
               >
                 Watch 30s demo &darr;
               </button>

@@ -286,8 +286,8 @@ export function FullScreenLoginPage({
   return (
     <div className="min-h-screen w-full flex flex-col bg-white selection:bg-[#1f883d] selection:text-white">
       <div className="flex-1 w-full grid grid-cols-1 lg:grid-cols-2">
-        {/* LEFT PANEL: Dark Cosmic Showcase (GitHub-style split-screen) */}
-        <div className="relative overflow-hidden bg-[#06090f] text-white flex flex-col justify-between px-8 sm:px-14 lg:px-16 py-10 lg:py-14">
+        {/* LEFT PANEL: Dark Cosmic Showcase (GitHub-style split-screen; below form on mobile for instant mobile sign-up) */}
+        <div className="order-2 lg:order-1 relative overflow-hidden bg-[#06090f] text-white flex flex-col justify-between px-6 sm:px-14 lg:px-16 py-10 lg:py-14">
         {/* Subtle starfield dots */}
         <div
           aria-hidden="true"
@@ -419,12 +419,24 @@ export function FullScreenLoginPage({
         </div>
       </div>
 
-      {/* RIGHT PANEL: Clean Crisp White Registration / Sign-In Form */}
-      <div className="bg-white text-[#1f2328] flex flex-col justify-between px-6 sm:px-12 lg:px-16 py-6 sm:py-8 overflow-y-auto">
-        {/* Top-right mode switcher (exact GitHub pattern) */}
-        <div className="flex justify-end items-center text-sm text-[#59636e]">
+      {/* RIGHT PANEL: Clean Crisp White Registration / Sign-In Form (Shown FIRST on mobile) */}
+      <div className="order-1 lg:order-2 bg-white text-[#1f2328] flex flex-col justify-between px-5 sm:px-12 lg:px-16 py-5 sm:py-8 overflow-y-auto">
+        {/* Top bar: mobile brand logo + top-right mode switcher */}
+        <div className="flex justify-between lg:justify-end items-center gap-3 text-xs sm:text-sm text-[#59636e]">
+          <button
+            type="button"
+            onClick={() => onBackToHome?.()}
+            className="lg:hidden flex items-center gap-2 cursor-pointer"
+            title="Back to Veridex Home"
+          >
+            <span className="w-7 h-7 rounded-lg bg-[#0d1117] text-white flex items-center justify-center font-black text-xs">
+              ◈
+            </span>
+            <span className="font-bold text-sm text-[#1f2328]">Veridex</span>
+          </button>
+
           {authMode === 'CREATE_ACCOUNT' ? (
-            <span>
+            <span className="text-right">
               Already have an account?{' '}
               <button
                 type="button"
@@ -435,7 +447,7 @@ export function FullScreenLoginPage({
               </button>
             </span>
           ) : (
-            <span>
+            <span className="text-right">
               New to Veridex?{' '}
               <button
                 type="button"
@@ -449,7 +461,7 @@ export function FullScreenLoginPage({
         </div>
 
         {/* Main Centered Form */}
-        <div className="w-full max-w-[440px] mx-auto my-8 space-y-5">
+        <div className="w-full max-w-[440px] mx-auto my-6 sm:my-8 space-y-5">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight text-[#1f2328]">
               {authMode === 'CREATE_ACCOUNT' ? 'Sign up for Veridex' : 'Sign in to Veridex'}

@@ -148,7 +148,7 @@ export function VeridexShowcasePlayer({ onGetStarted }: VeridexShowcasePlayerPro
         </div>
 
         {/* 16:9 Stage Viewport */}
-        <div className="relative min-h-[380px] sm:min-h-[440px] p-6 sm:p-10 flex flex-col justify-between overflow-hidden">
+        <div className="relative min-h-[340px] sm:min-h-[440px] p-4 sm:p-10 flex flex-col justify-between overflow-hidden">
           {/* Ambient dynamic glow based on current chapter */}
           <div
             aria-hidden="true"
@@ -474,18 +474,18 @@ export function VeridexShowcasePlayer({ onGetStarted }: VeridexShowcasePlayerPro
               />
             </div>
 
-            {/* Play/Pause + Chapter Pills */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Play/Pause + Chapter Pills (Horizontally swipeable on mobile) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <button
                 type="button"
                 onClick={handleTogglePlay}
-                className="px-3.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                className="self-start px-4 py-2 min-h-[38px] rounded-md bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
               >
                 <span>{isPlaying ? '⏸' : '▶'}</span>
                 <span>{isPlaying ? 'Pause' : hasEnded ? 'Replay' : 'Play'}</span>
               </button>
 
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 touch-pan-x max-w-full">
                 {CHAPTERS.map((ch) => {
                   const isCurrent = activeChapter.id === ch.id;
                   return (
@@ -493,7 +493,7 @@ export function VeridexShowcasePlayer({ onGetStarted }: VeridexShowcasePlayerPro
                       key={ch.id}
                       type="button"
                       onClick={() => handleJumpToChapter(ch.start)}
-                      className={`px-2.5 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
+                      className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 rounded text-[10px] font-mono transition cursor-pointer ${
                         isCurrent
                           ? 'bg-[#3fb950]/20 text-[#3fb950] border border-[#3fb950]/50 font-semibold'
                           : 'bg-[#161b22] text-[#8b949e] border border-[#30363d] hover:text-white'

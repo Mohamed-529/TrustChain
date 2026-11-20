@@ -29,10 +29,10 @@ export function SiteFooter({
         variant === 'subtle' ? 'bg-[#f6f8fa]' : 'bg-white'
       } text-[#59636e]`}
     >
-      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-10 py-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-10">
+      <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-10 py-10 sm:py-12">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-7 sm:gap-8 lg:gap-10">
           {/* Brand Column */}
-          <div className="lg:col-span-2 space-y-3.5">
+          <div className="col-span-2 lg:col-span-2 space-y-3.5">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-[#0d1117] text-white flex items-center justify-center font-black text-sm shadow-sm">
                 ◈
